@@ -252,6 +252,7 @@ import { multihopSearch } from './multihop.js';
 import { graphExpandRecall, MAX_HOPS, DEFAULT_MAX_NEIGHBORS } from './graph-recall.js';
 import { DEFAULT_GRAPH_STREAM_WEIGHT } from './graph-stream.js';
 import { getReranker } from './rerankers/index.js';
+import { JEV_DEFAULT_TOP_K } from './rerankers/jev.js';
 import { computeSalience } from './salience.js';
 import { renderAmbientSummary } from './ambient.js';
 import { validateOwner, isStrictOwnerEnv } from './owner-validation.js';
@@ -1419,10 +1420,10 @@ async function cmdRecall(
   // --reranker <name> is set, look up the reranker fn from the registry
   // (src/rerankers/index.ts) and apply it to the top-K candidates. The
   // reranker reorders (and may rescale) results; the post-budget set is
-  // returned. Default off; opt-in via --reranker <cross-encoder|llm>. The
+  // returned. Default off; opt-in via --reranker <cross-encoder|jev|llm>. The
   // structurally similar --rerank-utility block above is the OFC MVP and is
   // independent — both can run in the same recall, with --rerank-utility
-  // applied first. Available rerankers: cross-encoder, llm (see
+  // applied first. Available rerankers: cross-encoder, jev, llm (see
   // src/rerankers/index.ts). The Track 1 `features` reranker was removed in
   // v1.9.1 per the F10 HARD RETRACTION; it is no longer a valid value.
   const rerankerName = flags['reranker'] !== undefined ? String(flags['reranker']).trim() : '';
@@ -1431,7 +1432,7 @@ async function cmdRecall(
     if (rerankerFn) {
       const topK = flags['reranker-top-k'] !== undefined
         ? parseInt(String(flags['reranker-top-k']), 10)
-        : 50;
+        : rerankerName === 'jev' ? JEV_DEFAULT_TOP_K : 50;
       const head = results.slice(0, topK);
       const tail = results.slice(topK);
       const rerankInput = head.map((r, i) => ({ ...r, preRerankRank: i + 1 }));
@@ -8826,11 +8827,17 @@ Commands:
                            where cost_factor = min(0.3, tokens / 10000). Re-sorts
                            results by utility. Default off. RESEARCH.md §PFC.OFC.
     --reranker <name>      Apply a reranker pass after retrieval
-                           (cross-encoder|llm). Looks up the named
+                           (cross-encoder|jev|llm). Looks up the named
                            reranker from src/rerankers/index.ts and re-orders
                            the top-K candidates. Default unset (no reranker).
-                           See docs/plans/2026-05-10-f6-reranker-hardening.md.
-    --reranker-top-k <n>   Cap candidates passed to the reranker (default 50).
+                           jev calls the hosted TypeSafe Jev API: it needs
+                           TYPESAFE_API_KEY, sends the query and candidate
+                           text to that API, costs about 0.0004 USD a recall,
+                           and falls back to cross-encoder on any failure.
+                           See docs/evals/2026-09-19-jev-reranker.md and
+                           docs/plans/2026-05-10-f6-reranker-hardening.md.
+    --reranker-top-k <n>   Cap candidates passed to the reranker (default 50;
+                           40 for jev).
     --goal <tag>           dlPFC goal-conditioned recall: memories tagged with
                            the goal tag get a 1.5x score boost and results are
                            re-sorted. Default off. RESEARCH.md §PFC.dlPFC.
