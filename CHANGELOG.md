@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.43.0 - 2026-09-20
+
+### Added
+
+- **Board view in the dashboard.** `hippo dashboard` has a map/board switch in its header. The board lays out every card in one column per status, marks a running card whose lease has expired, and opens a card's runs, comments, dependencies and latest handoff on click. It reads two new routes, `GET /api/cards` and `GET /api/cards/:id`, which return the same JSON as `hippo card list --json` and `hippo card show <id> --json`. Load errors on the board and in the card dialog are announced to screen readers.
+
+### Changed
+
+- **The dashboard top bar fits a phone-width screen.** At 640px wide and below, the top bar of both views drops its subtitle and its count, tightens its padding, and lets the map's search box shrink. At 400px nothing in the bar overflows and the page does not scroll sideways. Wider screens look the same as before. On the board the count stays available to screen readers at that width.
+
+### Fixed
+
+- **A malformed request no longer stops the dashboard.** A request such as `GET //` threw inside the request handler and ended the `hippo dashboard` process. The handler now answers 500 and keeps serving.
+
+### Security
+
+- **Other web pages can no longer read the dashboard's data.** `hippo dashboard` sent `Access-Control-Allow-Origin: *` on every response, so a web page from another origin could read `/api/memories` from `127.0.0.1:3333`. The header is gone, and the server now answers 403 to a request whose `Host` is not `localhost` or `127.0.0.1` (with any port), which closes the DNS-rebinding route to the same data. A hostname alias for the dashboard (for example a hosts-file entry) or a forwarded URL with its own host is refused too; open it as `localhost` or `127.0.0.1`.
+
 ## 1.42.1 - 2026-09-19
 
 ### Fixed

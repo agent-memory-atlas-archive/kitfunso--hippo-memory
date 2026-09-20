@@ -89,3 +89,30 @@
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+/* W2c: dashboard top bar (Header + Board). Padding/gap live here, not inline,
+   so the phone breakpoint below can override them without !important. */
+.dashboard-bar {
+  padding: 0 24px;
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .dashboard-bar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  /* Decorative subtitle/count text: dropped first so fixed controls fit 400px. */
+  .bar-decorative {
+    display: none;
+  }
+  /* Live region: clipped like .sr-only, because display:none would silence the count. */
+  .bar-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}

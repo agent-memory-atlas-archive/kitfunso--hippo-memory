@@ -8,12 +8,13 @@
 import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs';
-import { loadAllEntries, listMemoryConflicts, readEntry, writeEntry } from './store.js';
+import { loadAllEntries, listCards, listMemoryConflicts, readEntry, writeEntry } from './store.js';
 import { calculateStrength, confidenceFacets, type MemoryEntry } from './memory.js';
 import { loadConfig } from './config.js';
 import { listPeers } from './shared.js';
 import { loadEmbeddingIndex } from './embeddings.js';
 import { resolveTenantId } from './tenant.js';
+import { loadCardDetail } from './card-detail.js';
 
 interface DashboardData {
   memories: Array<{
@@ -181,6 +182,9 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
 } as const;
 
+// Binds 127.0.0.1 only; refusing other Hosts closes the DNS-rebinding route.
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
 type StaticFileExtension = keyof typeof MIME_TYPES;
 
 function isStaticFileExtension(ext: string): ext is StaticFileExtension {
@@ -191,7 +195,6 @@ function jsonResponse<T>(res: http.ServerResponse, data: T, status: number = 200
   const body = JSON.stringify(data);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
   });
   res.end(body);
 }
@@ -205,7 +208,6 @@ function serveStaticFile(res: http.ServerResponse, filePath: string): boolean {
     const content = fs.readFileSync(filePath);
     res.writeHead(200, {
       'Content-Type': mime,
-      'Access-Control-Allow-Origin': '*',
     });
     res.end(content);
     return true;
@@ -218,7 +220,13 @@ export function serveDashboard(hippoRoot: string, port: number = 3333): http.Ser
   const distUiDir = path.resolve(import.meta.dirname, '..', 'dist-ui');
   const hasDistUi = fs.existsSync(path.join(distUiDir, 'index.html'));
 
-  const server = http.createServer((req, res) => {
+  const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+    const host = req.headers.host;
+    if (host !== undefined && !LOOPBACK_HOST.test(host)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden');
+      return;
+    }
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
     const pathname = url.pathname;
 
@@ -233,6 +241,15 @@ export function serveDashboard(hippoRoot: string, port: number = 3333): http.Ser
         entry.starred = !entry.starred;
         writeEntry(hippoRoot, entry);
         return jsonResponse(res, { id, starred: entry.starred });
+      }
+
+      if (pathname === '/api/cards' && req.method === 'GET') {
+        return jsonResponse(res, { cards: listCards(hippoRoot, resolveTenantId({})) });
+      }
+      const cardMatch = pathname.match(/^\/api\/cards\/([A-Za-z0-9_-]+)$/);
+      if (cardMatch && req.method === 'GET') {
+        const detail = loadCardDetail(hippoRoot, resolveTenantId({}), cardMatch[1]);
+        return detail ? jsonResponse(res, detail) : jsonResponse(res, { error: 'Not found' }, 404);
       }
 
       const data = buildDashboardData(hippoRoot);
@@ -285,6 +302,16 @@ export function serveDashboard(hippoRoot: string, port: number = 3333): http.Ser
 <pre style="background:#faf7f2;padding:16px;border:1px solid #c4b9a8;border-radius:3px;font-family:Consolas,monospace">cd ui && npm install && npm run build</pre>
 <p>Then refresh this page. The dashboard server will serve <code>dist-ui/index.html</code> automatically once present.</p>
 </body></html>`);
+  };
+
+  const server = http.createServer((req, res) => {
+    try {
+      handleRequest(req, res);
+    } catch (err) {
+      console.error('Dashboard request failed:', err);
+      if (res.headersSent) res.end();
+      else jsonResponse(res, { error: 'Internal error' }, 500);
+    }
   });
 
   server.listen(port, '127.0.0.1', () => {
