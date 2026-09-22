@@ -282,6 +282,22 @@ function parseCountFlag(value: string | boolean | string[] | undefined): number 
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : 0;
 }
 
+function parseBudgetFlag(value: string | boolean | string[] | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  // A value-less flag and a junk value are different typos; the --hops guard already splits them.
+  if (typeof value !== 'string') {
+    console.error('--budget requires an integer value (e.g. --budget 1500).');
+    process.exit(1);
+  }
+  // Number(), like the --hops guard: parseInt('12abc') is 12, silently accepting what this message rejects.
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    console.error(`Invalid --budget: "${value}". Must be a non-negative integer.`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
 /**
  * Emit an audit event against `hippoRoot`'s db. Opens its own short-lived
  * connection so callers don't have to thread a db handle. Swallows all errors
@@ -385,10 +401,33 @@ async function runViaServerIfAvailable(
   }
 }
 
-// Flags that NEVER take a value. Without this, a positional following the
-// flag is silently swallowed as its value (`invalidate --dry-run "X"` would
-// eat the pattern). Every existing --dry-run consumer reads it as boolean.
-const BOOLEAN_FLAGS = new Set(['dry-run', 'stdin-timed-out']);
+// Every switch the CLI reads. A value on one reads as on under Boolean() (`--fix=false` would fix)
+// and as off under === true (`--pin=true` would not pin), so parseArgs and main() refuse one.
+// tests/cli-parse-flag-equals.test.ts fails when a switch read is missing from this set.
+export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
+  'all', 'all-tenants', 'archive', 'auto', 'bad', 'bootstrap', 'classic', 'continuity',
+  'cross-project', 'dry-run', 'equal-sources', 'error', 'evc-adaptive', 'extract',
+  'filter-conflicts', 'fix', 'force', 'forget', 'git', 'global', 'good', 'graph-stream',
+  'help', 'include-superseded', 'inferred', 'json', 'last-session', 'multihop', 'no-hooks',
+  'no-learn', 'no-mmr', 'no-propagate', 'no-schedule', 'no-share', 'no-summarize-older',
+  'observed', 'open', 'physics', 'pin', 'pinned-only', 'reject-loser', 'rerank-utility',
+  'reset-physics', 'save-baseline', 'show-cases', 'stats', 'stdin', 'stdin-timed-out',
+  'strict', 'suite', 'value-aware', 'verified', 'version', 'why',
+]);
+
+// Shared by both the separated and glued (`=`) forms so the list can't drift.
+function isRepeatableFlag(key: string): boolean {
+  return key === 'tag' || key === 'artifact' || key === 'link' || key === 'step' || key === 'constraint' || key === 'depends-on';
+}
+
+function pushRepeatableFlag(flags: Record<string, string | boolean | string[]>, key: string, value: string): void {
+  if (Array.isArray(flags[key])) {
+    // SAFETY: Array.isArray just confirmed flags[key] is an array; the union has no other array member.
+    (flags[key] as string[]).push(value);
+  } else {
+    flags[key] = [value];
+  }
+}
 
 export function parseArgs(argv: string[]): { command: string; args: string[]; flags: Record<string, string | boolean | string[]> } {
   const [, , command = '', ...rest] = argv;
@@ -403,24 +442,39 @@ export function parseArgs(argv: string[]): { command: string; args: string[]; fl
       break;
     }
     if (part.startsWith('--')) {
+      const eqIdx = part.indexOf('=');
+      if (eqIdx > 2) {
+        // Glued form has no following token to swallow, so BOOLEAN_FLAGS gets its
+        // own branch here instead of the swallow-avoidance short-circuit below.
+        const key = part.slice(2, eqIdx);
+        const value = part.slice(eqIdx + 1);
+        if (BOOLEAN_FLAGS.has(key)) {
+          flags[key] = value;
+        } else if (isRepeatableFlag(key)) {
+          if (value !== '') pushRepeatableFlag(flags, key, value);
+        } else {
+          flags[key] = value === '' ? true : value;
+        }
+        i++;
+        continue;
+      }
+
       const key = part.slice(2);
       const next = rest[i + 1];
 
-      if (!next || next.startsWith('--') || BOOLEAN_FLAGS.has(key)) {
+      if (BOOLEAN_FLAGS.has(key) && (next === 'true' || next === 'false')) {
+        // Kept as a value so main() rejects it, instead of `--pin true` pinning the text "... true".
+        flags[key] = next;
+        i += 2;
+      } else if (!next || next.startsWith('--') || BOOLEAN_FLAGS.has(key)) {
         // Boolean flag
         flags[key] = true;
         i++;
+      } else if (isRepeatableFlag(key)) {
+        pushRepeatableFlag(flags, key, next);
+        i += 2;
       } else {
-        // Check if it's a repeatable flag (tag, artifact, link, step, constraint, depends-on)
-        if (key === 'tag' || key === 'artifact' || key === 'link' || key === 'step' || key === 'constraint' || key === 'depends-on') {
-          if (Array.isArray(flags[key])) {
-            (flags[key] as string[]).push(next);
-          } else {
-            flags[key] = [next];
-          }
-        } else {
-          flags[key] = next;
-        }
+        flags[key] = next;
         i += 2;
       }
     } else {
@@ -966,7 +1020,7 @@ async function cmdRecall(
 ): Promise<void> {
   requireInit(hippoRoot);
 
-  const budget = parseInt(String(flags['budget'] ?? '4000'), 10);
+  const budget = parseBudgetFlag(flags['budget'], 4000);
   const limit = parseLimitFlag(flags['limit']);
   const asJson = Boolean(flags['json']);
   const showWhy = Boolean(flags['why']);
@@ -2136,7 +2190,7 @@ async function cmdExplain(
 ): Promise<void> {
   requireInit(hippoRoot);
 
-  const budget = parseInt(String(flags['budget'] ?? '4000'), 10);
+  const budget = parseBudgetFlag(flags['budget'], 4000);
   const limit = parseLimitFlag(flags['limit']);
   const asJson = Boolean(flags['json']);
   const forcePhysics = Boolean(flags['physics']);
@@ -4592,10 +4646,8 @@ function cmdCard(
     const allowedFlags = CARD_SUBCOMMAND_FLAGS[subcommand as CardSubcommand];
     for (const key of Object.keys(flags)) {
       if (!allowedFlags.includes(key)) {
-        // --flag=value never splits on '=' (see parseArgs), so it lands here as one long key.
-        const hint = key.includes('=') ? ` Use --${key.slice(0, key.indexOf('='))} <value>, not --${key}.` : '';
         const valid = allowedFlags.length > 0 ? allowedFlags.map((f) => `--${f}`).join(', ') : '(none)';
-        console.error(`Unknown flag --${key} for hippo card ${subcommand}.${hint} Valid flags: ${valid}`);
+        console.error(`Unknown flag --${key} for hippo card ${subcommand}. Valid flags: ${valid}`);
         process.exit(1);
       }
     }
@@ -6433,7 +6485,7 @@ async function cmdContext(
     requireInit(hippoRoot);
   }
 
-  const budget = parseInt(String(flags['budget'] ?? '1500'), 10);
+  const budget = parseBudgetFlag(flags['budget'], 1500);
   if (budget <= 0) return;
 
   // Resolve query: explicit args, --auto (git diff via CLI-side helper), or
@@ -7879,7 +7931,8 @@ function cmdDag(hippoRoot: string, flags: Record<string, string | boolean | stri
 
 function cmdAssemble(hippoRoot: string, sessionId: string, flags: Record<string, string | boolean | string[]>): void {
   requireInit(hippoRoot);
-  const budget = typeof flags['budget'] === 'string' ? Number(flags['budget']) : undefined;
+  // Absent stays undefined so the api default applies; the 0 fallback is unreachable.
+  const budget = flags['budget'] === undefined ? undefined : parseBudgetFlag(flags['budget'], 0);
   const freshTailCount = typeof flags['fresh-tail'] === 'string' ? Number(flags['fresh-tail']) : undefined;
   const summarizeOlder = flags['no-summarize-older'] !== true;
   const scope = typeof flags['scope'] === 'string' && (flags['scope'] as string).length > 0
@@ -7911,7 +7964,8 @@ function cmdAssemble(hippoRoot: string, sessionId: string, flags: Record<string,
 function cmdDrillDown(hippoRoot: string, summaryId: string, flags: Record<string, string | boolean | string[]>): void {
   requireInit(hippoRoot);
   const limit = typeof flags['limit'] === 'string' ? Number(flags['limit']) : undefined;
-  const budget = typeof flags['budget'] === 'string' ? Number(flags['budget']) : undefined;
+  // Absent stays undefined so the api default applies; the 0 fallback is unreachable.
+  const budget = flags['budget'] === undefined ? undefined : parseBudgetFlag(flags['budget'], 0);
   // v0.30 / E5: --depth N walks N levels down (default 1, hard cap 10).
   // L4 fold: reject out-of-range explicitly (no silent clamp).
   const rawDepth = typeof flags['depth'] === 'string' ? Number(flags['depth']) : undefined;
@@ -9335,6 +9389,14 @@ async function main(): Promise<void> {
       process.exit(1);
     }
   }
+  // Reject rather than coerce: consumers read --dry-run both as Boolean() and === true,
+  // so no single coercion of an inline value would be correct for every one of them.
+  for (const key of BOOLEAN_FLAGS) {
+    if (Object.hasOwn(flags, key) && typeof flags[key] !== 'boolean') {
+      console.error(`--${key} takes no value`);
+      process.exit(1);
+    }
+  }
   switch (command) {
     case 'init':
       cmdInit(hippoRoot, flags);
@@ -9983,8 +10045,8 @@ async function main(): Promise<void> {
       }
       const onlyId = typeof flags['id'] === 'string' ? (flags['id'] as string) : undefined;
       if (typeof flags['dry-run'] === 'string') {
-        // Unreachable via argv (dry-run is in BOOLEAN_FLAGS); guards
-        // programmatically-built flags objects.
+        // Dead: the earlier global BOOLEAN_FLAGS guard now exits first on any --dry-run=<v>.
+        // Kept as defence in depth on a destructive command.
         console.error('--dry-run takes no value');
         process.exit(1);
       }
