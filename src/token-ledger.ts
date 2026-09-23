@@ -262,3 +262,38 @@ export function hookPayloadSessionId(stdinText: string | undefined, requiredSour
   if (requiredSource !== null && payload.source !== requiredSource) return null;
   return sessionId;
 }
+
+/** Tokens hippo sent and skipped in one session, for {@link tokensBySession}. */
+export interface SessionTokens {
+  sessionId: string;
+  /** Tokens of memory text sent to the agent. */
+  sent: number;
+  /** Tokens of unchanged blocks not sent. */
+  skipped: number;
+  /** Blocks sent. */
+  injections: number;
+}
+
+/**
+ * Ledger totals per session id since `sinceIso`, across every surface.
+ * Claude Code hook rows carry the host's session id, which is also the
+ * transcript file name, so these join to the host's own usage records.
+ */
+export function tokensBySession(db: DatabaseSyncLike, tenantId: string, sinceIso: string): SessionTokens[] {
+  // SAFETY: the SELECT names exactly these columns, all aggregates or TEXT.
+  const rows = db.prepare(
+    `SELECT session_id,
+            SUM(CASE WHEN event = 'inject' THEN tokens ELSE 0 END) AS sent,
+            SUM(CASE WHEN event = 'skip' THEN tokens ELSE 0 END) AS skipped,
+            SUM(CASE WHEN event = 'inject' THEN 1 ELSE 0 END) AS injections
+     FROM token_ledger
+     WHERE tenant_id = ? AND ts >= ? AND session_id IS NOT NULL
+     GROUP BY session_id`,
+  ).all(tenantId, sinceIso) as Array<{ session_id: string; sent: number; skipped: number; injections: number }>;
+  return rows.map((r) => ({
+    sessionId: r.session_id,
+    sent: Number(r.sent),
+    skipped: Number(r.skipped),
+    injections: Number(r.injections),
+  }));
+}

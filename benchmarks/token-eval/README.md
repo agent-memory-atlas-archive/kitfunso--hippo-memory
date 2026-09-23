@@ -10,6 +10,32 @@ Three harnesses, from cheapest to most convincing. Build first with `npm run bui
 
 Shared statistics and four-bucket cost accounting are in `src/eval-stats.ts`.
 
+## What is and is not established
+
+- **Established, with records:** on the bundled synthetic traces, skipping unchanged hook blocks cuts the text hippo itself injects by 85-90%. The run is deterministic: two runs give identical per-prompt counts, and the record is `replay-results.json`.
+- **Not established:** that hippo saves anyone tokens or money. The replay prices only hippo's own text (tens of tokens per prompt in these traces), and its token counts are an estimate (characters / 4). For comparison, one long Claude Code session in the container this was built in recorded about 207 million cache-read tokens, as counted by the API. Cutting hippo's overhead is housekeeping. A saving claim needs the paired A/B (TE5) on real tasks.
+- **Needs checking on a real machine:** that Claude Code keeps hook `additionalContext` in the transcript, which the cache model assumes. `claude-usage.mjs` below reads the real records.
+
+## Measure on your own machine
+
+Claude Code writes every session to `~/.claude/projects/<project>/<session>.jsonl`, including the API's billed usage for every message. The TE0 ledger records hippo's session id from the hook payload, and that id is the transcript file name.
+
+```bash
+npm run build
+node scripts/token-eval/claude-usage.mjs --days 30                 # all sessions, joined to ~/.hippo's ledger
+node scripts/token-eval/claude-usage.mjs --hippo-root path/to/project/.hippo --prices prices.json --out usage.json
+```
+
+It reports, per session:
+- uncached input, cache writes, cache reads and output, as billed;
+- the same totals priced in dollars, if you give prices;
+- how many tokens hippo sent and skipped;
+- hippo's share of the new context written.
+
+Usage is counted once per API message id. One message spans several transcript lines, so summing lines would roughly double the totals. Subagent transcripts count towards their parent session.
+
+This measures cost and hippo's share of it. It does not measure savings, because a session without hippo is a different session. A before-and-after comparison across weeks is confounded by different work, so the saving claim still needs TE5.
+
 ## Session replay (TE4)
 
 ```bash
