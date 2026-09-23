@@ -443,6 +443,9 @@ function mapApiError<E>(err: E) {
   if (/already superseded/.test(lower)) {
     return { status: 409, message };
   }
+  if (/requires admin role/.test(lower)) {
+    return { status: 403, message };
+  }
   return { status: 400, message };
 }
 
@@ -1261,11 +1264,8 @@ async function handleRequest(
     }
     // v1.12.3: optional body.role mirrors the --role CLI flag. Validated
     // strictly — anything other than 'admin'|'member' is a 400 (no silent
-    // fallback to admin). Required note: admin Bearer can mint a member
-    // key for the same tenant; member Bearer minting an admin key is NOT
-    // blocked here today (auth_create is currently unaudited per the A5 v2
-    // note in authCreate doc). The HTTP layer trusts the buildContextWithAuth
-    // role check at admin-gated routes; mint surface remains permissive.
+    // fallback to admin). Key management is admin-only: a member Bearer
+    // gets 403 below (it used to be able to mint an admin key).
     const roleRaw = body['role'];
     let role: 'admin' | 'member' | undefined;
     if (roleRaw !== undefined) {
@@ -1279,6 +1279,9 @@ async function handleRequest(
     // from the Bearer token). Forwarding body.tenantId here would let
     // tenant A mint a key for tenant B — see authCreate doc comment.
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
+    if (ctx.actor.role !== 'admin') {
+      throw new HttpError(403, 'API key management requires admin role');
+    }
     const result = authCreate(ctx, {
       label: labelRaw,
       role,
@@ -1299,6 +1302,9 @@ async function handleRequest(
       else throw new HttpError(400, "active must be 'true' or 'false'");
     }
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
+    if (ctx.actor.role !== 'admin') {
+      throw new HttpError(403, 'API key management requires admin role');
+    }
     const result = authList(ctx, { active });
     sendJson(res, 200, result);
     return;
@@ -1312,6 +1318,9 @@ async function handleRequest(
   if (method === 'DELETE' && keyMatch) {
     validateIdSegment(keyMatch.keyId!, 'key id');
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
+    if (ctx.actor.role !== 'admin') {
+      throw new HttpError(403, 'API key management requires admin role');
+    }
     const result = authRevoke(ctx, keyMatch.keyId!);
     sendJson(res, 200, result);
     return;
@@ -3217,6 +3226,8 @@ async function handleRequest(
         tenantId: ctx.tenantId,
         // v1.12.0: McpContext.actor stays string; extract subject at the boundary.
         actor: ctx.actor.subject,
+        // The caller's real role: MCP tools must not run a member key as admin.
+        role: ctx.actor.role,
         clientKey: buildMcpClientKey(req),
       });
     } catch (err) {

@@ -27,7 +27,8 @@ import { fetchGitLog, extractLessons, partitionLessons, deduplicateLesson, isGit
 import { loadConfig } from '../config.js';
 import { confidenceLabel } from '../memory.js';
 import { resolveTenantId } from '../tenant.js';
-import { recall as apiRecall, remember as apiRemember, outcome as apiOutcome, drillDown as apiDrillDown, assemble as apiAssemble, isPrivateScope, passesScopeFilterForRecall, adminActor, buildSuppressionSummary, ambientSecretAdmit, type Context as ApiContext } from '../api.js';
+import { recall as apiRecall, remember as apiRemember, outcome as apiOutcome, drillDown as apiDrillDown, assemble as apiAssemble, isPrivateScope, passesScopeFilterForRecall, buildSuppressionSummary, ambientSecretAdmit, type Context as ApiContext, type Actor as ApiActor } from '../api.js';
+import { assertScopeRequestAllowed } from '../recall-scope.js';
 import { resolveProjectIdentity, classifyOriginProject, findHippoStoreDir, type ResolveProjectIdentityOpts } from '../project-identity.js';
 import { computePredictionBaserate } from '../predictions.js';
 import { appendAuditEvent } from '../audit.js';
@@ -106,12 +107,27 @@ export interface McpContext {
   tenantId: string;
   actor: string;
   /**
+   * The caller's role from the HTTP transport's auth. Absent for stdio, which
+   * is the local operator and runs as admin. Tools must use this rather than
+   * assuming admin, or a member key over HTTP-MCP would act as admin.
+   */
+  role?: 'admin' | 'member';
+  /**
    * Per-client key for state isolation under HTTP-MCP. For stdio: 'stdio-${pid}'
    * (one process = one client). For HTTP-SSE / HTTP MCP: hash(bearer + remoteAddr)
    * built by src/server.ts when constructing McpContext for the request.
    * Optional for backwards compatibility; defaults to `${tenantId}:default`.
    */
   clientKey?: string;
+}
+
+/**
+ * The api-layer actor for a tool call. Stdio (no ctx) is the local operator
+ * and runs as admin; over HTTP the transport's authenticated role is used, so
+ * a member key never acts as admin through MCP.
+ */
+function mcpActor(ctx: McpContext | undefined): ApiActor {
+  return { subject: ctx?.actor ?? 'mcp', role: ctx?.role ?? 'admin' };
 }
 
 // MCP stdio transport spec: messages are newline-delimited JSON-RPC, no embedded newlines.
@@ -549,7 +565,7 @@ async function executeTool(
       const apiCtx: ApiContext = {
         hippoRoot,
         tenantId,
-        actor: adminActor(ctx?.actor ?? 'mcp'),
+        actor: mcpActor(ctx),
       };
       // Route through api.recall for audit + (when requested) continuity block.
       // api.recall already applies the same default-deny / exact-match rules
@@ -894,7 +910,7 @@ async function executeTool(
       const apiCtx: ApiContext = {
         hippoRoot,
         tenantId,
-        actor: adminActor(ctx?.actor ?? 'mcp'),
+        actor: mcpActor(ctx),
       };
       const explicitScope = isJsonString(args.scope) && args.scope.length > 0
         ? args.scope
@@ -935,7 +951,7 @@ async function executeTool(
       const apiCtx: ApiContext = {
         hippoRoot,
         tenantId,
-        actor: adminActor(ctx?.actor ?? 'mcp'),
+        actor: mcpActor(ctx),
       };
       const drillExtra: DrillDownExtraOpts = {};
       if (Number.isFinite(limit) && limit > 0) drillExtra.limit = limit;
@@ -1000,7 +1016,7 @@ async function executeTool(
       const apiCtx: ApiContext = {
         hippoRoot,
         tenantId,
-        actor: adminActor(ctx?.actor ?? 'mcp'),
+        actor: mcpActor(ctx),
       };
       const result = apiRemember(apiCtx, {
         content: text,
@@ -1044,7 +1060,7 @@ async function executeTool(
       const apiCtx: ApiContext = {
         hippoRoot,
         tenantId,
-        actor: adminActor(ctx?.actor ?? 'mcp'),
+        actor: mcpActor(ctx),
       };
       const { applied } = apiOutcome(apiCtx, ids, good);
       return `Applied ${good ? 'positive' : 'negative'} outcome to ${applied} memories`;
@@ -1074,6 +1090,7 @@ async function executeTool(
       // results and the snapshot. Pre-v1.2 this surface returned all memories
       // and the snapshot unfiltered, which would have leaked private-channel
       // content to no-scope MCP callers once scope writers shipped.
+      assertScopeRequestAllowed(mcpActor(ctx).role, explicitScope);
       const allEntries = loadAllEntries(hippoRoot, tenantId);
       // v39 memory scope isolation: this surface reads the LOCAL store only,
       // but synced-down or legacy rows can still carry another project's

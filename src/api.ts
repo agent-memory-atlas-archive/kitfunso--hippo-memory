@@ -176,9 +176,9 @@ export class RecallContractError extends Error {
 // back-compat (`api.isPrivateScope`, test imports). NOTE: the import statement
 // is required — a bare `export { x } from` re-export does not bind the local
 // names this module's ~9 call sites use.
-import { isPrivateScope, passesScopeFilterForRecall } from './recall-scope.js';
+import { isPrivateScope, passesScopeFilterForRecall, assertScopeRequestAllowed } from './recall-scope.js';
 export { isPrivateScope, passesScopeFilterForRecall };
-export { passesCliRecallScopeFilter } from './recall-scope.js';
+export { passesCliRecallScopeFilter, ScopeForbiddenError } from './recall-scope.js';
 
 // v39: classifyOriginProject lives in project-identity.ts (leaf) so
 // shared.ts can use it without an api.ts import cycle. Re-exported here for
@@ -702,6 +702,8 @@ export function buildSuppressionSummary(counts: {
  * `tests/api-recall-no-side-effects.test.ts`.
  */
 export function recall(ctx: Context, opts: RecallOpts): RecallResult {
+  // A member key may not unlock a private or quarantined scope by naming it.
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
   const limit = opts.limit ?? 10;
   // F5 (v1.6.5) preflight — codex P1: original guard fired AFTER
   // loadSearchEntries (which runs initStore, migrating legacy state on first
@@ -1323,6 +1325,7 @@ export function assemble(
   sessionId: string,
   opts: AssembleOpts = {},
 ): AssembleResult {
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
   const budget = opts.budget ?? 4000;
   const freshTailCount = opts.freshTailCount ?? 10;
   const summarizeOlder = opts.summarizeOlder ?? true;
@@ -2137,6 +2140,17 @@ export interface AuthCreateResult {
 }
 
 /**
+ * API-key management (mint, list, revoke) is admin-only. Before this gate a
+ * member key could mint an admin key for its own tenant, which made the
+ * member role meaningless. The HTTP routes check this too and answer 403.
+ */
+function requireAdminForKeys(ctx: Context): void {
+  if (ctx.actor.role !== 'admin') {
+    throw new Error('API key management requires admin role');
+  }
+}
+
+/**
  * Mint a new API key. The new key is ALWAYS bound to `ctx.tenantId`. Callers
  * cannot override the tenant via the opts bag — a previous `tenantId` field
  * was removed because the HTTP layer would happily forward `body.tenantId`,
@@ -2149,6 +2163,7 @@ export interface AuthCreateResult {
  * lands and adds the audit op, this function should mirror the cli handler.
  */
 export function authCreate(ctx: Context, opts: AuthCreateOpts): AuthCreateResult {
+  requireAdminForKeys(ctx);
   const db = openHippoDb(ctx.hippoRoot);
   try {
     const role = opts.role ?? 'admin';
@@ -2189,6 +2204,7 @@ export function authList(
   ctx: Context,
   opts: { active: boolean },
 ): ApiKeyListItem[] {
+  requireAdminForKeys(ctx);
   const db = openHippoDb(ctx.hippoRoot);
   try {
     const all = listApiKeys(db, opts);
@@ -2217,6 +2233,7 @@ export function authRevoke(
   ctx: Context,
   keyId: string,
 ): AuthRevokeResult {
+  requireAdminForKeys(ctx);
   const db = openHippoDb(ctx.hippoRoot);
   try {
     // SAFETY: row's shape matches the three columns named in the SELECT

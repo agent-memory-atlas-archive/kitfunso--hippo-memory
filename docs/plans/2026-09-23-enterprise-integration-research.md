@@ -197,9 +197,9 @@ will ask for.
 |---|---|---|
 | Git learning | Host-agnostic: runs `git log --since --pretty=%s` on local clones (`src/autolearn.ts:189`). Invalidation from migration commits (`src/invalidation.ts`). | Subject line only. No body, trailers, author, files, diff, ticket keys, or bot filtering. Lessons carry no `artifact_ref`, so they cannot be traced to a commit. The CLI ignores `config.gitLearnPatterns` (`src/cli.ts:6980`); MCP honours it. |
 | Connectors | Slack and GitHub webhooks with HMAC checks, idempotency, DLQ, backfill, deletion, tenant routing | Two copy-pasted modules, no shared interface. About 1,000-1,400 source lines per connector today, or 300-500 with a shared kit. GitHub backfill hardcodes `https://api.github.com` (no GHES). `artifact_ref` has no host part. No GitHub App auth. No CLI to register GitHub routing. |
-| Server | API keys (scrypt), admin/member roles, tenants, per-IP rate limit, audit log, non-loopback bind gated by `HIPPO_REQUIRE_AUTH` | **A member key can mint an admin key** (`src/server.ts:1262-1268`, noted in code). Plain HTTP only. No per-key quotas. |
+| Server | API keys (scrypt), admin/member roles, tenants, per-IP rate limit, audit log, non-loopback bind gated by `HIPPO_REQUIRE_AUTH` | A member key could mint an admin key (fixed in PR #227: key management is admin-only). Plain HTTP only. No per-key quotas. |
 | Identity | `src/sso.ts` stubs throw `NotImplementedError` | SSO, SCIM, IdP groups, machine identity |
-| Permissions | Tenant isolation; default-deny on `<source>:private:` scopes | Any key in a tenant can read a private scope by naming it. No per-user ACLs, no identity mapping to source permissions, no ACL re-sync. |
+| Permissions | Tenant isolation; default-deny on `<source>:private:` scopes; member keys can no longer unlock a private scope by naming it (PR #227) | No per-user ACLs or per-scope grants, no identity mapping to source permissions, no ACL re-sync. |
 | Storage and deploy | SQLite; `deploy/aml` Docker is a benchmark deployment | No Postgres (A6), Helm, encryption at rest, data residency or air-gapped packaging |
 | Agent delivery | MCP (13 tools), hooks for 6 agents, HTTP API, Python SDK | Not yet listed for enterprise MCP registries |
 
