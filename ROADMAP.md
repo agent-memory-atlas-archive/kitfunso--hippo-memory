@@ -909,6 +909,8 @@ Things hippo will not do. Each one is a deliberate position derived from the pro
 | 11 | An in-process agent loop | Runtimes (Claude Code, Codex, Grok Build, Muse Code) are external processes hippo informs and never starts. Hippo stores state and hands it off; it never runs the agent loop itself | Part VII, Track W boundary, W0 |
 | 12 | A shared transcript as the handoff between agents | A dumped context window blows the token budget and loses the interface-artifact model. The handoff is a structured envelope: summary, next action, constraints, evidence, outcome | Part VII, Track W boundary, W0 |
 | 13 | Starting or supervising agent processes | Hippo informs runtimes and never starts, stops or supervises one, not even behind a human gate. Runtimes claim cards themselves (pull mode). A process hippo starts and feeds with stored context is a path from stored memory to actuation | Part VII, decision 2026-09-20 (`docs/decisions/2026-09-20-no-agent-spawn.md`) |
+| 14 | Hosting, mirroring or searching source code as a product | Code hosts and code search (GitHub, GitLab, Sourcegraph) stay canonical. Hippo reads history and metadata to learn lessons; it stores lessons with provenance, not a copy of the codebase | Part VIII, Track EI |
+| 15 | One model trained across customers' data | Per-company learning stays per tenant and deletable (right to be forgotten must reach the scorer). No pooled cross-customer model | Part VIII, Track EI |
 
 ## Deferred / speculative
 
@@ -1269,3 +1271,92 @@ W0 and W1 first: small, close the last E2 item, no non-goal tension. W2 next. W3
 - **Muse** = Muse Code (Meta), **Grok** = Grok Build (xAI); both real terminal agents with worktree isolation, neither integrated with hippo today.
 
 **Discipline note (same as Part V):** the proposal was LLM-authored and carried three attribution errors, one fabricated product and one overstated paper claim; every item above that cites a paper or a product was re-read at source before it landed here.
+
+---
+
+## Part VIII - 2026-09-23 update: enterprise integration (the corporate memory layer)
+
+Triggered by a founder question: companies keep code in private hosts that are often not github.com, so how does hippo plug into their DevOps, and how does one memory layer tailor itself to each company? Research record: `docs/plans/2026-09-23-enterprise-integration-research.md` (market and platform landscape, literature review, source audit of v1.44.0).
+
+**Answer (source-verified where it cites hippo):** most companies still use Git, hosted on GitHub Enterprise (Cloud, `*.ghe.com` residency, or self-hosted Server), GitLab (about two thirds of GitLab revenue is self-managed), Bitbucket Data Center or Azure DevOps. Hippo's git learning already works on all of them because it reads the local clone (`src/autolearn.ts:189`). What it cannot reach is the metadata around code (reviews, tickets, incidents, CI failures, chat decisions), and an enterprise will not adopt any memory layer without four things: deployment where its code lives, SSO/SCIM and machine identity, **permission-aware recall**, and an audit trail. Hippo has the audit trail and tenant isolation; the rest is this track.
+
+**Shape:** one core, many source adapters, one company profile, every agent over MCP. The core and the memory envelope do not change; adapters normalize each source into the envelope plus an ACL, the profile holds what differs per company, and deployment matches the company's security posture.
+
+### What hippo already has (read from source, v1.44.0 + PR #227)
+
+| Existing | Where | What it becomes |
+|---|---|---|
+| Host-agnostic git learning (`git log` on local clones), migration-commit invalidation | `src/autolearn.ts`, `src/invalidation.ts` | Git learning v2 (EI1) |
+| Slack and GitHub webhook connectors: HMAC, idempotency, DLQ, backfill, deletion, tenant routing | `src/connectors/` | The pattern the connector kit (EI0) generalizes |
+| Tenants, API keys, roles, audit log, non-loopback gate | `src/server.ts`, `src/auth.ts`, `src/audit.ts` | Base for identity (EI11) and permissions (EI2) |
+| `<source>:private:` default-deny scopes | `src/recall-scope.ts:26` | Starting point for real ACLs (EI2) |
+| Dormant memories on by default, restore labels (`dormant_restore`) | `src/dormant.ts`, PR #227 | Per-tenant learned lifecycle input (EI9) |
+| MCP server (13 tools), hooks for 6 agents | `src/mcp/server.ts`, `src/hooks.ts` | Unchanged delivery surface; registry listing (EI11) |
+
+### Track EI - Enterprise integration
+
+#### EI0. Connector kit [next, 2w]
+One `Connector` interface plus shared tables for event log, dead-letter queue, cursors and tenant routing, with one CLI (`hippo connector add|list|dlq|backfill`). Port Slack and GitHub onto it with no behaviour change. Host-qualified `artifact_ref` (`github://ghe.corp.example/org/repo/pull/42`). **Success:** Slack and GitHub suites pass unchanged on the kit; a new source is an adapter of a few hundred lines, down from 1,000-1,400.
+
+#### EI1. Git learning v2 [next, 2-3w]
+Read subject, body, trailers (`Fixes`, `Co-authored-by`), ticket keys (`ABC-123`), changed paths and author; skip bot and merge noise; classify with the diff, not the subject alone; link fixes and reverts to the change that introduced the bug (SZZ-lite, `git blame` on the fixed lines); store the commit as `artifact_ref`. Also fix the CLI ignoring `config.gitLearnPatterns` (`src/cli.ts:6980`) and align the CLI and MCP learn paths. Still local-clone based, so it works on every Git host and air-gapped. **Success:** pre-registered eval on the lesson-precision fixture: v2 lessons judged useful at a higher rate than v1 keyword lessons, and every lesson traceable to a commit.
+
+#### EI2. Permission-aware recall [critical, next, 3-4w]
+Every memory carries the ACL of its source (repo visibility and teams, channel membership, Jira project). Callers carry an identity; recall filters by ACL as a hard predicate before ranking; memories derived from several sources inherit the most restrictive ACL; ACLs re-sync on webhook events and on a schedule. Fix now: a member key can mint an admin key (`src/server.ts:1262-1268`), and naming a private scope unlocks it for any key in the tenant (`src/recall-scope.ts:55-57`). **Success:** negative tests that a user without source access recalls nothing from that source, including through summaries and the graph.
+
+#### EI3. GitHub, enterprise grade [next, 2w]
+GitHub App auth (installation tokens) instead of a PAT; configurable API base for GHES and `*.ghe.com` (backfill hardcodes `api.github.com` today, `backfill.ts:41`); pull request reviews, reverts and CODEOWNERS as lesson sources; review threads that ended in a code change become convention memories.
+
+#### EI4. GitLab (SaaS, Dedicated, self-managed) [planned, 2w after EI0]
+Group service accounts or OAuth, group webhooks, system hooks on self-managed; merge requests, discussions, pipelines.
+
+#### EI5. Jira and Confluence [planned, 2-3w after EI0; supersedes the Jira half of E1.5]
+Forge or OAuth 3LO for Cloud (Connect is end of support in 2026), PATs for Data Center through 2029. Ticket keys join tickets to commits (EI1). Optionally consume the Atlassian Rovo MCP server instead of building a crawler.
+
+#### EI6. Azure DevOps [planned, 2w after EI0]
+Repos, Boards and Pipelines through service hooks; Entra ID service principals or managed identity only (global PATs stop working Dec 1, 2026).
+
+#### EI7. Bitbucket, Teams, incidents [planned]
+Bitbucket Cloud and Data Center (DC is exempt from Atlassian's 2029 end of life); Microsoft Teams through Graph; PagerDuty and Jira Service Management postmortems as incident memories. The Slack app must become Marketplace-listed or customer-internal: since May 2025 other distributed apps get 1 history request a minute.
+
+#### EI8. Company profile and onboarding hindcast [research -> planned]
+A per-company profile: sources and repos, ticket-key pattern, commit conventions, ownership from CODEOWNERS or a Backstage catalog, retention and legal hold, sensitivity rules, `.hippoignore`, model endpoint. Onboarding replays a sample of the company's own past issues, compares an agent's attempt with the merged change, and stores the differences as evidence-backed convention memories (Learning to Commit, arXiv:2603.26664). Generated-but-unverified context hurts (arXiv:2602.11988), so hindcast memories stay probationary until outcomes confirm them.
+
+#### EI9. Per-tenant learned lifecycle [research, gated on LC3]
+LC2/LC3 value scorers trained per tenant on that company's outcomes and `dormant_restore` labels, deletable with the tenant's data (non-goal 15).
+
+#### EI10. Deployment tiers [planned, 4-6w]
+Single-tenant or customer-VPC (Helm, Terraform, Postgres per A6), fully air-gapped (local embeddings, customer model endpoint, no telemetry), and an outbound-only relay so self-hosted Git servers need no inbound port. TLS, per-key quotas, encryption at rest (A4).
+
+#### EI11. Enterprise identity and governance [planned]
+SAML/OIDC SSO and SCIM (A5 stubs made real), roles from IdP groups, OIDC workload identity for machines, SIEM export of the audit log, listing in internal MCP registries (Copilot "registry only" policies block unlisted servers).
+
+#### EI12. Tenant evaluation harness [next, 2w]
+Replay a tenant's own history in time order with memory on and off at matched token budgets and several seeds; report resolve rate, tokens per resolved task, review-acceptance and revert rate, and stale-retrieval rate, with verbatim storage as a baseline. This is the number a buyer and an investor both ask for, and it keeps every later claim honest (arXiv:2606.15017 shows memory gains often vanish at matched budgets).
+
+#### EI13. Organisational-memory benchmark [research]
+A public benchmark whose tasks need knowledge that exists only outside the code (review threads, incidents, ticket decisions). No 2025-2026 memory benchmark for coding agents does this (SWE-Bench-CL, SWE Context Bench, DreamBench-SWE all use code or prior trajectories). Publishable; the natural home for the Part III "memory-system eval methodology" item.
+
+#### EI14. Compliance [planned, runs alongside]
+SOC 2 Type II first, then ISO 27001 and ISO 42001; DPA, subprocessor list, SIG/CAIQ answers; FedRAMP only through the self-hosted SKU or a partner.
+
+### Deferred in this track
+Gerrit and Perforce (automotive, games) through Git bridges or partners; observability alerts as memories; a "who knows what" directory built from review and outcome evidence rather than `git blame` (arXiv:2606.20882).
+
+### What not to build
+A code host, a code mirror or a code search engine (non-goal 14); a crawler where the vendor ships an MCP server or events API; long-lived personal tokens as the default auth; one model pooled across customers (non-goal 15); write-back into source systems (non-goal 8).
+
+### Honest forecast
+
+| Goal | Confidence | Why |
+|---|---|---|
+| Git history on any host | High | Already host-agnostic; v2 is reading more of the same data |
+| GitHub, GitLab, Jira, Azure DevOps coverage | High | Well-documented APIs; the kit removes duplication |
+| Permission-aware recall that survives an enterprise security review | Medium | Derived memories (summaries, graph) are the hard part; research literature has no complete answer |
+| Air-gapped and VPC deployment | Medium | Local-first core helps; Postgres and packaging are new work |
+| Measured value per company | Medium | Depends on EI12 and real design partners |
+
+### Sequencing
+EI2's two key fixes immediately; then EI0, EI1, EI2, EI12 (trust and measurement, about 0-3 months); EI3, EI4, EI5, EI6, EI10 VPC tier (3-6 months); EI7, EI8, EI11, EI14, air-gapped tier (6-12 months); EI9 and EI13 as research alongside.
+
+**Discipline note:** market figures in the research record came through search summaries (the sandbox blocked most direct fetches) and 2026 arXiv items are preprints; re-check any figure at its source before it goes on a slide or into a claim.
