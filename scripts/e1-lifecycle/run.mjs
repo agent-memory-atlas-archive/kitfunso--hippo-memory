@@ -52,6 +52,11 @@ import { generateProtocol, GENERATOR_VERSION } from './generate.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 const OUT_DIR = path.join(REPO, 'benchmarks', 'e1-lifecycle', 'raw');
+// Half-life robustness sweep (amendment A5, EXPLORATORY - not in the frozen prereg).
+// Module-level so the CLI can vary the decay half-life without changing runArmSeed's
+// signature: probe-replay.mjs imports runArmSeed and relies on the default 7d, which
+// reproduces the registered E1 byte-identically (invariant-tested).
+let SWEEP_HALF_LIFE = 7;
 
 const ARM_ENV = {
   'full': {},
@@ -92,6 +97,8 @@ async function probeEpoch(protocol, entries, epoch, epochDate, arm) {
   let active = 0, current5 = 0, staleEligible = 0, staleHit = 0;
   let trapEligible = 0, trapHit = 0, contraEligible = 0, contraHit = 0;
   let hotActive = 0, hotCurrent5 = 0, mrrSum = 0;
+  let cleanStale = 0, nonStaleActive = 0, nonStaleCurrent5 = 0;
+  const probes = [];
 
   for (const probe of protocol.probes) {
     const cur = currentAt(probe, epoch);
@@ -116,33 +123,47 @@ async function probeEpoch(protocol, entries, epoch, epochDate, arm) {
     const texts = top.map((e) => e.content);
     const curTok = probe.tokens[cur.version];
     const rank = texts.findIndex((t) => t.includes(curTok));
+    const row = {
+      factId: probe.factId, hot: !!probe.hot, hit: rank >= 0, rank, staleEligible: cur.version >= 2, staleHit: false,
+      trapEligible: false, trapHit: false, contraEligible: false, contraHit: false,
+    };
     if (rank >= 0) {
       current5++;
       if (probe.hot) hotCurrent5++;
       mrrSum += 1 / (rank + 1);
     }
     // Stale intrusion: only meaningful once an update has superseded v1.
-    if (cur.version >= 2) {
+    if (row.staleEligible) {
       staleEligible++;
       const staleToks = Object.entries(probe.tokens)
         .filter(([v]) => Number(v) < cur.version).map(([, t]) => t);
-      if (texts.some((t) => staleToks.some((s) => t.includes(s)))) staleHit++;
+      row.staleHit = texts.some((t) => staleToks.some((s) => t.includes(s)));
+      if (row.staleHit) staleHit++;
+      else if (rank >= 0) cleanStale++;
+    } else {
+      nonStaleActive++;
+      if (rank >= 0) nonStaleCurrent5++;
     }
     if (probe.trapTokens.length > 0) {
       // Eligible once the trap memory exists in the store.
       const trapLive = entries.some((e) => probe.trapTokens.some((t) => e.content.includes(t)));
       if (trapLive) {
         trapEligible++;
-        if (texts.some((t) => probe.trapTokens.some((tt) => t.includes(tt)))) trapHit++;
+        row.trapEligible = true;
+        row.trapHit = texts.some((t) => probe.trapTokens.some((tt) => t.includes(tt)));
+        if (row.trapHit) trapHit++;
       }
     }
     if (probe.contraTokens.length > 0) {
       const contraLive = entries.some((e) => probe.contraTokens.some((t) => e.content.includes(t)));
       if (contraLive) {
         contraEligible++;
-        if (texts.some((t) => probe.contraTokens.some((ct) => t.includes(ct)))) contraHit++;
+        row.contraEligible = true;
+        row.contraHit = texts.some((t) => probe.contraTokens.some((ct) => t.includes(ct)));
+        if (row.contraHit) contraHit++;
       }
     }
+    probes.push(row);
   }
 
   return {
@@ -153,6 +174,10 @@ async function probeEpoch(protocol, entries, epoch, epochDate, arm) {
     trapEligible, trapPersistenceRate: trapEligible > 0 ? trapHit / trapEligible : null,
     contraEligible, contraIntrusionRate: contraEligible > 0 ? contraHit / contraEligible : null,
     hotActive, hotR5: hotActive > 0 ? hotCurrent5 / hotActive : null,
+    // Split for the break-even superseded share (2026-09-23 mechanism audit prereg).
+    cleanStaleR5: staleEligible > 0 ? cleanStale / staleEligible : null,
+    nonStaleActive, nonStaleR5: nonStaleActive > 0 ? nonStaleCurrent5 / nonStaleActive : null,
+    probes,
   };
 }
 
@@ -202,7 +227,7 @@ export async function runArmSeed(arm, seed, genOpts = {}, inspect = undefined) {
       //    make identical (arm, seed) runs produce different top-5 metrics
       //    (codex P1). sha256 prefix keeps the mem_<12 hex> format.
       for (const m of bySession.get(session.index) ?? []) {
-        const entry = createMemory(m.content);
+        const entry = createMemory(m.content, { baseHalfLifeDays: SWEEP_HALF_LIFE });
         entry.id = `mem_${createHash('sha256').update(`e1:${seed}:${m.id}`).digest('hex').slice(0, 12)}`;
         writeEntry(hippoRoot, entry);
         idMap.set(m.id, entry.id);
@@ -235,6 +260,8 @@ export async function runArmSeed(arm, seed, genOpts = {}, inspect = undefined) {
       const entries = loadAllEntries(hippoRoot);
       epochs.push(await probeEpoch(protocol, entries, session.index, session.date, arm));
     }
+    // Only the final epoch is judged, so only it keeps per-probe rows (compare.mjs hierarchical CI).
+    for (const e of epochs.slice(0, -1)) delete e.probes;
 
     if (inspect) await inspect(hippoRoot, idMap);
   } finally {
@@ -272,19 +299,23 @@ if (isMain) {
     numSessions: Number(getArg('sessions', '20')),
     distractorMultiple: Number(getArg('distractors', '10')),
   };
+  // A5 sweep: --half-life sets the decay base (default 7 = registered E1); --out-dir
+  // isolates sweep output so it never clobbers the registered raw/.
+  SWEEP_HALF_LIFE = Number(getArg('half-life', '7'));
+  const outDir = path.resolve(getArg('out-dir', OUT_DIR));
   for (const arm of arms) {
     if (!ARM_ENV[arm]) {
       console.error(`unknown arm: ${arm}`);
       process.exit(1);
     }
   }
-  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.mkdirSync(outDir, { recursive: true });
   (async () => {
     for (const arm of arms) {
       for (const seed of seeds) {
         const t0 = Date.now();
         const result = await runArmSeed(arm, seed, genOpts);
-        const outFile = path.join(OUT_DIR, `${arm}-seed${seed}.json`);
+        const outFile = path.join(outDir, `${arm}-seed${seed}.json`);
         fs.writeFileSync(outFile, JSON.stringify(result, null, 1), 'utf8');
         const last = result.epochs[result.epochs.length - 1];
         console.log(
