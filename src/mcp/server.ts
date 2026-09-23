@@ -57,6 +57,7 @@ export function __resetSessionRecallHistoryMcp(): void {
 }
 import { applyGoalStackBoost } from '../goals.js';
 import { openHippoDb, closeHippoDb } from '../db.js';
+import { recordTokenUse, type TokenSurface } from '../token-ledger.js';
 import { PACKAGE_VERSION } from '../version.js';
 
 // ── Find hippo root ──
@@ -260,7 +261,7 @@ const TOOLS = [
       type: 'object' as const,
       properties: {
         query: { type: 'string', description: 'What to search for in memory (natural language)' },
-        budget: { type: 'number', description: 'Max tokens to return (default: 1500)' },
+        budget: { type: 'number', description: 'Max tokens to return (default: config.defaultBudget, 4000)' },
         include_continuity: {
           type: 'boolean',
           description: 'Append continuity context (active snapshot + handoff + last 5 session events) below the memory results. Useful at session boot.',
@@ -394,7 +395,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object' as const,
       properties: {
-        budget: { type: 'number', minimum: 0, description: 'Max tokens (default: 1500)' },
+        budget: { type: 'number', minimum: 0, description: 'Max tokens (default: config.defaultContextBudget, 3000)' },
         scope: {
           type: 'string',
           description: 'Restrict memories and snapshot to this scope exactly. When omitted, default-deny applies to ANY <source>:private:* (slack, github, ...) and unknown-legacy rows.',
@@ -501,6 +502,40 @@ function resolveClientKey(ctx: { clientKey?: string; tenantId: string } | undefi
   if (ctx?.clientKey) return ctx.clientKey;
   if (ctx?.tenantId) return `stdio-${process.pid}:${ctx.tenantId}`;
   return `stdio-${process.pid}:default`;
+}
+
+// ── Token ledger (ROADMAP TE0) ──
+
+const MCP_TOKEN_SURFACES: Record<string, TokenSurface> = {
+  hippo_recall: 'mcp_recall',
+  hippo_context: 'mcp_context',
+};
+
+/**
+ * Record the memory text a recall or context tool returned. Best-effort: a
+ * ledger failure never fails the tool call. Other tools are not recorded.
+ */
+function recordMcpTokens(toolName: string, output: string, ctx?: McpContext): void {
+  const surface = MCP_TOKEN_SURFACES[toolName];
+  if (!surface || !output) return;
+  try {
+    const hippoRoot = ctx?.hippoRoot ?? findHippoRoot();
+    if (!hippoRoot) return;
+    const db = openHippoDb(hippoRoot);
+    try {
+      recordTokenUse(db, {
+        tenantId: ctx?.tenantId ?? resolveTenantId({}),
+        surface,
+        event: 'inject',
+        items: 0,
+        tokens: estimateTokens(output),
+      });
+    } finally {
+      closeHippoDb(db);
+    }
+  } catch {
+    // Ledger is best-effort.
+  }
 }
 
 // ── Tool execution ──
@@ -1323,6 +1358,7 @@ export async function handleMcpRequest(
       const argumentsValue = params?.arguments;
       const toolArgs = isJsonObjectRecord(argumentsValue) ? argumentsValue : {};
       const output = await executeTool(toolName, toolArgs, ctx);
+      recordMcpTokens(toolName, output, ctx);
       return {
         jsonrpc: '2.0',
         id,

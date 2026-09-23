@@ -18,6 +18,11 @@ A `kind='raw'` memory: a connector message or imported note, append-only. Sleep 
 deletes one; only the raw archive removes it.
 _Avoid_: raw memory, transcript
 
+**Token ledger**:
+The record of every block of memory text hippo handed an agent: surface, session, estimated
+tokens, and whether it was sent or skipped as unchanged. Counts only, never the text.
+_Avoid_: usage log, telemetry, cost log
+
 ### Work queue
 
 **Card**:

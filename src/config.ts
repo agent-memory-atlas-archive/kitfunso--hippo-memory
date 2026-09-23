@@ -67,6 +67,13 @@ export interface HippoConfig {
   pinnedInject: {
     enabled: boolean;
     budget: number;
+    /** Skip a block identical to the one already injected this session
+     *  (ROADMAP TE2). Default true. Needs a session id from the hook payload. */
+    skipUnchanged: boolean;
+    /** Resend an unchanged block after this many consecutive skips, so long
+     *  sessions still see pinned rules near the latest turn. Default 10; 0
+     *  never resends an unchanged block. */
+    refreshTurns: number;
   };
   /** Memory scope isolation (v39): when true (default), ambient context
    *  (`hippo context`, the UserPromptSubmit hook, /v1/context, MCP
@@ -156,6 +163,8 @@ const DEFAULT_CONFIG: HippoConfig = {
   pinnedInject: {
     enabled: true,
     budget: 1500,
+    skipUnchanged: true,
+    refreshTurns: 10,
   },
   contextProjectIsolation: true,
   extraction: {

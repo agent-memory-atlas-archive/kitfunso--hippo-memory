@@ -51,6 +51,7 @@ import {
   type DormantMemory,
   type ListDormantOpts,
 } from './dormant.js';
+import { recordTokenUse, summarizeTokenUse, type TokenSummary, type TokenSurface } from './token-ledger.js';
 import { formatHandoffEvidenceLine, type SessionHandoff } from './handoff.js';
 import {
   createMemory,
@@ -179,6 +180,7 @@ export class RecallContractError extends Error {
 import { isPrivateScope, passesScopeFilterForRecall, assertScopeRequestAllowed } from './recall-scope.js';
 export { isPrivateScope, passesScopeFilterForRecall };
 export { passesCliRecallScopeFilter, ScopeForbiddenError } from './recall-scope.js';
+export type { TokenSummary, TokenSurface, TokenSurfaceSummary } from './token-ledger.js';
 
 // v39: classifyOriginProject lives in project-identity.ts (leaf) so
 // shared.ts can use it without an api.ts import cycle. Re-exported here for
@@ -994,7 +996,7 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
   freshTailAddedCount = freshRanked.length;
 
   rankedOut = [...freshRanked, ...baseRanked, ...summaryRanked];
-  tokensOut = rankedOut.reduce((acc, r) => acc + Math.ceil(r.content.length / 4), 0);
+  tokensOut = rankedOut.reduce((acc, r) => acc + estimateTokens(r.content), 0);
   totalOut = entries.length;
 
   // TODO(a1-task-4): emit via the shared audit hook in store.ts so we don't
@@ -1083,7 +1085,7 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
       recentSessionEvents: filteredEvents,
     };
     const tokenize = (s?: string | null): number =>
-      s ? Math.ceil(s.length / 4) : 0;
+      s ? estimateTokens(s) : 0;
     continuityTokens =
       tokenize(filteredSnapshot?.task) +
       tokenize(filteredSnapshot?.summary) +
@@ -1432,7 +1434,7 @@ export function assemble(
   tailItems.sort((a, b) => cmpIso(a.createdAt, b.createdAt));
   let items: AssembledContextItem[] = [...olderItems, ...tailItems];
 
-  let tokens = items.reduce((acc, it) => acc + Math.ceil(it.content.length / 4), 0);
+  let tokens = items.reduce((acc, it) => acc + estimateTokens(it.content), 0);
   let evicted = 0;
   while (tokens > budget && items.length > 0) {
     let worstIdx = -1;
@@ -1445,7 +1447,7 @@ export function assemble(
       }
     }
     if (worstIdx === -1) break;
-    const cost = Math.ceil(items[worstIdx].content.length / 4);
+    const cost = estimateTokens(items[worstIdx].content);
     items = items.filter((_, i) => i !== worstIdx);
     tokens -= cost;
     evicted++;
@@ -1583,7 +1585,7 @@ export function drillDown(
     const out: MemoryEntry[] = [];
     let used = 0;
     for (const c of collected) {
-      const t = Math.ceil(c.content.length / 4);
+      const t = estimateTokens(c.content);
       if (out.length > 0 && used + t > opts.budget) {
         truncated = true;
         break;
@@ -2917,6 +2919,51 @@ export interface SleepOpts {
    * preserve all current behaviour when `__phases` is undefined.
    */
   __phases?: Partial<SleepPhases>;
+}
+
+/**
+ * Record memory text handed to an agent in the token ledger (ROADMAP TE0).
+ * Best-effort: never throws, because a ledger failure must not fail the
+ * recall or context call that produced the text.
+ */
+export function recordTokens(
+  ctx: Context,
+  surface: TokenSurface,
+  use: { items: number; tokens: number; sessionId?: string | null },
+): void {
+  try {
+    const db = openHippoDb(ctx.hippoRoot);
+    try {
+      recordTokenUse(db, {
+        tenantId: ctx.tenantId,
+        sessionId: use.sessionId ?? null,
+        surface,
+        event: 'inject',
+        items: use.items,
+        tokens: use.tokens,
+      });
+    } finally {
+      closeHippoDb(db);
+    }
+  } catch {
+    // Ledger is best-effort.
+  }
+}
+
+/**
+ * Token ledger totals for the tenant over the last `days` days (default 30):
+ * tokens sent per surface, blocks skipped as unchanged and the tokens that
+ * saved, and mean tokens per session.
+ */
+export function tokenSummary(ctx: Context, opts: { days?: number } = {}): TokenSummary {
+  const days = opts.days !== undefined && Number.isFinite(opts.days) && opts.days > 0 ? opts.days : 30;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    return summarizeTokenUse(db, ctx.tenantId, since);
+  } finally {
+    closeHippoDb(db);
+  }
 }
 
 /**

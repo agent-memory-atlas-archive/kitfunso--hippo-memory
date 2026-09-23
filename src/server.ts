@@ -50,6 +50,7 @@ import {
   getContext,
   sleep,
   adminActor,
+  recordTokens,
   type Context,
   type RecallOpts,
   type AssembleOpts,
@@ -963,6 +964,7 @@ async function handleRequest(
     if (includeContinuity) {
       res.setHeader('Cache-Control', 'no-store');
     }
+    recordTokens(ctx, 'http_recall', { items: result.results.length, tokens: result.tokens + (result.continuityTokens ?? 0), sessionId: sessionId ?? null });
     sendJson(res, 200, result);
     return;
   }
@@ -1001,6 +1003,7 @@ async function handleRequest(
     if (summarizeOlder !== undefined) assembleExtra.summarizeOlder = summarizeOlder;
     if (scope !== undefined) assembleExtra.scope = scope;
     const result = assemble(ctx, assembleMatch.id!, assembleExtra);
+    recordTokens(ctx, 'http_assemble', { items: result.items.length, tokens: result.tokens, sessionId: assembleMatch.id! });
     sendJson(res, 200, result);
     return;
   }
@@ -1204,6 +1207,7 @@ async function handleRequest(
       crossProject,
       currentProject: resolveProjectIdentity(dirname(resolve(opts.hippoRoot))).name,
     });
+    recordTokens(ctx, 'http_context', { items: result.entries.length, tokens: result.tokens });
     sendJson(res, 200, result);
     return;
   }

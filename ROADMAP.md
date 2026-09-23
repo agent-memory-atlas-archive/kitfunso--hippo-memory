@@ -1379,20 +1379,23 @@ Triggered by a founder question: can hippo save organisations tokens and make an
 
 | Existing | Where | Status |
 |---|---|---|
-| Token budgets on every surface (recall 4000, context 1500, MCP recall 4000, MCP context 3000, pinned inject 1500) | `src/cli.ts`, `src/api.ts`, `src/config.ts` | Works; MCP tool descriptions advertise 1500 for both |
+| Token budgets on every surface (recall 4000, context 1500, MCP recall 4000, MCP context 3000, pinned inject 1500) | `src/cli.ts`, `src/api.ts`, `src/config.ts` | Works; the MCP descriptions advertised 1500 for both until PR #227 |
 | Greedy score-ordered packing, dedup, MMR, `minResults` | `src/search.ts:694-785` | Fills the budget; never stops early on weak results |
 | Lifecycle stress eval with a per-condition `tokens` field | `scripts/lifecycle-stress/run.mjs` | The only token-reporting harness; headline NULL (Part III) |
 | Structured handoff and snapshot caps instead of transcripts | `src/handoff.ts`, `src/capture.ts:1026` | Bounded by design (non-goal 12) |
 
 ### Track TE - Token efficiency
 
-#### TE0. Token ledger [next, 1w]
+#### TE0. Token ledger [shipped first slice, PR #227]
+**Status:** `token_ledger` (schema v45) records the hook, CLI context and recall, MCP recall and context, and HTTP recall, context and assemble; `hippo tokens` reports per surface; one `estimateTokens`; MCP descriptions fixed. Remaining: optional exact tokenizer or per-model calibration, continuity blocks inside the `hippo context` budget, an HTTP report endpoint and the A7 rollup, and confirming how each host keeps `additionalContext`.
 Record every injection: surface (hook, CLI, MCP, HTTP), items, estimated tokens, a hash of the rendered block, session id. One `estimateTokens` everywhere (six inline copies today), optional exact tokenizer or per-model calibration, continuity blocks counted inside the budget, MCP descriptions fixed to the real defaults. `hippo stats tokens` and an HTTP rollup feed A7 (per-tenant usage). Also confirms how each host keeps `additionalContext` in its transcript. **Success:** a week of dogfood sessions produces a per-session injection report.
 
-#### TE1. Cache-stable rendering [next, 3d]
+#### TE1. Cache-stable rendering [shipped for the hook, PR #227]
+**Status:** the hook block drops the live strength percentage and is byte-identical while its memories do not change. Remaining: moving pinned memories into the session-start prefix, and the same treatment for MCP and HTTP text.
 Injected blocks render byte-identically for the same memories: no per-call strength percentage (bucket or drop it), stable date text, deterministic tie order. Pinned memories inject at session start where they can sit in the cached prefix. **Success:** TE4 shows identical hashes for unchanged memory across turns.
 
-#### TE2. Inject only on change [next, 1w]
+#### TE2. Inject only on change [shipped, PR #227; delta-only injection remaining]
+**Status:** an unchanged hook block is skipped when the payload carries a session id, resent every 10 skips (`pinnedInject.refreshTurns`) and after compaction, and logged as tokens saved. Sending only the changed items is not built yet; a changed block is resent whole.
 The per-prompt hook compares the block hash with the last one it sent in this session and sends nothing (or a one-line marker) when unchanged, and only the new or changed items otherwise. **Success:** TE4 shows most per-session hook tokens removed, with no change in which memories the agent has seen.
 
 #### TE3. Token-at-accuracy curve [next, 1-2w]

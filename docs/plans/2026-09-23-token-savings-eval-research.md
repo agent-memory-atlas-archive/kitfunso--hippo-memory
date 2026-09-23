@@ -2,6 +2,10 @@
 
 Date: 2026-09-23. Status: research, feeds ROADMAP Part IX (Track TE). No code changes.
 
+Update, same day: the first slices of TE0 (token ledger, `hippo tokens`), TE1 (stable hook
+rendering) and TE2 (skip unchanged hook blocks) shipped in PR #227, along with the MCP budget
+description fix. Section 1 describes the code before that change.
+
 Method: two parallel passes. The first was a read-only audit of how hippo counts, spends and
 reports tokens at v1.44.0 plus PR #227. The second was a literature and industry review of how
 memory systems and coding-agent benchmarks measure token and cost savings. arxiv.org and
