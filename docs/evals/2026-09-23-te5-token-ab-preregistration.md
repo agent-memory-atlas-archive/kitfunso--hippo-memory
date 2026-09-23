@@ -1,0 +1,75 @@
+# TE5 paired agent A/B on task sequences: pre-registration
+
+**Date:** 2026-09-23
+**Roadmap:** ROADMAP Part IX, Track TE, TE5
+**Research record:** `docs/plans/2026-09-23-token-savings-eval-research.md`
+**Analyzer:** `scripts/token-eval/ab-analyze.mjs` (tested in `tests/token-eval-ab-analyze.test.ts`)
+**Status:** registered before any run. No result exists yet. Thresholds below do not move after the first run; a changed threshold is a new registration with its own date.
+
+## Question
+
+On a sequence of related coding tasks, where earlier tasks can teach lessons that later tasks need, does an agent with hippo resolve tasks at lower cost per resolved task than the same agent without memory? And is any gain due to hippo's selection, rather than to extra context or to memory in general?
+
+## Hypotheses
+
+- **H1 (cost):** hippo as shipped has a lower cost per resolved task than no memory. The 95% CI of the relative difference lies below zero.
+- **H2 (quality):** hippo's resolve rate is not lower than no memory. Non-inferiority margin: the lower end of the 95% CI of the paired difference is above -3pp.
+- **H3 (mechanism):** hippo beats random repository text at the same token budget on cost per resolved task, with the CI below zero.
+- **H4 (harm check):** stale or irrelevant memories raise cost per resolved task compared with hippo, with the CI above zero. If they do not, the eval cannot tell good memory from bad, and H1 is not reported.
+
+"Smarter" (a higher resolve rate, with the CI excluding zero) is exploratory. It is reported but not claimed from this run.
+
+## Arms
+
+All arms use the same agent harness, model version, system prompt, tools and task order. Model and harness versions are recorded in the run log.
+
+| Arm | Memory given to the agent |
+|---|---|
+| `no-memory` | none (control) |
+| `hippo` | hippo as shipped: hooks installed, default config, the store built only from earlier tasks in the same sequence |
+| `dump-all` | every memory in that store, unranked, up to the model's context limit |
+| `naive-topk` | top-k by BM25 over the same store, at hippo's token budget |
+| `random-text` | random repository text at hippo's mean injected tokens per prompt |
+| `stale-memory` | memories from a different repository's sequence, at hippo's budget |
+
+## Tasks
+
+- **Sources:**
+  - SWE-ContextBench related-task pairs (arXiv 2602.08316).
+  - Fresh issues from hippo's own history.
+  - Public repositories with issues created after the model's training cutoff. This limits contamination ("The SWE-Bench Illusion", arXiv 2506.12286).
+- **Structure:** sequences of 5-10 related tasks per repository. The memory store is empty at the start of each sequence and is never shared across sequences.
+- **Size:** at least 100 scored tasks (non-first tasks) across at least 10 repositories. Each task in each arm runs with 3 seeds.
+- **Leakage guard:** no memory may contain a gold patch, a test body or a task's expected answer. Memories are grepped against gold patches before a run, and a hit invalidates the sequence.
+
+## Grading
+
+- **Resolved:** the task's own tests pass after the agent's change. This is execution-based; there is no LLM judge on the headline.
+- **Majority rule across seeds:** a task counts as resolved in an arm when most of its seeds resolve it. pass@1 and pass^3 are reported too.
+
+## Measurements (per task, per arm, per seed)
+
+- `usage`: input, cache-write, cache-read and output tokens, summed from the provider's usage fields over every call in the task. A run without usage data is excluded and reported. It is never zero-filled.
+- `turns`, `fileReads`, `toolCalls`, `repeatedErrors`, taken from the agent transcript. A repeated error is the same failing command or error signature seen earlier in the sequence.
+- Hippo's own overhead: `hippo tokens --json` after each sequence (TE0 ledger), plus sleep and consolidation calls if an LLM is used for them.
+
+## Analysis
+
+- **Cost:** list-price dollars from the provider's price page on the run date, stored with the results. Headline: cost per resolved task, with a paired bootstrap over tasks (5000 resamples, seed 1), comparing each arm with `no-memory` (`costPerResolvedDelta`).
+- **Resolve rate:** paired difference with a cluster bootstrap by repository (`clusteredPairedBootstrap`).
+- **Work metrics:** paired differences with the same cluster bootstrap.
+- **Multiple comparisons:** H1-H4 are the only confirmatory tests. Everything else is descriptive.
+- **Net ROI:** reported with hippo's overhead included in the hippo arm's usage, never computed on gross savings.
+
+## What gets published, whatever the result
+
+- The run log (JSONL in the analyzer's input format) and the analyzer output.
+- Harness code and every arm's configuration.
+- Model and harness versions, and the price table used.
+- A null or negative result is published the same way. A failed H4 means the headline is withheld and the eval design is revised in a new registration.
+
+## Not in scope for this registration
+
+- Enterprise tenant replays: that is EI12, which uses the same analyzer.
+- Latency.
+- Any claim about a model or harness other than the one run.

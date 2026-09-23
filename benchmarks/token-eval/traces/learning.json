@@ -1,0 +1,148 @@
+{
+ "name": "learning",
+ "description": "40 prompts, four lessons remembered along the way",
+ "synthetic": true,
+ "pinned": [
+  "NEVER force-push to master; it rewrites shared history",
+  "Run npm run build before npm test; tests import dist/",
+  "Changelog entries go in changelog.d/<branch>.md, never CHANGELOG.md"
+ ],
+ "events": [
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "The staging deploy needs VPN; without it the health check times out"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "sqlite FTS5 rejects a bare hyphen in MATCH; quote the term"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "The flaky auth timing test fails under load; rerun it alone before blaming a change"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "hippo reject purges dormant copies; check with hippo dormant after rejecting"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  }
+ ]
+}

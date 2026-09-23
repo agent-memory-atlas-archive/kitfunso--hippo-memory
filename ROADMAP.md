@@ -1398,13 +1398,16 @@ Injected blocks render byte-identically for the same memories: no per-call stren
 **Status:** an unchanged hook block is skipped when the payload carries a session id, resent every 10 skips (`pinnedInject.refreshTurns`) and after compaction, and logged as tokens saved. Sending only the changed items is not built yet; a changed block is resent whole.
 The per-prompt hook compares the block hash with the last one it sent in this session and sends nothing (or a one-line marker) when unchanged, and only the new or changed items otherwise. **Success:** TE4 shows most per-session hook tokens removed, with no change in which memories the agent has seen.
 
-#### TE3. Token-at-accuracy curve [next, 1-2w]
+#### TE3. Token-at-accuracy curve [harness shipped, PR #227; real-data run pending]
+**Status:** `scripts/token-eval/budget-curve.mjs` sweeps budgets per question against recency, full context and no memory, and reports minimum tokens to reach the evidence. Verified on the bundled smoke file only (haystacks too small to discriminate); the LongMemEval_s run needs the dataset, which this container cannot download. LLMLingua-2 arm deferred.
 LongMemEval and LoCoMo at budgets 250 to 8000, reporting answer recall against injected tokens and minimum tokens to answer, against full context, naive top-k at the same budget, LLMLingua-2 compression and no memory. Deterministic, gates CI. Replaces "R@5 at a fixed 4000" as the retrieval chart, since per-haystack R@5 is saturated.
 
-#### TE4. Session replay harness [next, 1-2w]
+#### TE4. Session replay harness [shipped, PR #227]
+**Status:** `scripts/token-eval/replay.mjs` replays traces through the real hook in every-turn and skip-unchanged arms, cache-priced; a short trace runs in CI. On three synthetic traces skip-unchanged cut hippo's cache-priced hook cost by 84-89% and unchanged blocks were byte-identical every time (`benchmarks/token-eval/README.md`). Real traces from dogfood sessions are the next input.
 Replays recorded (anonymised) agent sessions through the hooks with no LLM calls and prices the injected text with a cache model (Anthropic 0.1x read, 1.25x write). Reports tokens injected per session, share re-injected unchanged, and byte-stability. **Success:** runs in CI and fails on a regression, such as a hook that doubles its output.
 
-#### TE5. Paired agent A/B on task sequences [critical, next, 3-4w]
+#### TE5. Paired agent A/B on task sequences [critical; pre-registered and analyzer shipped in PR #227; runner and runs pending]
+**Status:** protocol and thresholds registered in `docs/evals/2026-09-23-te5-token-ab-preregistration.md`; `scripts/token-eval/ab-analyze.mjs` and `src/eval-stats.ts` (four-bucket pricing, paired, clustered and ratio bootstraps, pass@k and pass^k) are tested. The agent runner and the runs themselves need an API key and are not done.
 Sequences of related coding tasks where early tasks produce lessons later ones can use: SWE-ContextBench plus fresh issues from hippo's own history and post-cutoff public repositories. Six arms on the same model and harness: no memory, hippo as shipped, all memories dumped, naive top-k at equal budget, random repository text at equal budget, stale or irrelevant memories. 3-5 seeds, standard errors clustered by repository, four-bucket costs from provider usage fields, execution-based grading. Reports dollars per resolved task, resolve-rate delta (pass@1, pass^k), turns, file reads and repeated-error rate, and net token ROI. Pre-registered in `docs/evals`; harness and every arm's configuration published (the Mem0/Zep dispute shows vendor-run baselines are not trusted). This is the eval EI12 runs on a tenant's own history. **Success:** a published result with CIs, whatever it says.
 
 #### TE6. Adaptive budget [planned, after TE3]

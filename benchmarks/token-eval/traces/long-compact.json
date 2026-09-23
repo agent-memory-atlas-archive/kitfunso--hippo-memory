@@ -1,0 +1,263 @@
+{
+ "name": "long-compact",
+ "description": "80 prompts, two lessons, one context compaction at prompt 45",
+ "synthetic": true,
+ "pinned": [
+  "NEVER force-push to master; it rewrites shared history",
+  "Run npm run build before npm test; tests import dist/",
+  "Changelog entries go in changelog.d/<branch>.md, never CHANGELOG.md"
+ ],
+ "events": [
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "The docs site builds from docs/ with mkdocs; run mkdocs serve to preview"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "compact"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "remember",
+   "text": "Windows paths in fixtures need forward slashes or the path tests fail"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  }
+ ]
+}
