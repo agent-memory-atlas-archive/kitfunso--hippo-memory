@@ -12,6 +12,7 @@ import { openHippoDb, closeHippoDb, type DatabaseSyncLike } from './db.js';
 import {
   writeEntry,
   writeEntryDbOnly,
+  batchWriteAndDelete,
   stampOriginProject,
   writeEntryMirrors,
   readEntry,
@@ -102,7 +103,7 @@ import { detectAvailabilityBias, type AvailabilityHint } from './availability.js
  * object carrying both the audit-log subject (formerly the string itself) and
  * a role for /v1/sleep admin gating. Audit helpers continue accepting `string`
  * — callers pass `ctx.actor.subject`. Role checks happen at the request
- * boundary (e.g. /v1/sleep), not inside api functions.
+ * boundary (e.g. /v1/sleep), except in authCreate and authRevoke (ForbiddenError).
  */
 export interface Actor {
   /** 'cli' | 'localhost:cli' | 'api_key:<key_id>' | 'mcp' | 'connector:slack' | 'connector:github' */
@@ -157,6 +158,14 @@ export class RecallContractError extends Error {
     super(message);
     this.name = 'RecallContractError';
     this.code = code;
+  }
+}
+
+/** The actor's role or identity does not allow the operation. HTTP maps it to 403. */
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
   }
 }
 
@@ -310,6 +319,7 @@ export interface RecallOpts {
    * (e.g. mean-of-children summary re-rank).
    */
   scorerWindow?: number;
+  /** Candidate order. `recall` always keeps the BM25 order; `retrieve` honours this. */
   mode?: 'bm25' | 'hybrid' | 'physics';
   /**
    * Restrict results to memories whose `scope` equals this value exactly.
@@ -680,9 +690,8 @@ export function buildSuppressionSummary(counts: {
 
 /**
  * Domain-level recall. Loads BM25-ranked candidates from SQLite scoped to
- * `ctx.tenantId`. The `mode` flag is accepted for forward compatibility (the
- * CLI exposes hybrid/physics paths) but Task 2 wires only the BM25 candidate
- * loader; later tasks can extend this to call the physics/hybrid scorer.
+ * `ctx.tenantId` and keeps that order whatever `mode` says; `retrieve` is the
+ * mode-aware, strengthening variant the HTTP route uses.
  *
  * **api.recall does NOT mutate `index.last_retrieval_ids`** (v1.11.5 contract
  * lock). The CLI `cmdRecall` (cli.ts) writes `last_retrieval_ids` because the
@@ -695,7 +704,32 @@ export function buildSuppressionSummary(counts: {
  * `tests/api-recall-no-side-effects.test.ts`.
  */
 export function recall(ctx: Context, opts: RecallOpts): RecallResult {
-  const limit = opts.limit ?? 10;
+  const windowSize = recallWindowSize(opts);
+  return recallFrom(ctx, opts, windowSize, loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope));
+}
+
+/** Mode-aware recall that strengthens each returned row; never writes last_retrieval_ids (v1.11.5 lock). */
+export async function retrieve(ctx: Context, opts: RecallOpts): Promise<RecallResult> {
+  const windowSize = recallWindowSize(opts);
+  let candidates = loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope);
+  if (opts.mode === 'hybrid' || opts.mode === 'physics') {
+    const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot, scope: opts.scope ?? null };
+    const ranked = opts.mode === 'physics'
+      ? await physicsSearch(opts.query, candidates, { ...searchOpts, physicsConfig: loadConfig(ctx.hippoRoot).physics })
+      : await hybridSearch(opts.query, candidates, searchOpts);
+    const rankedIds = new Set(ranked.map((r) => r.entry.id));
+    candidates = [...ranked.map((r) => r.entry), ...candidates.filter((e) => !rankedIds.has(e.id))];
+  }
+  const result = recallFrom(ctx, opts, windowSize, candidates);
+  if (!isRecallBoostAblated()) {
+    const retrieved = markRetrieved(loadEntriesByIds(ctx.hippoRoot, result.results.map((r) => r.id), ctx.tenantId));
+    batchWriteAndDelete(ctx.hippoRoot, retrieved, [], { snapshotIds: new Set(retrieved.map((e) => e.id)) });
+  }
+  return result;
+}
+
+/** Contract preflight: throws before any store-touching work. */
+function recallWindowSize(opts: RecallOpts): number {
   // F5 (v1.6.5) preflight — codex P1: original guard fired AFTER
   // loadSearchEntries (which runs initStore, migrating legacy state on first
   // call). For a true contract preflight we want the throw before any
@@ -735,7 +769,11 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
       );
     }
   }
-  const windowSize = opts.scorerWindow ?? DEFAULT_SEARCH_CANDIDATE_LIMIT;
+  return opts.scorerWindow ?? DEFAULT_SEARCH_CANDIDATE_LIMIT;
+}
+
+function recallFrom(ctx: Context, opts: RecallOpts, windowSize: number, all: MemoryEntry[]): RecallResult {
+  const limit = opts.limit ?? 10;
   // v1.7.1 — root-cause fix for the `unknown:legacy` leak. Scope predicate
   // is now pushed into `loadSearchRows` SQL via `loadRecallSearchEntries`.
   // - opts.scope undefined / '': SQL excludes `unknown:legacy`.
@@ -762,13 +800,6 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
   let summarySubstitutionsCount = 0;
   let freshTailAddedCount = 0;
 
-  const all = loadRecallSearchEntries(
-    ctx.hippoRoot,
-    opts.query,
-    windowSize,
-    ctx.tenantId,
-    opts.scope,
-  );
   // v1.12.13 / C5 — WYSIATI totalCandidates counter (post tenant + SQL scope
   // predicate, pre JS scope filter).
   totalCandidatesCount = all.length;
@@ -2137,11 +2168,13 @@ export interface AuthCreateResult {
  * `src/server.ts` POST /v1/auth/keys mirrors this: it ignores any body
  * `tenantId` and uses the resolved Bearer's tenant exclusively.
  *
- * Per A5 v2 follow-ups (TODOS.md), `auth_create` is currently unaudited —
- * we intentionally match that behavior here for consistency. When A5 v2
- * lands and adds the audit op, this function should mirror the cli handler.
+ * Only an admin actor can mint (ForbiddenError otherwise), so a member key
+ * can never create a key, least of all an admin one.
  */
 export function authCreate(ctx: Context, opts: AuthCreateOpts): AuthCreateResult {
+  if (ctx.actor.role !== 'admin') {
+    throw new ForbiddenError('Only an admin key can create API keys');
+  }
   const db = openHippoDb(ctx.hippoRoot);
   try {
     const role = opts.role ?? 'admin';
@@ -2195,8 +2228,8 @@ export function authList(
  * Revoke an API key.
  *
  * Security: the key must belong to `ctx.tenantId`. Cross-tenant revoke is
- * rejected with the same "not found" message used for missing keys, so that a
- * caller cannot probe which key_ids exist on other tenants.
+ * rejected with the "not found" message used for missing keys, and a member may
+ * revoke only its own key (checked first), so no caller can probe other key_ids.
  *
  * Audit: emits 'auth_revoke' with `tenantId` set to the KEY ROW's tenant_id
  * (M1 fix from A5 review, mirrors src/cli.ts:cmdAuthRevoke). Skipped on no-op
@@ -2210,6 +2243,9 @@ export function authRevoke(
   ctx: Context,
   keyId: string,
 ): AuthRevokeResult {
+  if (ctx.actor.role !== 'admin' && ctx.actor.subject !== `api_key:${keyId}`) {
+    throw new ForbiddenError('A member key can revoke only itself');
+  }
   const db = openHippoDb(ctx.hippoRoot);
   try {
     // SAFETY: row's shape matches the three columns named in the SELECT
