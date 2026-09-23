@@ -3024,6 +3024,9 @@ export function renderSleepResult(result: api.SleepResult): void {
   if (result.dormant !== undefined && result.dormant > 0) {
     console.log(`   Kept dormant:      ${result.dormant}  (hippo dormant to list)`);
   }
+  if (result.dormantExpired !== undefined && result.dormantExpired > 0) {
+    console.log(`   Expired dormant:   ${result.dormantExpired}  (past dormant.retentionDays)`);
+  }
   console.log(`   Merged episodic:   ${result.mergedEpisodic}`);
   console.log(`   New semantic:      ${result.newSemantic}`);
 
@@ -8305,6 +8308,7 @@ const VALID_AUDIT_OPS: ReadonlySet<AuditOp> = new Set<AuditOp>([
   'reject_refusal',        // AT1 — emitted when the rejection guard refuses a write; lockstep
   'unreject_value',        // AT1 — emitted by `hippo unreject`; lockstep
   'conflict_resolve',      // AT1 — emitted by resolveConflict on every resolution path; lockstep
+  'dormant_restore',       // Dormant memories — emitted by api.restoreDormant; lockstep with AuditOp union + server.ts VALID_AUDIT_OPS
 ]);
 
 function formatAuditRow(ev: AuditEvent): string {

@@ -17,8 +17,9 @@ afterEach(() => {
 });
 
 describe('Decay pass', () => {
-  it('removes entries below the strength threshold', async () => {
+  it('removes entries below the strength threshold (dormant opted out)', async () => {
     initStore(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
 
     // Create an entry that's very old (strength will be effectively 0)
     const entry = createMemory('ancient memory');
@@ -50,6 +51,7 @@ describe('Decay pass', () => {
 
   it('dry-run does not remove entries', async () => {
     initStore(tmpDir);
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
 
     const entry = createMemory('ancient memory');
     const veryOldDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000 * 10).toISOString();

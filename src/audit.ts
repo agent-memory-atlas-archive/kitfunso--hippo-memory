@@ -239,6 +239,7 @@ export type AuditOp =
   | 'reject_value' // AT1 — lockstep with cli.ts VALID_AUDIT_OPS + server.ts VALID_AUDIT_OPS; emitted by the `hippo reject` verb (docs/plans/2026-08-15-at1-rejected-value-tombstone.md)
   | 'reject_refusal' // AT1 — lockstep; emitted when the rejection guard refuses a write (writeEntry/api.supersede post-rollback, or inline during bootstrapLegacyStore/rebuildIndex skips)
   | 'unreject_value' // AT1 — lockstep; emitted by the `hippo unreject` verb
+  | 'dormant_restore' // Dormant memories — lockstep with cli.ts + server.ts VALID_AUDIT_OPS; emitted by api.restoreDormant (a "forgot it, then needed it" label)
   | 'conflict_resolve'; // AT1 — lockstep; emitted by resolveConflict on every resolution path (domain-namespaced, not bare 'resolve' — grill issue 5)
 
 export interface AppendAuditOpts {

@@ -45,7 +45,7 @@ import { RejectedValueError, type RejectedValueRow } from './rejection.js';
 import { rejectValue, unrejectValue, listRejectionsForTenant } from './reject-flow.js';
 import {
   listDormantRows,
-  readDormantEntry,
+  readDormantSnapshot,
   deleteDormantRow,
   hasDormantRow,
   type DormantMemory,
@@ -2933,8 +2933,8 @@ export function restoreDormant(ctx: Context, id: string): MemoryEntry {
     let restored: MemoryEntry;
     db.exec('BEGIN IMMEDIATE');
     try {
-      const snapshot = readDormantEntry(db, ctx.tenantId, id);
-      if (!snapshot) {
+      const dormant = readDormantSnapshot(db, ctx.tenantId, id);
+      if (!dormant) {
         throw new Error(`dormant memory not found: ${id}`);
       }
       if (db.prepare(`SELECT 1 FROM memories WHERE id = ?`).get(id) !== undefined) {
@@ -2948,12 +2948,27 @@ export function restoreDormant(ctx: Context, id: string): MemoryEntry {
       // legacy row shorter than 3 chars can still be restored.)
       const revived: MemoryEntry = {
         ...createMemory('dormant snapshot defaults'),
-        ...snapshot,
+        ...dormant.entry,
         last_retrieved: now.toISOString(),
       };
       restored = stampOriginProject(ctx.hippoRoot, { ...revived, strength: calculateStrength(revived, now) });
       writeEntryDbOnly(db, restored, { actor: ctx.actor.subject });
       deleteDormantRow(db, ctx.tenantId, id);
+      // A restore is a labelled "forgot it, then needed it" event: the
+      // signal a learned lifecycle (ROADMAP LC3) trains on. Same transaction
+      // as the restore, so the label exists exactly when the restore does.
+      appendAuditEvent(db, {
+        tenantId: ctx.tenantId,
+        actor: ctx.actor.subject,
+        op: 'dormant_restore',
+        targetId: id,
+        metadata: {
+          reason: dormant.reason,
+          strengthAtDormancy: dormant.strength,
+          dormantAt: dormant.dormantAt,
+          daysDormant: Math.max(0, (now.getTime() - Date.parse(dormant.dormantAt)) / (24 * 60 * 60 * 1000)),
+        },
+      });
       db.exec('COMMIT');
     } catch (err) {
       try { db.exec('ROLLBACK'); } catch { /* already rolled back */ }
@@ -3016,6 +3031,12 @@ export interface SleepResult {
    * (see src/sleep-redact.ts).
    */
   dormant?: number;
+  /**
+   * Dormant memories deleted for good this sleep because they outlived
+   * `dormant.retentionDays`. Absent when 0. Same per-invocation class as
+   * `removed` - NOT redacted on egress.
+   */
+  dormantExpired?: number;
   mergedEpisodic: number;
   newSemantic: number;
   dryRun: boolean;
@@ -3174,6 +3195,9 @@ export async function sleep(
     // byte-identical result (HTTP /v1/sleep, the CLI render snapshot).
     if (consolidateResult.dormant > 0) {
       result.dormant = consolidateResult.dormant;
+    }
+    if (consolidateResult.dormantExpired > 0) {
+      result.dormantExpired = consolidateResult.dormantExpired;
     }
 
     if (dryRun) return result;

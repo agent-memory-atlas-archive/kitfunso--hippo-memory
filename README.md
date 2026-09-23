@@ -465,11 +465,10 @@ usage, NOT real usage value — treat the flag as an experiment, not a recommend
 Tenants with fewer than 10 non-pinned memories never rescue (rank statistics are noise at
 tiny scale).
 
-**Keep faded memories dormant instead of deleting them (opt-in, default off).** With
-`{"dormant":{"enabled":true}}` in `.hippo/config.json`, sleep moves a memory that faded
+**Faded memories go dormant, not gone (on by default).** Sleep moves a memory that faded
 below the decay threshold into a dormant store instead of deleting it. A dormant memory
-leaves recall and context exactly like a deleted one and sits out every later sleep, but
-nothing is lost:
+leaves recall and context exactly like a deleted one and sits out every later sleep, so
+your agent's context stays as lean as before, but nothing is lost:
 
 ```bash
 hippo dormant                     # list, newest first (--json, --limit <n>)
@@ -479,9 +478,14 @@ hippo dormant forget mem_a1b2c3   # delete for good
 ```
 
 A restored memory comes back with a fresh recall clock, so it gets a full half-life before
-it can fade again. Rejecting a value (`hippo reject`) removes its dormant copies too. Sleep
-never removes pinned memories or raw receipts (Slack, GitHub, vault imports) either way.
-Duplicate removal and junk cleanup still delete.
+it can fade again, and every restore is logged (`hippo audit list --op dormant_restore`) as
+a "forgot it, then needed it" signal. Two guardrails: a faded memory that the secret
+detector flags is deleted, never kept dormant, and a dormant memory nobody restores within
+`dormant.retentionDays` (default 180, `0` keeps them forever) is deleted for good. Rejecting
+a value (`hippo reject`) removes its dormant copies too. To delete faded memories straight
+away as before, set `{"dormant":{"enabled":false}}` in `.hippo/config.json`. Sleep never
+removes pinned memories or raw receipts (Slack, GitHub, vault imports) either way, and
+duplicate removal and junk cleanup still delete.
 
 ---
 
@@ -608,7 +612,7 @@ hippo watch "npm run build"
 | `hippo outcome --id <id> --good` | Target a specific memory |
 | `hippo inspect <id>` | Full detail on one memory |
 | `hippo forget <id>` | Force remove a memory |
-| `hippo dormant [<query>]` | List faded memories sleep kept instead of deleting (`dormant.enabled`) |
+| `hippo dormant [<query>]` | List faded memories sleep kept instead of deleting |
 | `hippo dormant restore <id>` | Bring a dormant memory back to active memory |
 | `hippo dormant forget <id>` | Delete a dormant memory permanently |
 | `hippo embed` | Embed all memories for semantic search |

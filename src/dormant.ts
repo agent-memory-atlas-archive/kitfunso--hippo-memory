@@ -1,7 +1,7 @@
 /**
- * Dormant memories: what sleep does with a faded memory when
- * `"dormant": { "enabled": true }` is set in config.json, instead of
- * deleting it.
+ * Dormant memories: what sleep does with a faded memory instead of deleting
+ * it (config `dormant.enabled`, on by default; `retentionDays` bounds how
+ * long one is kept).
  *
  * A dormant memory keeps its full content in `dormant_memories` (schema v44)
  * but is no longer a `memories` row, so recall, context, every sleep pass and
@@ -149,17 +149,26 @@ export function listDormantRows(db: DatabaseSyncLike, tenantId: string, opts: Li
   return rows.map(rowToDormantMemory);
 }
 
+/** A dormant memory's stored snapshot plus when and why it went dormant. */
+export interface DormantSnapshot {
+  entry: MemoryEntry;
+  reason: string;
+  strength: number;
+  dormantAt: string;
+}
+
 /**
  * The stored snapshot for a tenant's dormant memory, or null when the tenant
  * has no dormant memory with that id (another tenant's id reads as absent).
  */
-export function readDormantEntry(db: DatabaseSyncLike, tenantId: string, id: string): MemoryEntry | null {
+export function readDormantSnapshot(db: DatabaseSyncLike, tenantId: string, id: string): DormantSnapshot | null {
   // SAFETY: row's shape matches the seven columns named in the SELECT.
   const row = db.prepare(
     `SELECT tenant_id, id, content, entry_json, reason, strength, dormant_at
        FROM dormant_memories WHERE tenant_id = ? AND id = ?`,
   ).get(tenantId, id) as DormantRow | undefined;
-  return row ? parseSnapshot(row) : null;
+  const entry = row ? parseSnapshot(row) : null;
+  return row && entry ? { entry, reason: row.reason, strength: row.strength, dormantAt: row.dormant_at } : null;
 }
 
 /** Whether a tenant has a dormant memory with this id (snapshot readable or not). */
@@ -189,4 +198,20 @@ export function purgeDormantByDigest(db: DatabaseSyncLike, tenantId: string, dig
     removed.push(row.id);
   }
   return removed;
+}
+
+/** How many dormant memories went dormant before `cutoffIso` (a dry-run count). */
+export function countExpiredDormant(db: DatabaseSyncLike, cutoffIso: string): number {
+  // SAFETY: row's shape matches the single aliased COUNT column in the SELECT.
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM dormant_memories WHERE dormant_at < ?`).get(cutoffIso) as { n: number };
+  return Number(row.n);
+}
+
+/**
+ * Delete every dormant memory (all tenants) that went dormant before
+ * `cutoffIso`: the `dormant.retentionDays` window. Returns how many went.
+ */
+export function purgeExpiredDormant(db: DatabaseSyncLike, cutoffIso: string): number {
+  const result = db.prepare(`DELETE FROM dormant_memories WHERE dormant_at < ?`).run(cutoffIso);
+  return Number(result.changes ?? 0);
 }

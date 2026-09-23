@@ -26,7 +26,8 @@ import { textOverlap, markRetrieved } from './search.js';
 import { compareEntryIdentity } from './compare.js';
 import { openHippoDb, closeHippoDb, type DatabaseSyncLike } from './db.js';
 import { rejectionDigest, findRejectedValue } from './rejection.js';
-import type { DormantMove } from './dormant.js';
+import { countExpiredDormant, purgeExpiredDormant, type DormantMove } from './dormant.js';
+import { detectSecret } from './secret-detect.js';
 import { loadPhysicsState, savePhysicsState, refreshParticleProperties } from './physics-state.js';
 import { simulate, type ForceContext } from './physics.js';
 import { loadConfig } from './config.js';
@@ -78,6 +79,9 @@ export interface ConsolidationResult {
   /** Faded memories moved to the dormant store instead of deleted (config
    *  `dormant.enabled`; src/dormant.ts). Always 0 when that is off. */
   dormant: number;
+  /** Dormant memories deleted for good this sleep because they outlived
+   *  `dormant.retentionDays` without a restore. */
+  dormantExpired: number;
   merged: number;
   semanticCreated: number;
   replayed: number;
@@ -129,6 +133,7 @@ export async function consolidate(
     decayed: 0,
     removed: 0,
     dormant: 0,
+    dormantExpired: 0,
     merged: 0,
     semanticCreated: 0,
     replayed: 0,
@@ -184,7 +189,9 @@ export async function consolidate(
       }
       return;
     }
-    if (config.dormant.enabled) {
+    // A faded secret is deleted, never kept dormant: keeping it would hold a
+    // credential on disk that the user reasonably expects forgetting removed.
+    if (config.dormant.enabled && !detectSecret(entry).flagged) {
       result.dormant++;
       result.details.push(`  💤 dormant ${entry.id} ${why}`);
       if (!dryRun) {
@@ -868,6 +875,23 @@ export async function consolidate(
   // Flush all writes/deletes/dormant moves in a single transaction
   if (!dryRun) {
     batchWriteAndDelete(hippoRoot, pendingWrites, pendingDeletes, pendingDormant);
+  }
+
+  // Dormant retention: a dormant memory nobody restored within
+  // dormant.retentionDays is deleted for good (0 keeps them forever). Runs
+  // even when dormant.enabled is off, so turning it off still ages out what
+  // earlier sleeps kept.
+  if (config.dormant.retentionDays > 0) {
+    const cutoff = new Date(now.getTime() - config.dormant.retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const db = openHippoDb(hippoRoot);
+    try {
+      result.dormantExpired = dryRun ? countExpiredDormant(db, cutoff) : purgeExpiredDormant(db, cutoff);
+    } finally {
+      closeHippoDb(db);
+    }
+    if (result.dormantExpired > 0) {
+      result.details.push(`  ⌛ ${dryRun ? 'would expire' : 'expired'} ${result.dormantExpired} dormant memor${result.dormantExpired === 1 ? 'y' : 'ies'} older than ${config.dormant.retentionDays} days`);
+    }
   }
 
   // -------------------------------------------------------------------------

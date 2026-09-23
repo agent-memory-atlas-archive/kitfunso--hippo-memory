@@ -8,8 +8,9 @@ claim cards. These terms have one fixed meaning in the hippo code, the `hippo` C
 ### Memory lifecycle
 
 **Dormant memory**:
-A memory sleep moved out of active memory instead of deleting it, because it faded and
-`dormant.enabled` is on. It keeps its content and can be restored or forgotten for good.
+A memory sleep moved out of active memory instead of deleting it, because it faded
+(`dormant.enabled`, on by default). It keeps its content and can be restored or forgotten for
+good until `dormant.retentionDays` expires it.
 _Avoid_: archived memory (the raw archive keeps metadata only), deleted, cold
 
 **Raw receipt**:

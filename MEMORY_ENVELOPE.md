@@ -158,11 +158,11 @@ the guard's correctness.
 
 ## Dormant memories (schema v44)
 
-With `{"dormant":{"enabled":true}}` in `.hippo/config.json`, the sleep decay
-pass moves a memory that faded below the threshold into `dormant_memories`
-instead of deleting it (`src/dormant.ts`). The snapshot insert and the
+The sleep decay pass moves a memory that faded below the threshold into
+`dormant_memories` instead of deleting it (`src/dormant.ts`; on by default,
+`{"dormant":{"enabled":false}}` opts out). The snapshot insert and the
 `memories` delete run in one transaction, so a memory is never in both tables
-or in neither. Off by default.
+or in neither.
 
 - **Content is kept.** Unlike `raw_archive` (metadata only), a dormant row
   holds the full content plus a `MemoryEntry` snapshot, so treat it as stored
@@ -175,6 +175,13 @@ or in neither. Off by default.
   the rejection guard refuses a value rejected by an older binary too.
 - **Never raw.** A faded `kind='raw'` row stays in `memories` (append-only);
   it is neither deleted nor made dormant.
+- **Never secrets.** A faded memory the secret detector flags is deleted, not
+  kept dormant.
+- **Bounded.** Sleep deletes a dormant row older than `dormant.retentionDays`
+  (default 180; 0 keeps them forever), even with the feature switched off.
+- **Restores are labels.** Each restore writes a `dormant_restore` audit row
+  (reason, strength at dormancy, days dormant): training signal for a learned
+  lifecycle.
 
 ## Out of scope here (deferred)
 

@@ -69,7 +69,8 @@ function enableMemoryValue(hippoRoot: string, extra: Partial<HippoConfig> = {}):
   const configPath = path.join(hippoRoot, 'config.json');
   fs.writeFileSync(
     configPath,
-    JSON.stringify({ memoryValue: { enabled: true }, physics: { enabled: false }, ...extra }, null, 2),
+    // dormant off: these gates were pre-registered on the delete path.
+    JSON.stringify({ memoryValue: { enabled: true }, physics: { enabled: false }, dormant: { enabled: false }, ...extra }, null, 2),
   );
 }
 
@@ -292,7 +293,9 @@ describe('(c) weights-sync vs the committed JSON artifact', () => {
 describe('(d) flag-off byte-identical', () => {
   it('identical survivor/removed sets and zero mv audit rows with memoryValue.enabled false (default)', async () => {
     initStore(dir);
-    // DEFAULT_CONFIG.memoryValue.enabled === false; no config.json override.
+    // DEFAULT_CONFIG.memoryValue.enabled === false. Dormant is pinned off:
+    // this gate was pre-registered on the delete path.
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
     const fresh = createMemory('a perfectly healthy fresh memory entry', { layer: Layer.Semantic });
     const ancient = condemnedEntry('an old memory that should decay away in the usual way');
     const pinned = { ...createMemory('a pinned rule', { pinned: true }), created: ancientDate(3650), last_retrieved: ancientDate(3650), half_life_days: 1 };
@@ -319,7 +322,7 @@ describe('(d) flag-off byte-identical', () => {
     const configPath = path.join(dir, 'config.json');
     fs.writeFileSync(
       configPath,
-      JSON.stringify({ replay: { count: 0 }, physics: { enabled: false }, autoTraceCapture: false }, null, 2),
+      JSON.stringify({ replay: { count: 0 }, physics: { enabled: false }, autoTraceCapture: false, dormant: { enabled: false } }, null, 2),
     );
 
     const tenants = ['d-t1', 'd-t2', 'd-t3'];

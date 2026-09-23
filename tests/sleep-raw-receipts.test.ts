@@ -27,8 +27,9 @@ function tmpHome(prefix: string, config?: string) {
   const home = mkdtempSync(join(tmpdir(), prefix));
   initStore(home);
   // Replay off keeps the decay assertions deterministic (replay re-strengthens
-  // a random sample of survivors).
-  writeFileSync(join(home, 'config.json'), config ?? JSON.stringify({ replay: { count: 0 } }), 'utf8');
+  // a random sample of survivors). Dormant off: these tests pin the delete
+  // path (tests/dormant-memories.test.ts covers the dormant default).
+  writeFileSync(join(home, 'config.json'), config ?? JSON.stringify({ replay: { count: 0 }, dormant: { enabled: false } }), 'utf8');
   return { home, restore: () => rmSync(home, { recursive: true, force: true }) };
 }
 

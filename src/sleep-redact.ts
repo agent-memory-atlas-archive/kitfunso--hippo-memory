@@ -48,8 +48,9 @@ export interface RedactSleepCtx {
  *
  * NOT redacted (per-invocation activity counters, not cross-tenant accounting):
  *   - active, removed, mergedEpisodic, newSemantic (this invocation's totals)
- *   - dormant (faded memories moved to the dormant store this invocation;
- *     the dormant.enabled sibling of `removed`, same class)
+ *   - dormant, dormantExpired (faded memories moved to the dormant store,
+ *     and dormant memories aged out, this invocation; siblings of `removed`,
+ *     same class)
  *   - dryRun (echo of input)
  *   - shared (counted within api.sleep's per-call work)
  *   - secretSkipped (v1.25.0 — sibling of `shared`, produced by the same

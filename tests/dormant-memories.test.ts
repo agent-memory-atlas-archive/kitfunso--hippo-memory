@@ -1,12 +1,13 @@
 /**
- * Dormant memories: an opt-in alternative to deleting what fades.
+ * Dormant memories: what sleep does with a faded memory instead of deleting it.
  *
- * With `"dormant": { "enabled": true }` in config.json, the sleep decay pass
- * moves a memory that faded below the threshold out of active memory into
- * the dormant store instead of deleting it. Dormant memories never reach
- * recall or context, sit out every later sleep, and can be listed, searched,
- * restored or permanently forgotten. Off by default: without the setting a
- * faded memory is deleted exactly as before. Real SQLite throughout.
+ * On by default (`"dormant": { "enabled": false }` opts out). The sleep decay
+ * pass moves a memory that faded below the threshold out of active memory
+ * into the dormant store. Dormant memories never reach recall or context,
+ * sit out every later sleep, and can be listed, searched, restored or
+ * permanently forgotten. Guardrails: a faded secret is deleted, never kept
+ * dormant, and a dormant memory older than `retentionDays` (default 180, 0 =
+ * forever) is deleted for good. Real SQLite throughout.
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,6 +22,7 @@ import {
 } from '../src/store.js';
 import { openHippoDb, closeHippoDb } from '../src/db.js';
 import { consolidate } from '../src/consolidate.js';
+import { insertDormantRow } from '../src/dormant.js';
 import { loadConfig } from '../src/config.js';
 import { createMemory, Layer, calculateStrength, type MemoryEntry } from '../src/memory.js';
 import { RejectedValueError, rejectionDigest, insertRejectedValue } from '../src/rejection.js';
@@ -28,7 +30,7 @@ import * as api from '../src/api.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DORMANT_ON = JSON.stringify({ replay: { count: 0 }, dormant: { enabled: true } });
-const DORMANT_OFF = JSON.stringify({ replay: { count: 0 } });
+const DORMANT_OFF = JSON.stringify({ replay: { count: 0 }, dormant: { enabled: false } });
 
 function tmpHome(prefix: string, config: string) {
   const home = mkdtempSync(join(tmpdir(), prefix));
@@ -57,8 +59,37 @@ function countDormantRows(home: string): number {
   }
 }
 
-describe('dormant memories are opt-in', () => {
-  it('without the setting a faded memory is deleted and nothing goes dormant', async () => {
+describe('dormant memories are on by default, with an opt-out', () => {
+  function captureWarnings(fn: () => void): string[] {
+    const warnings: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
+    try {
+      fn();
+    } finally {
+      console.error = originalError;
+    }
+    return warnings;
+  }
+
+  it('with no dormant setting a faded memory goes dormant, and retention defaults to 180 days', async () => {
+    const { home, restore } = tmpHome('hippo-dormant-default-', JSON.stringify({ replay: { count: 0 } }));
+    try {
+      const faded = aged(createMemory('the old staging hostname was build-07 before the move'), 90);
+      writeEntry(home, faded);
+
+      const result = await consolidate(home, { now: new Date() });
+
+      expect(result.removed).toBe(0);
+      expect(result.dormant).toBe(1);
+      expect(api.listDormant(ctxFor(home)).map((m) => m.id)).toEqual([faded.id]);
+      expect(loadConfig(home).dormant).toEqual({ enabled: true, retentionDays: 180 });
+    } finally {
+      restore();
+    }
+  });
+
+  it('opting out deletes a faded memory as before', async () => {
     const { home, restore } = tmpHome('hippo-dormant-off-', DORMANT_OFF);
     try {
       const faded = aged(createMemory('the old staging hostname was build-07 before the move'), 90);
@@ -70,22 +101,106 @@ describe('dormant memories are opt-in', () => {
       expect(result.dormant).toBe(0);
       expect(loadAllEntries(home).map((e) => e.id)).not.toContain(faded.id);
       expect(countDormantRows(home)).toBe(0);
-      expect(loadConfig(home).dormant.enabled).toBe(false);
     } finally {
       restore();
     }
   });
 
-  it('a non-object "dormant" setting falls back to off and warns', () => {
-    const { home, restore } = tmpHome('hippo-dormant-badcfg-', JSON.stringify({ dormant: true }));
-    const warnings: string[] = [];
-    const originalError = console.error;
-    console.error = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
+  it('a malformed setting warns and falls back to the default, which keeps faded memories', () => {
+    for (const bad of [{ dormant: true }, { dormant: { enabled: 'false' } }]) {
+      const { home, restore } = tmpHome('hippo-dormant-badcfg-', JSON.stringify(bad));
+      try {
+        let enabled: boolean | undefined;
+        const warnings = captureWarnings(() => { enabled = loadConfig(home).dormant.enabled; });
+        expect(enabled).toBe(true);
+        expect(warnings.some((w) => w.includes('"dormant'))).toBe(true);
+      } finally {
+        restore();
+      }
+    }
+    const { home, restore } = tmpHome('hippo-dormant-badretention-', JSON.stringify({ dormant: { retentionDays: -5 } }));
     try {
-      expect(loadConfig(home).dormant.enabled).toBe(false);
-      expect(warnings.some((w) => w.includes('"dormant"'))).toBe(true);
+      let days: number | undefined;
+      const warnings = captureWarnings(() => { days = loadConfig(home).dormant.retentionDays; });
+      expect(days).toBe(180);
+      expect(warnings.some((w) => w.includes('retentionDays'))).toBe(true);
     } finally {
-      console.error = originalError;
+      restore();
+    }
+  });
+
+  it('a faded memory holding a secret is deleted, never kept dormant', async () => {
+    const { home, restore } = tmpHome('hippo-dormant-secret-', DORMANT_ON);
+    try {
+      const secret = aged(createMemory('billing sandbox uses api_key=Zx81Qa92Lm37Pt45Rk for the nightly job'), 90);
+      const plain = aged(createMemory('the billing sandbox nightly job runs at 02:00 UTC'), 90);
+      writeEntry(home, secret);
+      writeEntry(home, plain);
+
+      const result = await consolidate(home, { now: new Date() });
+
+      expect(result.removed).toBe(1);
+      expect(result.dormant).toBe(1);
+      expect(api.listDormant(ctxFor(home)).map((m) => m.id)).toEqual([plain.id]);
+      expect(loadAllEntries(home)).toEqual([]);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('dormant retention', () => {
+  function storeWithOldDormant(prefix: string, config: string, daysAgo: number) {
+    const { home, restore } = tmpHome(prefix, config);
+    const entry = createMemory('the retired cron host was called nightly-02');
+    const db = openHippoDb(home);
+    try {
+      insertDormantRow(db, {
+        entry,
+        strength: 0.01,
+        reason: 'decay',
+        dormantAt: new Date(Date.now() - daysAgo * DAY_MS).toISOString(),
+      });
+    } finally {
+      closeHippoDb(db);
+    }
+    return { home, restore, id: entry.id };
+  }
+
+  it('sleep deletes a dormant memory once it outlives retentionDays', async () => {
+    const { home, restore } = storeWithOldDormant('hippo-dormant-expire-', JSON.stringify({ dormant: { retentionDays: 30 } }), 45);
+    try {
+      const dry = await consolidate(home, { now: new Date(), dryRun: true });
+      expect(dry.dormantExpired).toBe(1);
+      expect(countDormantRows(home)).toBe(1);
+
+      const result = await consolidate(home, { now: new Date() });
+      expect(result.dormantExpired).toBe(1);
+      expect(countDormantRows(home)).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps a dormant memory inside the window, and forever with retentionDays 0', async () => {
+    const inside = storeWithOldDormant('hippo-dormant-inside-', JSON.stringify({ dormant: { retentionDays: 180 } }), 45);
+    const forever = storeWithOldDormant('hippo-dormant-forever-', JSON.stringify({ dormant: { retentionDays: 0 } }), 4000);
+    try {
+      expect((await consolidate(inside.home, { now: new Date() })).dormantExpired).toBe(0);
+      expect((await consolidate(forever.home, { now: new Date() })).dormantExpired).toBe(0);
+      expect(countDormantRows(inside.home)).toBe(1);
+      expect(countDormantRows(forever.home)).toBe(1);
+    } finally {
+      inside.restore();
+      forever.restore();
+    }
+  });
+
+  it('still ages out old dormant memories after the feature is turned off', async () => {
+    const { home, restore } = storeWithOldDormant('hippo-dormant-off-expire-', JSON.stringify({ dormant: { enabled: false } }), 400);
+    try {
+      expect((await consolidate(home, { now: new Date() })).dormantExpired).toBe(1);
+    } finally {
       restore();
     }
   });
@@ -255,6 +370,20 @@ describe('listing, restoring and forgetting dormant memories', () => {
       const next = await consolidate(home, { now: new Date() });
       expect(next.dormant).toBe(0);
       expect(loadAllEntries(home).map((e) => e.id)).toContain(ids[0]);
+
+      // The restore is logged as a "forgot it, then needed it" label.
+      const db = openHippoDb(home);
+      try {
+        // SAFETY: rows' shape matches the two columns named in the SELECT.
+        const rows = db.prepare(`SELECT target_id, metadata_json FROM audit_log WHERE op = 'dormant_restore'`).all() as Array<{ target_id: string; metadata_json: string }>;
+        expect(rows.map((r) => r.target_id)).toEqual([ids[0]]);
+        // SAFETY: metadata_json is written by appendAuditEvent from a JSON object.
+        const meta = JSON.parse(rows[0].metadata_json) as { reason: string; daysDormant: number };
+        expect(meta.reason).toBe('decay');
+        expect(meta.daysDormant).toBeGreaterThanOrEqual(0);
+      } finally {
+        closeHippoDb(db);
+      }
     } finally {
       restore();
     }
