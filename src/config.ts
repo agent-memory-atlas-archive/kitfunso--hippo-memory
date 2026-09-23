@@ -101,6 +101,15 @@ export interface HippoConfig {
   memoryValue: {
     enabled: boolean;
   };
+  /** Dormant memories (src/dormant.ts): when enabled, the sleep decay pass
+   *  moves a memory that faded below the threshold into the dormant store
+   *  instead of deleting it. A dormant memory leaves recall and context like
+   *  a deleted one, but `hippo dormant restore <id>` brings it back and
+   *  `hippo dormant forget <id>` deletes it for good. Default OFF: a faded
+   *  memory is deleted, as before. */
+  dormant: {
+    enabled: boolean;
+  };
 }
 
 const DEFAULT_CONFIG: HippoConfig = {
@@ -165,11 +174,20 @@ const DEFAULT_CONFIG: HippoConfig = {
   memoryValue: {
     enabled: false,
   },
+  dormant: {
+    enabled: false,
+  },
 };
 
 function isMemoryValueConfig(
   value: HippoConfig['memoryValue'] | undefined,
 ): value is HippoConfig['memoryValue'] {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDormantConfig(
+  value: HippoConfig['dormant'] | undefined,
+): value is HippoConfig['dormant'] {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -197,6 +215,26 @@ export function loadConfig(hippoRoot: string): HippoConfig {
     }
     const memoryValueOverride: Partial<HippoConfig['memoryValue']> =
       memoryValueRaw !== undefined && isMemoryValueConfig(memoryValueRaw) ? memoryValueRaw : {};
+    // Same "never silently off" rule as memoryValue above: {"dormant": true}
+    // would otherwise spread to nothing and leave faded memories being
+    // deleted while the user believes they are kept.
+    const dormantRaw = raw.dormant;
+    if (dormantRaw !== undefined && !isDormantConfig(dormantRaw)) {
+      console.error(
+        `Warning: config.json's "dormant" must be an object like {"enabled": true} ` +
+        `(got ${JSON.stringify(dormantRaw)}) - faded memories will be deleted.`,
+      );
+    }
+    const dormantOverride: Partial<HippoConfig['dormant']> =
+      dormantRaw !== undefined && isDormantConfig(dormantRaw) ? dormantRaw : {};
+    // Only a real boolean counts: {"enabled": "false"} is a truthy string.
+    const dormantEnabled = dormantOverride.enabled ?? DEFAULT_CONFIG.dormant.enabled;
+    if (dormantEnabled !== true && dormantEnabled !== false) {
+      console.error(
+        `Warning: config.json's "dormant.enabled" must be true or false ` +
+        `(got ${JSON.stringify(dormantEnabled)}) - faded memories will be deleted.`,
+      );
+    }
     return {
       defaultHalfLifeDays: raw.defaultHalfLifeDays ?? DEFAULT_CONFIG.defaultHalfLifeDays,
       defaultBudget: raw.defaultBudget ?? DEFAULT_CONFIG.defaultBudget,
@@ -223,6 +261,9 @@ export function loadConfig(hippoRoot: string): HippoConfig {
       memoryValue: {
         ...DEFAULT_CONFIG.memoryValue,
         ...memoryValueOverride,
+      },
+      dormant: {
+        enabled: dormantEnabled === true,
       },
     };
   } catch (err) {

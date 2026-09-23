@@ -39,6 +39,7 @@ import {
 // inside function bodies (never at module-evaluation time), so the cycle
 // is the standard safe mutual-function-reference shape under NodeNext ESM.
 import { archiveRawMemory } from './raw-archive.js';
+import { insertDormantRow, type DormantMove } from './dormant.js';
 
 /** A value that round-trips through JSON.stringify/JSON.parse unchanged. */
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -2015,13 +2016,22 @@ export function deleteEntry(
 /**
  * Batch-write and batch-delete entries in a single transaction.
  * Used by consolidation to avoid N open/close cycles.
+ *
+ * `toDormant` (dormant memories, src/dormant.ts): each entry's snapshot is
+ * inserted into `dormant_memories` and its `memories` row then leaves exactly
+ * like a delete (FTS row, DAG parent dirty-mark, markdown mirrors), all in
+ * this one transaction, so a memory is never in both places or in neither.
+ * Never pass a kind='raw' row: raw rows are append-only and the DELETE would
+ * abort the whole batch.
  */
 export function batchWriteAndDelete(
   hippoRoot: string,
   toWrite: MemoryEntry[],
   toDeleteIds: string[],
+  toDormant: DormantMove[] = [],
 ): void {
-  if (toWrite.length === 0 && toDeleteIds.length === 0) return;
+  if (toWrite.length === 0 && toDeleteIds.length === 0 && toDormant.length === 0) return;
+  const removeIds = [...toDeleteIds, ...toDormant.map((move) => move.entry.id)];
 
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
@@ -2042,13 +2052,13 @@ export function batchWriteAndDelete(
     // dirty for the dominant mutation source (decay, merge, garbage-collect).
     const dirtyParents = new Set<string>();
     const tenantById = new Map<string, string>();
-    if (toDeleteIds.length > 0) {
-      const placeholders = toDeleteIds.map(() => '?').join(',');
+    if (removeIds.length > 0) {
+      const placeholders = removeIds.map(() => '?').join(',');
       // SAFETY: rows' shape matches the two columns named in the SELECT
       // above.
       const rows = db.prepare(
         `SELECT dag_parent_id, tenant_id FROM memories WHERE id IN (${placeholders})`,
-      ).all(...toDeleteIds) as Array<{ dag_parent_id: string | null; tenant_id: string | null }>;
+      ).all(...removeIds) as Array<{ dag_parent_id: string | null; tenant_id: string | null }>;
       for (const row of rows) {
         if (row.dag_parent_id) {
           dirtyParents.add(row.dag_parent_id);
@@ -2128,7 +2138,10 @@ export function batchWriteAndDelete(
         tenantById.set(entry.dag_parent_id, entry.tenantId);
       }
     }
-    for (const id of toDeleteIds) {
+    for (const move of toDormant) {
+      insertDormantRow(db, move);
+    }
+    for (const id of removeIds) {
       db.prepare('DELETE FROM memories WHERE id = ?').run(id);
       deleteFtsRow(db, id);
     }
@@ -2152,7 +2165,7 @@ export function batchWriteAndDelete(
       if (skippedWriteIds.has(entry.id)) continue;
       writeMarkdownMirror(hippoRoot, entry);
     }
-    for (const id of toDeleteIds) {
+    for (const id of removeIds) {
       removeEntryMirrors(hippoRoot, id);
     }
     writeIndexMirror(hippoRoot, buildIndexFromDb(db));

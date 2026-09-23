@@ -126,6 +126,12 @@ function hasNoSpecificity(text: string): boolean {
 }
 
 export function auditMemory(entry: MemoryEntry): AuditIssue | null {
+  // A raw receipt (Slack / GitHub message, vault note) records what was said,
+  // and is append-only: flagging a short one ("lgtm") as an error made sleep
+  // and `hippo audit --fix` DELETE it, which the append-only trigger aborts.
+  // archiveRawMemory (`hippo forget --archive`) is its only removal path.
+  if (entry.kind === 'raw') return null;
+
   const content = entry.content.trim();
 
   if (content.length < 3) {

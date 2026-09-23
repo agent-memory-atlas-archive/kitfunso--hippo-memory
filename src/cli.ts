@@ -19,6 +19,7 @@
  *   hippo reject <id>|--value "<text>" --reason "<why>"
  *   hippo rejections
  *   hippo unreject <digest-prefix>
+ *   hippo dormant [<query>] [--limit <n>] [--json] | restore <id> | forget <id>
  *   hippo inspect <id>
  *   hippo embed [--status]
  *   hippo watch "<command>"
@@ -3018,6 +3019,11 @@ export function renderSleepResult(result: api.SleepResult): void {
   console.log(`\nResults:`);
   console.log(`   Active memories:  ${result.active}`);
   console.log(`   Removed (decayed): ${result.removed}`);
+  // Only when dormant.enabled moved something, so every other render stays
+  // byte-identical (tests/cli-context-render-snapshot.test.ts).
+  if (result.dormant !== undefined && result.dormant > 0) {
+    console.log(`   Kept dormant:      ${result.dormant}  (hippo dormant to list)`);
+  }
   console.log(`   Merged episodic:   ${result.mergedEpisodic}`);
   console.log(`   New semantic:      ${result.newSemantic}`);
 
@@ -3828,6 +3834,13 @@ function cmdForget(
         `Cannot forget ${id}: it is a raw, append-only memory. ` +
         `Archive it instead: hippo forget ${id} --archive --reason "<why>"`,
       );
+    } else if (api.isDormant(ctx, id)) {
+      // Sleep moved it to the dormant store (dormant.enabled): it is not in
+      // active memory, so point at the command that owns it.
+      console.error(
+        `${id} is dormant, not in active memory. Delete it for good: hippo dormant forget ${id} ` +
+        `(or bring it back: hippo dormant restore ${id})`,
+      );
     } else {
       console.error(`Memory not found: ${id}`);
     }
@@ -4136,6 +4149,80 @@ function cmdUnreject(
   }
 
   console.log(`Unrejected [${outcome.digest.slice(0, 12)}...] (was: ${outcome.reason ?? 'none given'})`);
+}
+
+/**
+ * `hippo dormant [list] [<query>...] [--limit <n>] [--json] [--global]`,
+ * `hippo dormant restore <id>`, `hippo dormant forget <id>`.
+ * Dormant memories are what sleep keeps instead of deleting when
+ * `"dormant": { "enabled": true }` is set in .hippo/config.json.
+ */
+function cmdDormant(
+  hippoRoot: string,
+  args: string[],
+  flags: Record<string, string | boolean | string[]>,
+): void {
+  const root = resolveAuthRoot(hippoRoot, flags);
+  const ctx: api.Context = {
+    hippoRoot: root,
+    tenantId: resolveTenantId({}),
+    actor: api.adminActor('cli'),
+  };
+  const sub = args[0];
+
+  if (sub === 'restore' || sub === 'forget') {
+    const id = (args[1] ?? '').trim();
+    if (!id) {
+      console.error(`Usage: hippo dormant ${sub} <id>`);
+      process.exit(1);
+    }
+    try {
+      if (sub === 'restore') {
+        api.restoreDormant(ctx, id);
+        console.log(`Restored ${id} to active memory.`);
+      } else {
+        api.forgetDormant(ctx, id);
+        console.log(`Forgot dormant memory ${id} permanently.`);
+      }
+    } catch (err) {
+      if (err instanceof RejectedValueError) {
+        console.error(`Cannot restore ${id}: its value was rejected (${err.reason ?? 'no reason given'}). Run \`hippo unreject\` first to allow it.`);
+      } else {
+        console.error(`Could not ${sub} ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      process.exit(1);
+    }
+    return;
+  }
+
+  const queryArgs = sub === 'list' ? args.slice(1) : args;
+  const limit = parseCountFlag(flags['limit']);
+  const rows = api.listDormant(ctx, {
+    query: queryArgs.join(' '),
+    limit: limit > 0 ? limit : undefined,
+  });
+
+  if (flags['json']) {
+    console.log(JSON.stringify({ dormant: rows }, null, 2));
+    return;
+  }
+  if (rows.length === 0) {
+    console.log(queryArgs.length > 0 ? 'No dormant memories match.' : 'No dormant memories.');
+    if (!loadConfig(root).dormant.enabled) {
+      console.log(`Sleep deletes faded memories. To keep them dormant instead, set "dormant": { "enabled": true } in ${path.join(root, 'config.json')}.`);
+    }
+    return;
+  }
+
+  console.log(`${rows.length} dormant memor${rows.length === 1 ? 'y' : 'ies'}${queryArgs.length > 0 ? ' matching' : ''} (newest first):\n`);
+  for (const row of rows) {
+    const preview = row.content.length > 100 ? `${row.content.slice(0, 100)}...` : row.content;
+    console.log(`--- ${row.id}`);
+    console.log(`    ${preview}`);
+    console.log(`    Dormant since ${row.dormantAt.slice(0, 10)} (${row.reason}, strength ${row.strength.toFixed(3)})${row.tags.length > 0 ? `  tags: ${row.tags.join(', ')}` : ''}`);
+    console.log('');
+  }
+  console.log('Bring one back: hippo dormant restore <id>   Delete for good: hippo dormant forget <id>');
 }
 
 function cmdSnapshot(
@@ -9004,6 +9091,13 @@ Commands:
     --global               Operate on the global store
   unreject <digest-prefix> Delete a tombstone (the only escape hatch)
     --global               Operate on the global store
+  dormant [<query>]        List faded memories sleep kept instead of deleting
+                           (needs "dormant": {"enabled": true} in config.json)
+    --limit <n>            Max rows, newest first (default: 20)
+    --json                 Output as JSON
+    --global               Operate on the global store
+    dormant restore <id>   Bring a dormant memory back to active memory
+    dormant forget <id>    Delete a dormant memory permanently
   snapshot <sub>           Persist or inspect the current active task
     snapshot save          Save active task state
       --task <task>
@@ -9295,6 +9389,8 @@ Examples:
   hippo reject --value "never store my key again" --reason "secret"
   hippo rejections
   hippo unreject a1b2c3d4e5f6
+  hippo dormant "staging hostname"
+  hippo dormant restore mem_abc123
   hippo session log --id sess_123 --task "Ship feature" --type progress --content "Build is green, next step is docs"
   hippo session latest --json
   hippo session resume
@@ -9712,6 +9808,10 @@ async function main(): Promise<void> {
 
     case 'unreject':
       cmdUnreject(hippoRoot, args, flags);
+      break;
+
+    case 'dormant':
+      cmdDormant(hippoRoot, args, flags);
       break;
 
     case 'snapshot':

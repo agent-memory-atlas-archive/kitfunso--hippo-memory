@@ -5,6 +5,18 @@ claim cards. These terms have one fixed meaning in the hippo code, the `hippo` C
 
 ## Language
 
+### Memory lifecycle
+
+**Dormant memory**:
+A memory sleep moved out of active memory instead of deleting it, because it faded and
+`dormant.enabled` is on. It keeps its content and can be restored or forgotten for good.
+_Avoid_: archived memory (the raw archive keeps metadata only), deleted, cold
+
+**Raw receipt**:
+A `kind='raw'` memory: a connector message or imported note, append-only. Sleep never
+deletes one; only the raw archive removes it.
+_Avoid_: raw memory, transcript
+
 ### Work queue
 
 **Card**:

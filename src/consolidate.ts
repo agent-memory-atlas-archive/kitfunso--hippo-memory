@@ -26,6 +26,7 @@ import { textOverlap, markRetrieved } from './search.js';
 import { compareEntryIdentity } from './compare.js';
 import { openHippoDb, closeHippoDb, type DatabaseSyncLike } from './db.js';
 import { rejectionDigest, findRejectedValue } from './rejection.js';
+import type { DormantMove } from './dormant.js';
 import { loadPhysicsState, savePhysicsState, refreshParticleProperties } from './physics-state.js';
 import { simulate, type ForceContext } from './physics.js';
 import { loadConfig } from './config.js';
@@ -74,6 +75,9 @@ const CONFLICT_STOPWORDS = new Set([
 export interface ConsolidationResult {
   decayed: number;
   removed: number;
+  /** Faded memories moved to the dormant store instead of deleted (config
+   *  `dormant.enabled`; src/dormant.ts). Always 0 when that is off. */
+  dormant: number;
   merged: number;
   semanticCreated: number;
   replayed: number;
@@ -124,6 +128,7 @@ export async function consolidate(
   const result: ConsolidationResult = {
     decayed: 0,
     removed: 0,
+    dormant: 0,
     merged: 0,
     semanticCreated: 0,
     replayed: 0,
@@ -161,6 +166,38 @@ export async function consolidate(
   // Collect all writes/deletes and batch them at the end
   const pendingWrites: MemoryEntry[] = [];
   const pendingDeletes: string[] = [];
+  const pendingDormant: DormantMove[] = [];
+
+  // A faded, unpinned, unrescued memory leaves active memory one of three
+  // ways. A raw receipt is append-only: trg_memories_raw_append_only aborts
+  // a DELETE, and with it this whole cycle's batch and every later sleep,
+  // so it stays where it is (stored strength refreshed) but sits out the
+  // rest of this cycle the way a deleted row would. Anything else goes
+  // dormant when config.dormant is on, and is deleted otherwise.
+  const retireFaded = (entry: MemoryEntry, strength: number): void => {
+    const why = `(strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`;
+    if (entry.kind === 'raw') {
+      result.decayed++;
+      result.details.push(`  🧾 kept ${entry.id} ${why} - raw receipt, append-only`);
+      if (!dryRun && strength !== entry.strength) {
+        pendingWrites.push({ ...entry, strength });
+      }
+      return;
+    }
+    if (config.dormant.enabled) {
+      result.dormant++;
+      result.details.push(`  💤 dormant ${entry.id} ${why}`);
+      if (!dryRun) {
+        pendingDormant.push({ entry: { ...entry, strength }, strength, reason: 'decay', dormantAt: now.toISOString() });
+      }
+      return;
+    }
+    result.removed++;
+    result.details.push(`  🗑  removed ${entry.id} ${why}`);
+    if (!dryRun) {
+      pendingDeletes.push(entry.id);
+    }
+  };
 
   // -------------------------------------------------------------------------
   // 1. Decay pass
@@ -191,7 +228,9 @@ export async function consolidate(
     for (const entry of all) {
       const strength = calculateStrength(entry, now, decayOpts);
       strengthById.set(entry.id, strength);
-      if (!entry.pinned && strength < DECAY_THRESHOLD) {
+      // A raw receipt is never condemned (retireFaded keeps it), so it
+      // never competes for, or spends, the rescue budget.
+      if (!entry.pinned && entry.kind !== 'raw' && strength < DECAY_THRESHOLD) {
         condemned.push(entry);
       }
     }
@@ -256,11 +295,7 @@ export async function consolidate(
             : ' - rescued';
           result.details.push(`  🛟 ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})${rankNote}`);
         } else {
-          result.removed++;
-          result.details.push(`  🗑  removed ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`);
-          if (!dryRun) {
-            pendingDeletes.push(entry.id);
-          }
+          retireFaded(entry, strength);
         }
       } else {
         const updated = { ...entry, strength };
@@ -276,11 +311,7 @@ export async function consolidate(
       const strength = calculateStrength(entry, now, decayOpts);
 
       if (!entry.pinned && strength < DECAY_THRESHOLD) {
-        result.removed++;
-        result.details.push(`  🗑  removed ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`);
-        if (!dryRun) {
-          pendingDeletes.push(entry.id);
-        }
+        retireFaded(entry, strength);
       } else {
         // Only strength is a cached computation; confidence stays as stored.
         const updated = { ...entry, strength };
@@ -834,9 +865,9 @@ export async function consolidate(
     );
   }
 
-  // Flush all writes/deletes in a single transaction
+  // Flush all writes/deletes/dormant moves in a single transaction
   if (!dryRun) {
-    batchWriteAndDelete(hippoRoot, pendingWrites, pendingDeletes);
+    batchWriteAndDelete(hippoRoot, pendingWrites, pendingDeletes, pendingDormant);
   }
 
   // -------------------------------------------------------------------------
