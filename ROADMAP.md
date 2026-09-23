@@ -911,6 +911,7 @@ Things hippo will not do. Each one is a deliberate position derived from the pro
 | 13 | Starting or supervising agent processes | Hippo informs runtimes and never starts, stops or supervises one, not even behind a human gate. Runtimes claim cards themselves (pull mode). A process hippo starts and feeds with stored context is a path from stored memory to actuation | Part VII, decision 2026-09-20 (`docs/decisions/2026-09-20-no-agent-spawn.md`) |
 | 14 | Hosting, mirroring or searching source code as a product | Code hosts and code search (GitHub, GitLab, Sourcegraph) stay canonical. Hippo reads history and metadata to learn lessons; it stores lessons with provenance, not a copy of the codebase | Part VIII, Track EI |
 | 15 | One model trained across customers' data | Per-company learning stays per tenant and deletable (right to be forgotten must reach the scorer). No pooled cross-customer model | Part VIII, Track EI |
+| 16 | Publishing a token or cost saving that was not measured | A savings figure must come from the paired, cache-accounted task eval (TE5) with its harness published. Raw token counts, full-history strawmen and unmeasured multipliers stay out of the README, decks and grant reports | Part IX, Track TE |
 
 ## Deferred / speculative
 
@@ -1332,7 +1333,7 @@ Single-tenant or customer-VPC (Helm, Terraform, Postgres per A6), fully air-gapp
 SAML/OIDC SSO and SCIM (A5 stubs made real), roles from IdP groups, OIDC workload identity for machines, SIEM export of the audit log, listing in internal MCP registries (Copilot "registry only" policies block unlisted servers).
 
 #### EI12. Tenant evaluation harness [next, 2w]
-Replay a tenant's own history in time order with memory on and off at matched token budgets and several seeds; report resolve rate, tokens per resolved task, review-acceptance and revert rate, and stale-retrieval rate, with verbatim storage as a baseline. This is the number a buyer and an investor both ask for, and it keeps every later claim honest (arXiv:2606.15017 shows memory gains often vanish at matched budgets).
+Replay a tenant's own history in time order with memory on and off at matched token budgets and several seeds; report resolve rate, tokens per resolved task, review-acceptance and revert rate, and stale-retrieval rate, with verbatim storage as a baseline. This is the number a buyer and an investor both ask for, and it keeps every later claim honest (arXiv:2606.15017 shows memory gains often vanish at matched budgets). Shares its harness and cost accounting with TE5 (Part IX).
 
 #### EI13. Organisational-memory benchmark [research]
 A public benchmark whose tasks need knowledge that exists only outside the code (review threads, incidents, ticket decisions). No 2025-2026 memory benchmark for coding agents does this (SWE-Bench-CL, SWE Context Bench, DreamBench-SWE all use code or prior trajectories). Publishable; the natural home for the Part III "memory-system eval methodology" item.
@@ -1360,3 +1361,74 @@ A code host, a code mirror or a code search engine (non-goal 14); a crawler wher
 EI0, EI1, EI2, EI12 (trust and measurement, about 0-3 months); EI3, EI4, EI5, EI6, EI10 VPC tier (3-6 months); EI7, EI8, EI11, EI14, air-gapped tier (6-12 months); EI9 and EI13 as research alongside.
 
 **Discipline note:** market figures in the research record came through search summaries (the sandbox blocked most direct fetches) and 2026 arXiv items are preprints; re-check any figure at its source before it goes on a slide or into a claim.
+
+---
+
+## Part IX - 2026-09-23 update: token efficiency and the evals that prove it
+
+Triggered by a founder question: can hippo save organisations tokens and make answers smarter, and how would we prove it? Research record: `docs/plans/2026-09-23-token-savings-eval-research.md` (source audit of v1.44.0 plus PR #227, literature and benchmark review).
+
+**Answer (source-verified where it cites hippo):** not provable today, because hippo records nothing about the tokens it spends. It estimates tokens as `chars / 4` (`src/search.ts:108`), prints the count and stores none of it. It also adds tokens of its own: the Claude Code `UserPromptSubmit` hook re-injects the pinned block (cap 1,500 tokens) on every prompt, whether or not it changed, and the rendered lines carry a live strength percentage and dates, so repeated copies are rarely byte-identical for a prompt cache. The literature supports the claim in a narrower form: memory systems report 85-99% fewer context tokens than full-history baselines at similar accuracy (Mem0, Zep, LightMem), focused context beats long context (Lost in the Middle, Context Rot, NoLiMa), and experience reuse cuts steps on later coding tasks (ReasoningBank, SWE-ContextBench). For coding agents most spend is input and most input is file reads, so the saving that matters is work the agent no longer does, measured per task in dollars with cache accounting.
+
+**Rules for this track:**
+1. The headline metric is **dollars per resolved task**, priced over four buckets (uncached input, cache write, cache read, output), paired against a no-memory arm with bootstrap CIs. Raw token counts are supporting data, never the claim.
+2. Hippo's own overhead is measured and reported next to any saving (token ROI is net).
+3. No token or cost figure goes into the README, a deck or a grant report until TE5 measures it (non-goal 16). This covers the existing A9 "5x compute cost reduction" and Track L "5x-cost lever" lines, which are unmeasured.
+
+### What hippo already has (read from source)
+
+| Existing | Where | Status |
+|---|---|---|
+| Token budgets on every surface (recall 4000, context 1500, MCP recall 4000, MCP context 3000, pinned inject 1500) | `src/cli.ts`, `src/api.ts`, `src/config.ts` | Works; MCP tool descriptions advertise 1500 for both |
+| Greedy score-ordered packing, dedup, MMR, `minResults` | `src/search.ts:694-785` | Fills the budget; never stops early on weak results |
+| Lifecycle stress eval with a per-condition `tokens` field | `scripts/lifecycle-stress/run.mjs` | The only token-reporting harness; headline NULL (Part III) |
+| Structured handoff and snapshot caps instead of transcripts | `src/handoff.ts`, `src/capture.ts:1026` | Bounded by design (non-goal 12) |
+
+### Track TE - Token efficiency
+
+#### TE0. Token ledger [next, 1w]
+Record every injection: surface (hook, CLI, MCP, HTTP), items, estimated tokens, a hash of the rendered block, session id. One `estimateTokens` everywhere (six inline copies today), optional exact tokenizer or per-model calibration, continuity blocks counted inside the budget, MCP descriptions fixed to the real defaults. `hippo stats tokens` and an HTTP rollup feed A7 (per-tenant usage). Also confirms how each host keeps `additionalContext` in its transcript. **Success:** a week of dogfood sessions produces a per-session injection report.
+
+#### TE1. Cache-stable rendering [next, 3d]
+Injected blocks render byte-identically for the same memories: no per-call strength percentage (bucket or drop it), stable date text, deterministic tie order. Pinned memories inject at session start where they can sit in the cached prefix. **Success:** TE4 shows identical hashes for unchanged memory across turns.
+
+#### TE2. Inject only on change [next, 1w]
+The per-prompt hook compares the block hash with the last one it sent in this session and sends nothing (or a one-line marker) when unchanged, and only the new or changed items otherwise. **Success:** TE4 shows most per-session hook tokens removed, with no change in which memories the agent has seen.
+
+#### TE3. Token-at-accuracy curve [next, 1-2w]
+LongMemEval and LoCoMo at budgets 250 to 8000, reporting answer recall against injected tokens and minimum tokens to answer, against full context, naive top-k at the same budget, LLMLingua-2 compression and no memory. Deterministic, gates CI. Replaces "R@5 at a fixed 4000" as the retrieval chart, since per-haystack R@5 is saturated.
+
+#### TE4. Session replay harness [next, 1-2w]
+Replays recorded (anonymised) agent sessions through the hooks with no LLM calls and prices the injected text with a cache model (Anthropic 0.1x read, 1.25x write). Reports tokens injected per session, share re-injected unchanged, and byte-stability. **Success:** runs in CI and fails on a regression, such as a hook that doubles its output.
+
+#### TE5. Paired agent A/B on task sequences [critical, next, 3-4w]
+Sequences of related coding tasks where early tasks produce lessons later ones can use: SWE-ContextBench plus fresh issues from hippo's own history and post-cutoff public repositories. Six arms on the same model and harness: no memory, hippo as shipped, all memories dumped, naive top-k at equal budget, random repository text at equal budget, stale or irrelevant memories. 3-5 seeds, standard errors clustered by repository, four-bucket costs from provider usage fields, execution-based grading. Reports dollars per resolved task, resolve-rate delta (pass@1, pass^k), turns, file reads and repeated-error rate, and net token ROI. Pre-registered in `docs/evals`; harness and every arm's configuration published (the Mem0/Zep dispute shows vendor-run baselines are not trusted). This is the eval EI12 runs on a tenant's own history. **Success:** a published result with CIs, whatever it says.
+
+#### TE6. Adaptive budget [planned, after TE3]
+Stop packing when relevance falls off (score gap or threshold) and inject nothing when nothing is relevant; the budget becomes a ceiling, not a target. **Success:** fewer tokens on TE3 at equal recall, and no resolve-rate loss on TE5.
+
+#### TE7. Terse agent format [planned, after TE3]
+A compact rendering for agent-facing output without markdown decoration and repeated labels. **Success:** fewer tokens per fact at equal accuracy on TE3.
+
+#### TE8. Lessons that prevent exploration [research, gated on TE5]
+Capture file maps, "where X lives", commands that worked and known dead ends from sessions that read many files, since reads are most of a coding agent's input. Wrong pointers cost more than none (SWE-ContextBench), so this ships only with a TE5 delta.
+
+#### TE9. Consolidation that compresses [research, gated on TE3 and TE5]
+Part III found merge summaries are concatenations and DAG slice 1 cost 6.3pp. Any new attempt starts from a new hypothesis and must win on both evals.
+
+### What not to build
+LLM-in-the-loop compression at injection time (adds a model call to every prompt to save tokens on the same prompt); a token saving figure from raw token counts without cache accounting; savings measured only against a strawman full-history baseline without the naive top-k arm.
+
+### Honest forecast
+
+| Goal | Confidence | Why |
+|---|---|---|
+| Measure hippo's own overhead, and cut it | High | TE0-TE2 are plumbing; the waste is visible in source |
+| A retrieval-level tokens-at-accuracy chart | High | Existing LongMemEval and LoCoMo harnesses, new sweep |
+| A net dollar saving per resolved task on coding sequences | Medium | Literature says yes when retrieval is right and no when it is wrong; hippo's own lifecycle evals so far are NULL or negative |
+| "Smarter" (higher resolve rate) with CIs excluding zero | Low-Medium | Mem0's own table has full context ahead on accuracy; needs TE5 and likely TE8 |
+
+### Sequencing
+TE0, TE1, TE2, TE4 first (measure and remove hippo's own cost, about 0-1 month); TE3 and TE5 next (the proof, 1-3 months, shared with EI12); TE6 and TE7 after TE3; TE8 and TE9 as research gated on TE5.
+
+**Discipline note:** paper figures in the research record were checked through abstracts and secondary write-ups (the sandbox blocked most direct fetches) and 2026 items are preprints; the 40-turn hook cost is an upper bound at the cap, not a measurement. TE0 replaces it with real numbers.
