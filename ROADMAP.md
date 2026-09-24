@@ -1424,6 +1424,9 @@ Capture file maps, "where X lives", commands that worked and known dead ends fro
 #### TE9. Consolidation that compresses [research, gated on TE3 and TE5]
 Part III found merge summaries are concatenations and DAG slice 1 cost 6.3pp. Any new attempt starts from a new hypothesis and must win on both evals.
 
+#### TE10. VibeMemBench [next when released; plan fixed 2026-09-24]
+VibeMemBench (arXiv 2609.23570, Alibaba DAMO, September 2026) is the first public benchmark that toggles memory on real repository coding tasks with executable tests: 111 SWE-rebench V2 targets, 3,634 history trajectories, five solvers, 4 seeds. Mem0, SimpleMem, MemoryOS and A-MEM landed at or below memory-off in 11 of 12 pairings. Its code and data are not released yet (the DAMO-ConvAI folder says "Coming"). The protocol for hippo is fixed in `docs/evals/2026-09-24-vibemembench-plan.md` before seeing the data: a like-for-like top-1 arm, a separate hippo-native context arm, an outcome-feedback-off control, and publication whatever the result. Before release: trajectory ingestion (a trajectory becomes hippo memories with its outcome, never the gold patch) and a TE5 run on a few SWE-rebench V2 repositories as an early read.
+
 ### What not to build
 LLM-in-the-loop compression at injection time (adds a model call to every prompt to save tokens on the same prompt); a token saving figure from raw token counts without cache accounting; a claim that hippo beats simpler retrieval without the naive top-k arm (the first registration measures savings against no memory only, and defers naive top-k and dump-all; a claim against them needs a second registration that runs them).
 
@@ -1540,6 +1543,7 @@ Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 ca
    - Rename the TE5 stale-memory arm.
    - Run a 10-task TE5 pilot on the founder's machine to price the full run.
    - Company basics: IP assignment, `SECURITY.md`, licence decision.
+   - Trajectory ingestion for TE10 (VibeMemBench), so hippo can run as soon as the benchmark is released.
 2. **Weeks 4-8:**
    - EI2 permission-aware recall, with derived-memory negative tests.
    - CD5 poisoning defence with AT3 quarantine.
