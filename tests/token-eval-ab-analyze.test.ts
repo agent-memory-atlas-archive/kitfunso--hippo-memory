@@ -59,3 +59,21 @@ describe('A/B analyzer (TE5)', () => {
     expect(() => analyze(parseRuns(records()), { control: 'missing' })).toThrow(/control arm/);
   });
 });
+
+describe('A/B analyzer exclusions', () => {
+  it('excludes unscored and invalid runs and reports them', () => {
+    const base = { cluster: 'c', seed: 1, resolved: true, usage: { inputTokens: 1, cacheWriteTokens: 1, cacheReadTokens: 1, outputTokens: 1 } };
+    const text = [
+      { ...base, taskId: 't0', arm: 'no-memory', scored: false },
+      { ...base, taskId: 't0', arm: 'hippo', scored: false },
+      { ...base, taskId: 't1', arm: 'no-memory' },
+      { ...base, taskId: 't1', arm: 'hippo' },
+      { ...base, taskId: 't2', arm: 'no-memory' },
+      { ...base, taskId: 't2', arm: 'hippo', usage: null, invalid: 'no-result' },
+      { ...base, taskId: 't3', arm: 'hippo', invalid: 'leak' },
+    ].map((r) => JSON.stringify(r)).join('\n');
+    const result = analyze(parseRuns(text));
+    expect(result.excluded).toEqual({ unscored: 2, invalid: { 'no-result': 1, leak: 1 } });
+    expect(result.comparisons[0].tasks).toBe(1);
+  });
+});

@@ -72,6 +72,45 @@ node scripts/token-eval/budget-curve.mjs --data benchmarks/longmemeval/data/long
 - **Tests:** `tests/token-eval-budget-curve.test.ts` checks the scoring on a haystack built so that recency and relevance disagree.
 - **Deferred:** an LLMLingua-2 compression arm.
 
+## A/B on your machine (TE5)
+
+This is the only harness that can support a savings claim. It runs real Claude Code sessions, with your subscription or API key, on the same coding tasks with and without hippo.
+
+**1. Draft tasks from a repository's history** (small bug-fix commits with tests make the best tasks):
+
+```bash
+node scripts/token-eval/make-tasks.mjs --repo ../some-repo --cluster some-repo \
+  --test-cmd "npx vitest run {files}" --setup "npm ci" --verify > tasks.json
+```
+
+- `--verify` keeps only commits whose tests fail before the fix and pass after it.
+- **Then edit every prompt.** A drafted prompt is the commit message, which usually describes the fix. Rewrite each one as the problem a user would report, then delete `needsReview`. The runner refuses tasks that still have it.
+- Use at least two repositories: the stale-memory arm borrows another repository's store.
+
+**2. Check the plan, then run:**
+
+```bash
+node scripts/token-eval/ab-run.mjs --tasks tasks.json --out eval-runs --model <model id> --seeds 3 --dry-run
+node scripts/token-eval/ab-run.mjs --tasks tasks.json --out eval-runs --model <model id> --seeds 3 --max-budget-usd 3
+```
+
+**3. Analyze:**
+
+```bash
+node scripts/token-eval/ab-analyze.mjs --runs eval-runs/runs.jsonl --prices prices.json
+```
+
+What the runner does to keep the comparison fair:
+- **No future history.** Each workspace contains the repository's history only up to the task's base commit, so neither the agent nor hippo's git learning can read the fix from `git log`. Hidden tests are written in after the agent finishes.
+- **Your own setup is excluded.** Runs use `--setting-sources project` and `--strict-mcp-config`, so your `~/.claude` hooks, hippo's included, and your MCP servers do not load. Each arm gets only its own hooks.
+- **Hippo is isolated and fully counted.** Each run has its own `HIPPO_HOME`, and `hippo` on PATH is this checkout. Hippo's optional LLM extraction is off, so hippo spends nothing outside Claude Code's recorded usage.
+- **Every cost comes from Claude Code's own JSON result.** It uses `modelUsage` for the four token buckets and `total_cost_usd` at list price. Work metrics (tool calls, file reads, repeated errors) are read from the session transcript.
+- **Cache effects are balanced.** One warm-up call happens before the first recorded run, and hippo and no-memory swap order between seeds.
+- **Failures are recorded, not hidden.** A run with no result is recorded as invalid and excluded, never zero-filled. The first task of each sequence is run but not scored.
+- **Permissions.** Runs use `--permission-mode bypassPermissions` inside throwaway clones. Claude Code refuses that as root; there, use `--permission-mode acceptEdits`, which allows edits but not shell commands.
+
+**Checked so far.** The runner was exercised end to end with a stand-in for Claude Code in `tests/token-eval-ab-run.test.ts`. It was also run once with real Claude Code (Haiku) on a two-task toy repository, in the no-memory and hippo arms: four real sessions, about $0.08, with usage, cost, turns, tool calls and file reads recorded from the real output and transcripts. That run tests the plumbing and says nothing about hippo: one scored task, one seed, and a repository with no history for hippo to learn from.
+
 ## A/B analysis (TE5)
 
 ```bash
@@ -80,4 +119,4 @@ node scripts/token-eval/ab-analyze.mjs --runs runs.jsonl --prices prices.json
 
 - `runs.jsonl` holds one record per task, arm and seed; the input format is in the script header.
 - `prices.json` holds `{inputPerMTok, cacheWritePerMTok, cacheReadPerMTok, outputPerMTok}`, taken from the provider's current price page for the exact model.
-- No A/B has been run yet. The runner that drives an agent through task sequences is the next step. It needs an API key and a machine that can run the agent, so it is not part of this container's CI.
+- Records written by `ab-run.mjs` carry `scored` and `invalid`. Unscored first tasks and invalid runs are excluded and counted in the output.

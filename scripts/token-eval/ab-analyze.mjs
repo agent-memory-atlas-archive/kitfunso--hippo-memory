@@ -17,7 +17,10 @@
  *     usage: { inputTokens, cacheWriteTokens, cacheReadTokens, outputTokens },
  *     turns?, fileReads?, toolCalls?, repeatedErrors? }
  * usage comes from the provider's usage fields summed over the task. A
- * record whose usage is missing is rejected, never zero-filled.
+ * record whose usage is missing is rejected, never zero-filled. Records from
+ * scripts/token-eval/ab-run.mjs also carry `scored` (false for the first
+ * task of a sequence) and `invalid` (a reason, e.g. 'no-result' or 'leak');
+ * both are excluded from scoring and counted in the output.
  *
  * Prices: --prices FILE with {inputPerMTok, cacheWritePerMTok,
  * cacheReadPerMTok, outputPerMTok} from the provider's current price page.
@@ -63,6 +66,13 @@ export function parseRuns(text) {
     }
     if (!Number.isInteger(r.seed)) throw new Error(`${where}: seed must be an integer`);
     if (r.resolved !== true && r.resolved !== false) throw new Error(`${where}: resolved must be true or false`);
+    // Unscored (first task of a sequence) and invalid runs (no result,
+    // memory leak of the gold patch) are kept so analyze() can report them,
+    // but they are never scored.
+    if (r.scored === false || r.invalid) {
+      records.push(r);
+      return;
+    }
     if (!r.usage) throw new Error(`${where}: usage is required (never zero-filled)`);
     for (const f of USAGE_FIELDS) {
       if (!Number.isFinite(r.usage[f]) || r.usage[f] < 0) throw new Error(`${where}: usage.${f} must be a non-negative number`);
@@ -86,7 +96,11 @@ const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.l
  * majority of its seeds resolved it (ties count as unresolved). Only tasks
  * present in both arms are compared; the rest are listed as unpaired.
  */
-export function analyze(records, { prices = null, control = 'no-memory', k = 3, outputRatio = 5, seed = 1 } = {}) {
+export function analyze(allRecords, { prices = null, control = 'no-memory', k = 3, outputRatio = 5, seed = 1 } = {}) {
+  const records = allRecords.filter((r) => r.scored !== false && !r.invalid);
+  const invalidByReason = {};
+  for (const r of allRecords) if (r.invalid) invalidByReason[r.invalid] = (invalidByReason[r.invalid] ?? 0) + 1;
+  const excluded = { unscored: allRecords.filter((r) => r.scored === false && !r.invalid).length, invalid: invalidByReason };
   const arms = [...new Set(records.map((r) => r.arm))].sort();
   if (!arms.includes(control)) throw new Error(`control arm "${control}" has no records`);
   const byArmTask = new Map();
@@ -149,7 +163,7 @@ export function analyze(records, { prices = null, control = 'no-memory', k = 3, 
       work,
     });
   }
-  return { costUnit: prices ? 'usd' : 'uncached-equivalent tokens (output weighted)', arms, comparisons };
+  return { costUnit: prices ? 'usd' : 'uncached-equivalent tokens (output weighted)', arms, excluded, comparisons };
 }
 
 function main() {
@@ -173,8 +187,10 @@ function main() {
   const outFile = flag('--out', null);
   if (outFile) fs.writeFileSync(outFile, `${JSON.stringify(result, null, 2)}\n`);
   const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : String(x));
-  const p = (x) => `${(x * 100).toFixed(1)}%`;
-  console.log(`Cost unit: ${result.costUnit}\n`);
+  const p = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : 'n/a');
+  console.log(`Cost unit: ${result.costUnit}`);
+  const inv = Object.entries(result.excluded.invalid).map(([k, v]) => `${v} ${k}`).join(', ');
+  console.log(`Excluded: ${result.excluded.unscored} unscored first tasks${inv ? `; invalid runs: ${inv}` : ''}\n`);
   for (const c of result.comparisons) {
     const cpr = c.costPerResolved;
     console.log(`${c.arm} vs ${c.control} (${c.tasks} paired tasks${c.unpaired.length ? `, ${c.unpaired.length} unpaired` : ''})`);

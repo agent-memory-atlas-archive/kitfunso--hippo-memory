@@ -105,6 +105,10 @@ describe('pass@k and pass^k', () => {
     expect(passAtK(runs, 1)).toBeCloseTo(2 / 4, 10);
     expect(passAtK(runs, 3)).toBeCloseTo(2 / 3, 10);
   });
+  it('is not a number when no task has k runs', () => {
+    expect(Number.isNaN(passAtK([[true]], 3))).toBe(true);
+    expect(Number.isNaN(passHatK([], 1))).toBe(true);
+  });
   it('pass^k counts all-success in the first k runs', () => {
     expect(passHatK(runs, 2)).toBeCloseTo(1 / 4, 10);
     expect(passHatK(runs, 3)).toBeCloseTo(1 / 3, 10);

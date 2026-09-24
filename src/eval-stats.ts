@@ -258,16 +258,22 @@ export function costPerResolvedDelta(
   };
 }
 
-/** pass@k: share of tasks with at least one success in their first k runs. */
+/**
+ * pass@k: share of tasks with at least one success in their first k runs.
+ * NaN when no task has k runs (not measured, which is not the same as 0).
+ */
 export function passAtK(runsByTask: boolean[][], k: number): number {
   const eligible = runsByTask.filter((r) => r.length >= k);
-  if (eligible.length === 0) return 0;
+  if (eligible.length === 0) return Number.NaN;
   return eligible.filter((r) => r.slice(0, k).some(Boolean)).length / eligible.length;
 }
 
-/** pass^k: share of tasks whose first k runs all succeed (consistency). */
+/**
+ * pass^k: share of tasks whose first k runs all succeed (consistency).
+ * NaN when no task has k runs.
+ */
 export function passHatK(runsByTask: boolean[][], k: number): number {
   const eligible = runsByTask.filter((r) => r.length >= k);
-  if (eligible.length === 0) return 0;
+  if (eligible.length === 0) return Number.NaN;
   return eligible.filter((r) => r.slice(0, k).every(Boolean)).length / eligible.length;
 }

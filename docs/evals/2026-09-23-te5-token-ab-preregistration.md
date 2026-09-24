@@ -68,6 +68,20 @@ All arms use the same agent harness, model version, system prompt, tools and tas
 - Model and harness versions, and the price table used.
 - A null or negative result is published the same way. A failed H4 means the headline is withheld and the eval design is revised in a new registration.
 
+## Implementation notes (2026-09-24, before any scored run)
+
+These choices were made while building the runner (`scripts/token-eval/ab-run.mjs`). They were fixed before the first scored run.
+
+- **Workspaces hold history only up to each task's base commit.** The fix commit is never present. Hidden tests are written from the fix commit after the agent finishes.
+- **Arm isolation.**
+  - `--setting-sources project` and `--strict-mcp-config`: the user's own hooks and MCP servers never load.
+  - One `HIPPO_HOME` per run, and hippo run from the checkout under test.
+  - hippo's LLM extraction is disabled, so all of the hippo arm's spend appears in Claude Code's usage.
+- **Usage source.** Usage is taken from `modelUsage` in Claude Code's JSON result, the per-model billing aggregate whose costs sum to `total_cost_usd`. A real run showed the top-level `usage` can read zero when the budget cap stops a run.
+- **Cache order.** One unrecorded warm-up call is made before the first run, and hippo and no-memory alternate which runs first across seeds.
+- **Task selection.** Tasks are drafted from history by `make-tasks.mjs`, kept only if the hidden tests fail at the base and pass at the fix, and have their prompts rewritten by hand as problem statements before use.
+- **Arms deferred to a later registration.** `dump-all` and `naive-topk` are not implemented yet. H1 to H4 only need `no-memory`, `hippo`, `random-text` and `stale-memory`.
+
 ## Not in scope for this registration
 
 - Enterprise tenant replays: that is EI12, which uses the same analyzer.
