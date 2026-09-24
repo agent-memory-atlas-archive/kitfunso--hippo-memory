@@ -83,7 +83,7 @@ import dots from '../content/logo-mark.json';
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const group = new Group();
     scene.add(group);
-    type Node = { mesh: Mesh; halo: Sprite | null; t: number; base: number; wrong: boolean };
+    type Node = { mesh: Mesh; mat: MeshBasicMaterial; haloMat: SpriteMaterial | null; t: number; base: number; wrong: boolean };
     const nodes: Node[] = [];
     const N = 110;
     for (let i = 0; i < N; i++) {
@@ -98,14 +98,15 @@ import dots from '../content/logo-mark.json';
       const mesh = new Mesh(new SphereGeometry(wrong ? 0.08 : strong ? 0.075 + rnd() * 0.04 : 0.035 + rnd() * 0.02, 16, 12), mat);
       mesh.position.copy(pos);
       group.add(mesh);
-      let halo: Sprite | null = null;
+      let haloMat: SpriteMaterial | null = null;
       if (strong || wrong) {
-        halo = new Sprite(new SpriteMaterial({ map: tex, color: wrong ? AMBER : MINT, transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false }));
+        haloMat = new SpriteMaterial({ map: tex, color: wrong ? AMBER : MINT, transparent: true, opacity: 0.5, blending: AdditiveBlending, depthWrite: false });
+        const halo: Sprite = new Sprite(haloMat);
         halo.scale.set(0.55, 0.55, 1);
         halo.position.copy(pos);
         group.add(halo);
       }
-      nodes.push({ mesh, halo, t, base, wrong });
+      nodes.push({ mesh, mat, haloMat, t, base, wrong });
     }
     const curve = new CatmullRomCurve3(nodes.map((n) => n.mesh.position.clone()));
     group.add(new Line(new BufferGeometry().setFromPoints(curve.getPoints(400)), new LineBasicMaterial({ color: MINT, transparent: true, opacity: 0.12 })));
@@ -134,8 +135,8 @@ import dots from '../content/logo-mark.json';
         for (const n of nodes) {
           if (n.wrong) continue;
           const boost = Math.max(0, 1 - Math.abs(n.t - phase) * 14);
-          (n.mesh.material as MeshBasicMaterial).opacity = Math.min(1, n.base + boost * 0.8);
-          if (n.halo) (n.halo.material as SpriteMaterial).opacity = 0.45 + boost * 0.5;
+          n.mat.opacity = Math.min(1, n.base + boost * 0.8);
+          if (n.haloMat) n.haloMat.opacity = 0.45 + boost * 0.5;
         }
         renderer.render(scene, camera);
       }

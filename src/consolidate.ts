@@ -122,6 +122,36 @@ function isJsonString(value: JsonValue): value is string {
   return typeof value === 'string';
 }
 
+/** Tables whose rows keep a first-class object's backing memory in `memory_id` (ON DELETE SET NULL). */
+const MEMORY_BACKED_TABLES = ['predictions', 'decisions', 'processes', 'policies', 'skills', 'project_briefs', 'customer_notes'] as const;
+
+/**
+ * Ids of memories that back a first-class object (a decision, prediction,
+ * process, policy, skill, project brief or customer note). Sleep never
+ * retires these: deleting or moving one to dormant storage fires the
+ * object's ON DELETE SET NULL and a restore cannot repair the link. Their
+ * lifecycle belongs to the object. A table missing from an older schema is
+ * skipped.
+ */
+function memoriesBackingObjects(hippoRoot: string): Set<string> {
+  const ids = new Set<string>();
+  const db = openHippoDb(hippoRoot);
+  try {
+    for (const table of MEMORY_BACKED_TABLES) {
+      try {
+        // SAFETY: SELECT of one nullable TEXT column, filtered to non-null.
+        const rows = db.prepare(`SELECT memory_id FROM ${table} WHERE memory_id IS NOT NULL`).all() as { memory_id: string }[];
+        for (const r of rows) ids.add(r.memory_id);
+      } catch {
+        // Table not present in this schema version.
+      }
+    }
+  } finally {
+    closeHippoDb(db);
+  }
+  return ids;
+}
+
 /**
  * Run a full consolidation pass.
  */
@@ -168,6 +198,9 @@ export async function consolidate(
   // with no cross-tenant dedup. The api.sleep audit row tags this with the
   // admin synthetic actor; see api.ts:2050 for the rationale.
   const all = loadAllEntries(hippoRoot);
+  const backingObjects = memoriesBackingObjects(hippoRoot);
+  // Retirable: auto-deletable (never pinned, never raw) and not backing a first-class object.
+  const retirable = (entry: MemoryEntry): boolean => canAutoDelete(entry) && !backingObjects.has(entry.id);
   const snapshot = new Map(structuredClone(all).map((e) => [e.id, e]));
 
   // Load decay options from config + session context
@@ -190,7 +223,7 @@ export async function consolidate(
   // so it stays where it is (stored strength refreshed) but sits out the
   // rest of this cycle the way a deleted row would. Anything else goes
   // dormant when config.dormant is on, and is deleted otherwise.
-  // Only called for rows canAutoDelete allows (never pinned, never raw).
+  // Only called for rows `retirable` allows (never pinned, never raw, never backing a first-class object).
   const retireFaded = (entry: MemoryEntry, strength: number): void => {
     const why = `(strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`;
     // A faded secret is deleted, never kept dormant: keeping it would hold a
@@ -235,7 +268,7 @@ export async function consolidate(
     for (const entry of all) {
       const strength = calculateStrength(entry, now, decayOpts);
       strengthById.set(entry.id, strength);
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
         condemned.push(entry);
       }
     }
@@ -282,7 +315,7 @@ export async function consolidate(
     // preserves flag-off's ordering semantics exactly.)
     for (const entry of all) {
       const strength = strengthById.get(entry.id)!;
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
         if (rescuedIds.has(entry.id)) {
           // Rescued (D1): standard survivor stored-strength refresh (P2-1).
           // Confidence is left alone here: it is an epistemic tier, not a
@@ -315,7 +348,7 @@ export async function consolidate(
     for (const entry of all) {
       const strength = calculateStrength(entry, now, decayOpts);
 
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
         retireFaded(entry, strength);
       } else {
         // Only strength is a cached computation; confidence stays as stored.

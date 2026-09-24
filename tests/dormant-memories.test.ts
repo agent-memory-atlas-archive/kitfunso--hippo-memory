@@ -19,7 +19,9 @@ import {
   writeEntry,
   loadAllEntries,
   getExistingEntryMirrorPaths,
+  loadStats,
 } from '../src/store.js';
+import { saveDecision, resolveActiveDecisionIdByMemory } from '../src/decisions.js';
 import { openHippoDb, closeHippoDb } from '../src/db.js';
 import { consolidate } from '../src/consolidate.js';
 import { insertDormantRow } from '../src/dormant.js';
@@ -462,6 +464,30 @@ describe('listing, restoring and forgetting dormant memories', () => {
       api.forgetDormant(ctxFor(home), ids[0]);
       expect(api.listDormant(ctxFor(home))).toEqual([]);
       expect(() => api.restoreDormant(ctxFor(home), ids[0])).toThrow(/dormant memory not found/);
+      // Counted like forget and archiveRaw (review finding on PR #227).
+      expect(Number(loadStats(home).total_forgotten)).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('memories that back a first-class object', () => {
+  it('sleep keeps a faded decision memory active, so the decision keeps its link', async () => {
+    const { home, restore } = tmpHome('hippo-dormant-linked-', '{}');
+    try {
+      const decision = saveDecision(home, 'default', { decisionText: 'we release on Tuesdays after the staging soak' });
+      const memoryId = decision.memoryId!;
+      // Fade it far below the threshold, as years without recall would.
+      const faded = aged(loadAllEntries(home).find((e) => e.id === memoryId)!, 3000);
+      writeEntry(home, faded);
+      expect(calculateStrength(faded)).toBeLessThan(0.05);
+
+      const result = await consolidate(home);
+      expect(result.dormant).toBe(0);
+      expect(result.removed).toBe(0);
+      expect(loadAllEntries(home).map((e) => e.id)).toContain(memoryId);
+      expect(resolveActiveDecisionIdByMemory(home, 'default', memoryId)).toBe(decision.id);
     } finally {
       restore();
     }

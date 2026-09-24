@@ -3083,6 +3083,8 @@ export function forgetDormant(ctx: Context, id: string): void {
   } finally {
     closeHippoDb(db);
   }
+  // Counted like every other permanent removal (forget, archiveRaw).
+  updateStats(ctx.hippoRoot, { forgotten: 1 });
 }
 
 /** Whether the tenant holds a dormant memory with this id (for "not found" hints). */
