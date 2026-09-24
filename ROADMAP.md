@@ -1438,3 +1438,56 @@ LLM-in-the-loop compression at injection time (adds a model call to every prompt
 TE0, TE1, TE2, TE4 first (measure and remove hippo's own cost, about 0-1 month); TE3 and TE5 next (the proof, 1-3 months, shared with EI12); TE6 and TE7 after TE3; TE8 and TE9 as research gated on TE5.
 
 **Discipline note:** paper figures in the research record were checked through abstracts and secondary write-ups (the sandbox blocked most direct fetches) and 2026 items are preprints; the 40-turn hook cost is an upper bound at the cap, not a measurement. TE0 replaces it with real numbers.
+
+---
+
+## Part X - 2026-09-24 update: selling into companies that roll out GitHub Copilot
+
+Triggered by a founder question: many companies hand AI coding to developers through GitHub Copilot Business or Enterprise in VS Code, so how does hippo reach them, and should it be invisible infrastructure or a tool every developer sees?
+
+**Answer:** mostly invisible infrastructure with a small visible trust layer. The platform or AI-enablement team approves hippo once and switches it on for everyone; developers change nothing. The buyer is that team, not individual developers. Package hippo the way Copilot admins already approve add-ons (an agent plugin plus an approved MCP server), not as a classic VS Code extension first.
+
+### What changed in the market (research 2026-09-24; checked through search excerpts of GitHub, VS Code and vendor pages because the sandbox blocked direct fetches, so re-check before quoting)
+
+- **MCP is the only third-party route into Copilot.** GitHub sunset App-based Copilot Extensions on 2025-11-10 and named MCP servers as the replacement.
+- **Admins opt in.** For Business and Enterprise seats the "MCP servers in Copilot" policy is off by default. Admins can restrict developers to a private MCP registry ("registry only"), served by GitHub's registry format (MCP Registry v0.1) or Azure API Center.
+- **Agent plugins went GA on 2026-08-12** in VS Code, Copilot CLI and the Copilot app. A plugin bundles MCP servers, hooks, skills and commands, and admins enable plugins org-wide through managed settings.
+- **VS Code hooks (preview) use the same format as Claude Code**, so hippo's existing hooks may carry over with little change.
+- **Built-in memory is now everywhere and free.** Copilot Memory (public preview since 2026-01-15) stores repository facts, checks them against the current code, and deletes them after 28 days unused; it is off by default for Business and Enterprise. Claude Code, Codex and Windsurf ship their own memory. None of them is cross-tool, company-wide, long-lived, self-hosted and audited together, which is where hippo competes.
+
+**Positioning:** "Copilot remembers a repository for a month. Hippo is your company's memory, for every AI tool, on your own infrastructure." Complement Copilot Memory; do not compete with single-repository recall.
+
+### Track CD - Corporate distribution
+
+#### CD1. Hippo agent plugin [next, 1-2w]
+A Hippo agent plugin bundling the MCP server, the hooks and a short skill. That's the unit an admin can approve and turn on for everyone. Ship it in the agent-plugin format for VS Code and Copilot CLI (same bundle for Claude Code where the format matches), port the existing Claude Code hooks to VS Code's hook events, and publish a listing for the default plugin marketplaces and for private company marketplaces. **Success:** an admin enables it through managed settings and every developer's Copilot agent uses hippo with no per-developer step.
+
+#### CD2. Company-hosted Hippo server with company sign-in [next, 3-4w, builds on EI10 and EI11]
+A company-hosted Hippo server with sign-in that the company's identity system can use (OAuth), listed in the company's approved MCP list. Remote MCP over HTTP with OAuth 2.1 (today the HTTP server has API keys only), an entry in the MCP Registry v0.1 format so it can sit in a company's GitHub or Azure API Center registry, and the CD1 plugin pointing at it. **Success:** works under a "registry only" Copilot policy, and every recall is tied to the signed-in developer for permissions (EI2) and audit.
+
+#### CD3. Small VS Code extension [optional, later; build only on request]
+Optionally, later, a small VS Code extension. It could start Hippo automatically and show what memory was used. Only build it once someone asks. It would register hippo through VS Code's MCP server definition provider API and show a panel of the memories an answer used. Not started until a paying or piloting customer asks for it.
+
+#### CD4. Memory curation workflow [planned]
+Lessons move from repository to team to company only with approval. A review queue lets tech leads approve, reject (reusing `hippo reject`), merge or edit lessons; agents cite which memory they used and where it came from. Without this, one team's bad lesson reaches every agent in the company.
+
+#### CD5. Memory poisoning defence [critical, planned]
+Anyone who can write a PR comment, an issue or a chat message can try to plant instructions that become a "lesson" for every agent. Treat ingested text as untrusted: provenance-weighted admission, instruction-like content detection, quarantine for lessons from outside contributors, and approval (CD4) before org-wide reach. Enterprise security reviews will ask about this first.
+
+#### CD6. Admin dashboard [planned]
+One place for the buyer: what is stored per team and repository, who used what, audit log search, dormant and banned memories, and token cost from the TE0 ledger.
+
+#### CD7. Value report for buyers [planned, needs TE5]
+A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once TE5 or EI12 has measured it for that company, cost per resolved task with and without hippo. No saving figure before it is measured (non-goal 16).
+
+#### CD8. Reliability of the central server [planned, with EI10]
+Backup and restore, high availability, disaster recovery, upgrade and schema-migration runbooks, and monitoring for the company-hosted server.
+
+#### CD9. Company and commercial basics [next, founder task]
+IP assigned to the company; a contributor licence agreement for outside contributions; an open-core licence decision (local single-developer hippo stays free and MIT); pricing (per seat or per organisation for the company server); a support promise; a security pack (penetration test, software bill of materials, data flow and subprocessor list).
+
+### Sequencing
+CD1 and CD9 first (0-1 month); CD2 and CD5 next (1-3 months, alongside EI2 and EI11); CD4, CD6 and CD8 with the first pilot customer (3-6 months); CD7 once TE5 has a result; CD3 only on request.
+
+### What not to build
+A second Copilot, chat UI or code assistant; anything that needs developers to change how they work; per-developer setup steps a platform team cannot automate.
