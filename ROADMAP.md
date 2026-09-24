@@ -1615,6 +1615,14 @@ The first two need a store of attempts and lessons that remembers what worked, f
 - **Budgeted recall and the token ledger.**
 - **Strategy traces:** `hippo trace record --outcome` and `hippo recall --outcome success`, a small skill library.
 
+**Earlier items this track builds on.** Part IV's LC track learns from outcomes:
+- LC1, retrieval traces: shipped;
+- LC2, a learned keep/forget scorer: shipped, opt-in;
+- LC3, an outcome-trained reranker: planned, gated on about 90 days of data;
+- LC4, an RL memory controller: research.
+
+Also related: F3, reward-proportional decay (shipped), and TE8, lessons that prevent exploration. All of them make *hippo* better from outcomes, and all of them need outcome data. SI0 is what would supply that data at volume.
+
 **The gap.** Every outcome is still marked by hand, or by the agent calling `hippo outcome`. A self-improving loop needs outcomes to arrive by themselves, and needs a lesson to prove itself before it is trusted.
 
 #### SI0. Automatic outcome signals [planned, next; behind a flag until TE5 measures it]
