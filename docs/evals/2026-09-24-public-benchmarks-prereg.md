@@ -68,3 +68,16 @@ The same for every arm: `gpt-5` for both, matching Mem0's published result files
 - **Published:** every arm's runner output, the scorers' outputs, the server code, all configs and models, and the commands to reproduce.
 - **If `hippo` loses to `bm25` or `mem0-oss`, that is published the same way.**
 - **Scope of any claim:** these benchmarks ingest once and ask once. Nothing ages, is reused or is marked wrong, so hippo's lifecycle is not tested. Any claim from them is limited to retrieval for answering, at the budgets run.
+
+## Amendment 1 (2026-09-24, before any answer is generated): Sonnet trial in the sandbox
+
+**Why.** The sandbox has no OpenAI access, and the founder asked for a trial now. This amendment adds a trial. It does not replace the registered run, which still happens on the founder's machine with the registered models.
+
+- **Answering and judging:** Claude Sonnet, run as Claude Code subagents, instead of gpt-4o-mini. **Not comparable** with Mem0's published numbers.
+- **Prompts:** Mem0's own `get_answer_generation_prompt` and `get_judge_prompt`, from `benchmarks/locomo/prompts.py` at `4b61c5d`. They are built from the `--predict-only` retrieval already collected (`2026-09-24-public-benchmarks-dryrun.md`).
+- **Arms:** `hippo` as shipped (the 7-day default) and `bm25`.
+- **Cutoff:** top 10, where the retrieval check separated the arms.
+- **Sample:** 400 LoCoMo questions (categories 1 to 4), drawn with seed 1 and stratified by category.
+- **Batching.** Each answering subagent handles 40 questions from one arm. Arm A's batch i and arm B's batch i hold the same questions, so any carry-over between questions inside one agent affects both arms alike. Judges see a shuffled mix of both arms with no arm label.
+- **Scoring:** judge accuracy and the LoCoMo authors' F1. hippo minus bm25 is paired by question, with a 95% bootstrap interval.
+- **Published whatever the result:** `docs/evals/2026-09-24-public-benchmarks-sonnet-trial.md`.
