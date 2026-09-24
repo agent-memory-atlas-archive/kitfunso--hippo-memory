@@ -24,7 +24,7 @@ import { openHippoDb, closeHippoDb } from '../src/db.js';
 import { consolidate } from '../src/consolidate.js';
 import { insertDormantRow } from '../src/dormant.js';
 import { loadConfig } from '../src/config.js';
-import { createMemory, Layer, calculateStrength, type MemoryEntry } from '../src/memory.js';
+import { createMemory, Layer, calculateStrength, DEFAULT_HALF_LIFE_DAYS, type MemoryEntry } from '../src/memory.js';
 import { RejectedValueError, rejectionDigest, insertRejectedValue } from '../src/rejection.js';
 import * as api from '../src/api.js';
 
@@ -39,9 +39,10 @@ function tmpHome(prefix: string, config: string) {
   return { home, restore: () => rmSync(home, { recursive: true, force: true }) };
 }
 
+/** `entry` aged `days`, on the pre-1.46 7-day base so it fades within the test's horizon. */
 function aged(entry: MemoryEntry, days: number): MemoryEntry {
   const then = new Date(Date.now() - days * DAY_MS).toISOString();
-  return { ...entry, created: then, last_retrieved: then };
+  return { ...entry, half_life_days: (entry.half_life_days * 7) / DEFAULT_HALF_LIFE_DAYS, created: then, last_retrieved: then };
 }
 
 function ctxFor(home: string, tenantId = 'default'): api.Context {

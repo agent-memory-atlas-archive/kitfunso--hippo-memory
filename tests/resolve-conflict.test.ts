@@ -17,6 +17,9 @@ import {
 } from '../src/store.js';
 import { openHippoDb, closeHippoDb } from '../src/db.js';
 
+/** Sleep and decay here run on the pre-1.46 7-day base, so memories fade within the test's horizon. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 let tmpDir: string;
 
 beforeEach(() => {
@@ -29,8 +32,8 @@ afterAll(() => {
 });
 
 function seedConflict() {
-  const a = createMemory('Always use semicolons in PowerShell', { tags: ['powershell', 'windows'] });
-  const b = createMemory('Use && to chain commands in PowerShell', { tags: ['powershell', 'windows'] });
+  const a = createMemory7('Always use semicolons in PowerShell', { tags: ['powershell', 'windows'] });
+  const b = createMemory7('Use && to chain commands in PowerShell', { tags: ['powershell', 'windows'] });
   writeEntry(tmpDir, a);
   writeEntry(tmpDir, b);
 
@@ -140,8 +143,8 @@ describe('resolveConflict', () => {
 
 describe('conflict tenant isolation (E2)', () => {
   function seedTenantConflict(tenant: string) {
-    const a = createMemory(`semicolons rule for ${tenant}`, { tenantId: tenant, tags: ['x'] });
-    const b = createMemory(`chaining rule for ${tenant}`, { tenantId: tenant, tags: ['x'] });
+    const a = createMemory7(`semicolons rule for ${tenant}`, { tenantId: tenant, tags: ['x'] });
+    const b = createMemory7(`chaining rule for ${tenant}`, { tenantId: tenant, tags: ['x'] });
     writeEntry(tmpDir, a);
     writeEntry(tmpDir, b);
     replaceDetectedConflicts(tmpDir, [{
@@ -159,10 +162,10 @@ describe('conflict tenant isolation (E2)', () => {
     // Both tenants' conflicts must be seeded in ONE replaceDetectedConflicts
     // call — it is a global replace and resolves any open conflict absent
     // from the detected set.
-    const a1 = createMemory('tenant-a rule one', { tenantId: 'tenant-a', tags: ['x'] });
-    const a2 = createMemory('tenant-a rule two', { tenantId: 'tenant-a', tags: ['x'] });
-    const b1 = createMemory('tenant-b rule one', { tenantId: 'tenant-b', tags: ['x'] });
-    const b2 = createMemory('tenant-b rule two', { tenantId: 'tenant-b', tags: ['x'] });
+    const a1 = createMemory7('tenant-a rule one', { tenantId: 'tenant-a', tags: ['x'] });
+    const a2 = createMemory7('tenant-a rule two', { tenantId: 'tenant-a', tags: ['x'] });
+    const b1 = createMemory7('tenant-b rule one', { tenantId: 'tenant-b', tags: ['x'] });
+    const b2 = createMemory7('tenant-b rule two', { tenantId: 'tenant-b', tags: ['x'] });
     for (const m of [a1, a2, b1, b2]) writeEntry(tmpDir, m);
 
     replaceDetectedConflicts(tmpDir, [
@@ -188,8 +191,8 @@ describe('conflict tenant isolation (E2)', () => {
 
   it('auto-resolves an existing open cross-tenant row when the pair is re-detected (v1.11.0 residue)', () => {
     // Seed two memories under different tenants.
-    const a = createMemory('tenant-a content', { tenantId: 'tenant-a', tags: ['x'] });
-    const b = createMemory('tenant-b content', { tenantId: 'tenant-b', tags: ['x'] });
+    const a = createMemory7('tenant-a content', { tenantId: 'tenant-a', tags: ['x'] });
+    const b = createMemory7('tenant-b content', { tenantId: 'tenant-b', tags: ['x'] });
     writeEntry(tmpDir, a);
     writeEntry(tmpDir, b);
     const [memA, memB] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
@@ -251,9 +254,9 @@ describe('conflict tenant isolation (E2)', () => {
   });
 
   it('replaceDetectedConflicts skips a cross-tenant pair, keeps a within-tenant pair', () => {
-    const a = createMemory('tenant-a memory one', { tenantId: 'tenant-a', tags: ['x'] });
-    const b = createMemory('tenant-b memory one', { tenantId: 'tenant-b', tags: ['x'] });
-    const c = createMemory('tenant-a memory two', { tenantId: 'tenant-a', tags: ['x'] });
+    const a = createMemory7('tenant-a memory one', { tenantId: 'tenant-a', tags: ['x'] });
+    const b = createMemory7('tenant-b memory one', { tenantId: 'tenant-b', tags: ['x'] });
+    const c = createMemory7('tenant-a memory two', { tenantId: 'tenant-a', tags: ['x'] });
     writeEntry(tmpDir, a);
     writeEntry(tmpDir, b);
     writeEntry(tmpDir, c);
@@ -272,8 +275,8 @@ describe('conflict tenant isolation (E2)', () => {
     // Seed a within-tenant conflict, then re-home one member to another tenant
     // so the existing conflict row becomes cross-tenant — simulating a row
     // persisted before this fix.
-    const a = createMemory('stale-row memory a', { tenantId: 'tenant-a', tags: ['x'] });
-    const b = createMemory('stale-row memory b', { tenantId: 'tenant-a', tags: ['x'] });
+    const a = createMemory7('stale-row memory a', { tenantId: 'tenant-a', tags: ['x'] });
+    const b = createMemory7('stale-row memory b', { tenantId: 'tenant-a', tags: ['x'] });
     writeEntry(tmpDir, a);
     writeEntry(tmpDir, b);
     replaceDetectedConflicts(tmpDir, [

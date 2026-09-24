@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { calculateStrength, calculateRewardFactor, createMemory, applyOutcome, Layer, type TraceOutcome } from '../src/memory.js';
 
+/** These tests pin decay arithmetic to the pre-1.46 7-day base; the default itself is tested in half-life-migration and schema-fit. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 describe('Strength formula', () => {
   it('returns 1.0 for a pinned memory regardless of age', () => {
-    const entry = createMemory('pinned fact', { pinned: true });
+    const entry = createMemory7('pinned fact', { pinned: true });
     const oldDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000); // 1 year ago
     // Manually age it
     const aged = { ...entry, last_retrieved: oldDate.toISOString() };
@@ -11,7 +14,7 @@ describe('Strength formula', () => {
   });
 
   it('decays over time (no retrieval)', () => {
-    const entry = createMemory('ephemeral note');
+    const entry = createMemory7('ephemeral note');
     const now = new Date();
 
     // Simulate 7 days passing (one full half-life for default)
@@ -30,7 +33,7 @@ describe('Strength formula', () => {
     const now = new Date();
     const oldDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // 2 weeks ago
 
-    const entry1 = createMemory('memory A', { layer: Layer.Episodic });
+    const entry1 = createMemory7('memory A', { layer: Layer.Episodic });
     const e1 = { ...entry1, last_retrieved: now.toISOString(), retrieval_count: 5 };
     const e2 = { ...entry1, last_retrieved: oldDate.toISOString(), retrieval_count: 0 };
 
@@ -38,8 +41,8 @@ describe('Strength formula', () => {
   });
 
   it('error-tagged memory has longer half-life', () => {
-    const errorMem = createMemory('cache failure', { tags: ['error'] });
-    const neutralMem = createMemory('some info');
+    const errorMem = createMemory7('cache failure', { tags: ['error'] });
+    const neutralMem = createMemory7('some info');
 
     expect(errorMem.half_life_days).toBeGreaterThan(neutralMem.half_life_days);
   });
@@ -49,8 +52,8 @@ describe('Strength formula', () => {
     // Age the memories by 10 days so decay < 1, giving emotional multiplier room to show
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
-    const critical = createMemory('critical failure', { emotional_valence: 'critical' });
-    const neutral = createMemory('neutral note', { emotional_valence: 'neutral' });
+    const critical = createMemory7('critical failure', { emotional_valence: 'critical' });
+    const neutral = createMemory7('neutral note', { emotional_valence: 'neutral' });
 
     const crit = { ...critical, last_retrieved: tenDaysAgo };
     const neut = { ...neutral, last_retrieved: tenDaysAgo };
@@ -60,7 +63,7 @@ describe('Strength formula', () => {
   });
 
   it('strength is clamped to [0, 1]', () => {
-    const entry = createMemory('test', { emotional_valence: 'critical', pinned: false });
+    const entry = createMemory7('test', { emotional_valence: 'critical', pinned: false });
     const s = calculateStrength(entry);
     expect(s).toBeGreaterThanOrEqual(0);
     expect(s).toBeLessThanOrEqual(1);
@@ -69,7 +72,7 @@ describe('Strength formula', () => {
 
 describe('applyOutcome', () => {
   it('positive outcome increments outcome_positive counter', () => {
-    const entry = createMemory('some memory');
+    const entry = createMemory7('some memory');
     const updated = applyOutcome(entry, true);
     expect(updated.outcome_positive).toBe(1);
     expect(updated.outcome_negative).toBe(0);
@@ -77,7 +80,7 @@ describe('applyOutcome', () => {
   });
 
   it('negative outcome increments outcome_negative counter', () => {
-    const entry = createMemory('some memory');
+    const entry = createMemory7('some memory');
     const updated = applyOutcome(entry, false);
     expect(updated.outcome_positive).toBe(0);
     expect(updated.outcome_negative).toBe(1);
@@ -85,7 +88,7 @@ describe('applyOutcome', () => {
   });
 
   it('does not mutate half_life_days (reward factor is dynamic)', () => {
-    const entry = createMemory('some memory');
+    const entry = createMemory7('some memory');
     const before = entry.half_life_days;
     const afterGood = applyOutcome(entry, true);
     expect(afterGood.half_life_days).toBe(before);
@@ -96,7 +99,7 @@ describe('applyOutcome', () => {
   it('cumulative positive outcomes increase strength via reward factor', () => {
     const now = new Date();
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
-    const entry = createMemory('useful memory');
+    const entry = createMemory7('useful memory');
     const aged = { ...entry, last_retrieved: tenDaysAgo };
 
     // Apply 5 positive outcomes
@@ -112,7 +115,7 @@ describe('applyOutcome', () => {
   it('cumulative negative outcomes decrease strength via reward factor', () => {
     const now = new Date();
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
-    const entry = createMemory('bad memory');
+    const entry = createMemory7('bad memory');
     const aged = { ...entry, last_retrieved: tenDaysAgo };
 
     // Apply 3 negative outcomes
@@ -127,12 +130,12 @@ describe('applyOutcome', () => {
 
 describe('calculateRewardFactor', () => {
   it('returns 1.0 with no outcomes', () => {
-    const entry = createMemory('neutral');
+    const entry = createMemory7('neutral');
     expect(calculateRewardFactor(entry)).toBe(1.0);
   });
 
   it('returns > 1.0 with net positive outcomes', () => {
-    const entry = createMemory('good');
+    const entry = createMemory7('good');
     const updated = { ...entry, outcome_positive: 5, outcome_negative: 0 };
     const rf = calculateRewardFactor(updated);
     expect(rf).toBeGreaterThan(1.0);
@@ -141,7 +144,7 @@ describe('calculateRewardFactor', () => {
   });
 
   it('returns < 1.0 with net negative outcomes', () => {
-    const entry = createMemory('bad');
+    const entry = createMemory7('bad');
     const updated = { ...entry, outcome_positive: 0, outcome_negative: 3 };
     const rf = calculateRewardFactor(updated);
     expect(rf).toBeLessThan(1.0);
@@ -150,7 +153,7 @@ describe('calculateRewardFactor', () => {
   });
 
   it('converges toward 1.0 with mixed outcomes', () => {
-    const entry = createMemory('mixed');
+    const entry = createMemory7('mixed');
     const updated = { ...entry, outcome_positive: 3, outcome_negative: 3 };
     const rf = calculateRewardFactor(updated);
     // 1 + 0.5 * (0 / 7) = 1.0
@@ -158,7 +161,7 @@ describe('calculateRewardFactor', () => {
   });
 
   it('is bounded between 0.5 and 1.5', () => {
-    const entry = createMemory('extreme');
+    const entry = createMemory7('extreme');
     const allGood = { ...entry, outcome_positive: 1000, outcome_negative: 0 };
     const allBad = { ...entry, outcome_positive: 0, outcome_negative: 1000 };
     expect(calculateRewardFactor(allGood)).toBeLessThanOrEqual(1.5);
@@ -171,7 +174,7 @@ describe('Decay basis modes', () => {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   function makeAged() {
-    const entry = createMemory('test memory');
+    const entry = createMemory7('test memory');
     return { ...entry, last_retrieved: sevenDaysAgo.toISOString() };
   }
 
@@ -262,13 +265,13 @@ describe('Layer.Trace', () => {
 
 describe('MemoryEntry trace fields', () => {
   it('defaults trace_outcome and source_session_id to null for non-trace entries', () => {
-    const m = createMemory('plain memory content', { layer: Layer.Episodic });
+    const m = createMemory7('plain memory content', { layer: Layer.Episodic });
     expect(m.trace_outcome).toBeNull();
     expect(m.source_session_id).toBeNull();
   });
 
   it('accepts trace_outcome when explicitly provided', () => {
-    const m = createMemory('a trace', {
+    const m = createMemory7('a trace', {
       layer: Layer.Trace,
       trace_outcome: 'success',
     });
@@ -276,7 +279,7 @@ describe('MemoryEntry trace fields', () => {
   });
 
   it('accepts source_session_id on auto-promoted traces', () => {
-    const m = createMemory('a trace', {
+    const m = createMemory7('a trace', {
       layer: Layer.Trace,
       trace_outcome: 'success',
       source_session_id: 'sess-abc-123',
@@ -288,7 +291,7 @@ describe('MemoryEntry trace fields', () => {
     // A plain `string`-typed literal, not narrowed to the TraceOutcome union,
     // so the assertion below is a genuine down-cast rather than a no-op.
     const invalidOutcome: string = 'not-a-real-outcome';
-    expect(() => createMemory('invalid', {
+    expect(() => createMemory7('invalid', {
       layer: Layer.Trace,
       // SAFETY: intentionally NOT a member of the TraceOutcome union —
       // this test exercises createMemory's runtime validation (memory.ts

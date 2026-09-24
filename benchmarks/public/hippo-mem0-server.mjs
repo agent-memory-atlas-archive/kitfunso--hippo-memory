@@ -63,8 +63,8 @@ function entriesFor(userId) {
 async function addChunk(body) {
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const text = messages
-    .filter((m) => m && typeof m.content === 'string' && m.content.trim())
-    .map((m) => `${m.role ?? 'user'}: ${m.content.trim()}`)
+    .filter((m) => m && String(m.content ?? '').trim())
+    .map((m) => `${m.role ?? 'user'}: ${String(m.content).trim()}`)
     .join('\n');
   if (text.trim().length < 3) return { results: [] };
   const root = rootFor(body.user_id);

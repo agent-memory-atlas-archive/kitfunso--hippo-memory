@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId, AUTO_DELETABLE_SQL } from './memory.js';
+import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId, AUTO_DELETABLE_SQL, DEFAULT_HALF_LIFE_DAYS } from './memory.js';
 import { dumpFrontmatter, parseFrontmatter } from './yaml.js';
 import {
   openHippoDb,
@@ -321,9 +321,25 @@ export function initStore(hippoRoot: string): void {
     if (bootstrapped) {
       syncMirrorFiles(hippoRoot, db);
     }
+    recordHalfLifeBaseForNewStore(db);
   } finally {
     closeHippoDb(db);
   }
+}
+
+/** `meta` key holding the default half-life base a store's memories are on (src/half-life-migration.ts). */
+export const HALF_LIFE_BASE_META_KEY = 'default_half_life_base';
+
+/**
+ * A store with no memories starts on the current default half-life base, so
+ * `hippo sleep` never migrates it. A store that already holds memories and
+ * no recorded base predates the record, and keeps reading as the legacy
+ * 7-day base until sleep migrates it.
+ */
+function recordHalfLifeBaseForNewStore(db: DatabaseSyncLike): void {
+  if (getMeta(db, HALF_LIFE_BASE_META_KEY, '') !== '') return;
+  if (db.prepare(`SELECT 1 AS x FROM memories LIMIT 1`).get() !== undefined) return;
+  setMeta(db, HALF_LIFE_BASE_META_KEY, String(DEFAULT_HALF_LIFE_DAYS));
 }
 
 function ensureMirrorDirectories(hippoRoot: string): void {

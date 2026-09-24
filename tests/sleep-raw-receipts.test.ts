@@ -21,6 +21,9 @@ import { createMemory, Layer, type MemoryEntry } from '../src/memory.js';
 import { auditMemory } from '../src/audit.js';
 import * as api from '../src/api.js';
 
+/** Sleep and decay here run on the pre-1.46 7-day base, so memories fade within the test's horizon. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function tmpHome(prefix: string, config?: string) {
@@ -46,8 +49,8 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
   it('a faded raw receipt no longer aborts consolidate, and the rest of the cycle still commits', async () => {
     const { home, restore } = tmpHome('hippo-raw-decay-');
     try {
-      const receipt = aged(createMemory('slack receipt: prod deploy failed on the stale cache', { layer: Layer.Episodic, kind: 'raw' }), 90);
-      const faded = aged(createMemory('an ordinary observation about the build cache nobody recalled', { layer: Layer.Episodic }), 90);
+      const receipt = aged(createMemory7('slack receipt: prod deploy failed on the stale cache', { layer: Layer.Episodic, kind: 'raw' }), 90);
+      const faded = aged(createMemory7('an ordinary observation about the build cache nobody recalled', { layer: Layer.Episodic }), 90);
       writeEntry(home, receipt);
       writeEntry(home, faded);
 
@@ -69,10 +72,10 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
       JSON.stringify({ replay: { count: 0 }, memoryValue: { enabled: true } }),
     );
     try {
-      const receipt = aged(createMemory('github receipt: issue about the flaky integration suite', { layer: Layer.Episodic, kind: 'raw' }), 90);
+      const receipt = aged(createMemory7('github receipt: issue about the flaky integration suite', { layer: Layer.Episodic, kind: 'raw' }), 90);
       writeEntry(home, receipt);
       for (let i = 0; i < 12; i++) {
-        writeEntry(home, aged(createMemory(`faded observation number ${i} about module ${i} internals`, { layer: Layer.Episodic }), 90));
+        writeEntry(home, aged(createMemory7(`faded observation number ${i} about module ${i} internals`, { layer: Layer.Episodic }), 90));
       }
 
       await consolidate(home, { now: new Date() });
@@ -86,8 +89,8 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
   it('a short raw receipt no longer aborts api.sleep at the quality audit', async () => {
     const { home, restore } = tmpHome('hippo-raw-audit-');
     try {
-      const receipt = createMemory('lgtm', { layer: Layer.Episodic, kind: 'raw' });
-      const junk = createMemory('wip fix', { layer: Layer.Episodic });
+      const receipt = createMemory7('lgtm', { layer: Layer.Episodic, kind: 'raw' });
+      const junk = createMemory7('wip fix', { layer: Layer.Episodic });
       writeEntry(home, receipt);
       writeEntry(home, junk);
 
@@ -104,8 +107,8 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
   });
 
   it('the quality audit never marks a raw receipt for removal, so `hippo audit --fix` cannot hit the trigger either', () => {
-    const receipt = createMemory('lgtm', { layer: Layer.Episodic, kind: 'raw' });
-    const junk = createMemory('wip fix', { layer: Layer.Episodic });
+    const receipt = createMemory7('lgtm', { layer: Layer.Episodic, kind: 'raw' });
+    const junk = createMemory7('wip fix', { layer: Layer.Episodic });
     expect(auditMemory(receipt)?.severity).not.toBe('error');
     expect(auditMemory(junk)?.severity).toBe('error');
   });

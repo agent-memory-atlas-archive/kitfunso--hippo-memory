@@ -1,5 +1,7 @@
 # Decay default: result (2026-09-24)
 
+**Outcome: the default moves to 365 days.** The first registration, seeds 21 to 40, kept 7 days, because its guard was mis-specified; that verdict stands for those seeds. The second registration, seeds 41 to 60, uses the audit's own guards and selects 365 days. See "Second registration" at the end.
+
 **Registration:** `2026-09-24-decay-default-prereg.md` (locked at `68b90af`, before any run). **Raw outputs:** `2026-09-24-decay-default-raw.txt`. **Code under test:** `68b90af`, one `dist/` build, seeds 21 to 40, 120 runs, local CPU only.
 
 ## Verdict by the locked rule: the default stays at 7 days
@@ -55,9 +57,58 @@ The rule is kept as locked. This file does not change the default. A corrected g
   - On queries exposed to a superseded version, 7 days does better: cleanStaleR5 -12.6.
   - The audit's break-even says 365 still wins unless about 80% of queries face a superseded version. The dogfood store's real rate is 7.1%.
 
+## Second registration: seeds 41 to 60
+
+`2026-09-24-decay-default-prereg-2.md` was locked at `a6482a0` before any run on these seeds. The runs used the `dist/` build from that commit. The migration code added afterwards was built into `dist/` while the runs were in progress, but no file in E1's import graph (33 files, dynamic imports included) changed. Raw outputs are appended to `2026-09-24-decay-default-raw.txt`.
+
+| Step | Comparison | Measure | Benefit, pp [95% CI] | Verdict |
+|---|---|---|---|---|
+| 1 | full@365 vs full@7 | currentR5 | +45.6 [43.8, 47.4] | HELPS |
+| 1 | guard | cleanTrapR5 | +33.9 [28.8, 39.3] | does not hurt |
+| 1 | guard | demoted s\*, 95% lower bound | 100% > 1.4% | passes |
+| 1 | guard | superseded s\*, 95% lower bound | 77.2% > 7.1% | passes |
+| 1 | full@730 and decay-off vs full@7 | currentR5 | +46.3 and +46.3 | both qualify |
+| 3 | full@730 vs full@365 | currentR5 | +0.7 [0.1, 1.2] | tie, so 365 stays |
+| 4 | decay-off vs full@365 | currentR5 | +0.7 [-0.1, 1.4] | tie, so decay stays on |
+
+**Verdict: 365 days.** Shipped in 1.46.0 as `DEFAULT_HALF_LIFE_DAYS = 365` (`src/memory.ts`).
+
+## Migration (declared in the first registration; shipped)
+
+`src/half-life-migration.ts`, run at the start of `hippo sleep`:
+- **What moves:** memories whose half-life still equals `deriveHalfLife(7, entry)` move to `deriveHalfLife(365, entry)`.
+- **What stays:** memories hippo shortened keep their value (invalidated, superseded, merge sources, marked bad), and so do memories with a fixed half-life (decisions, incidents, customer notes: 90 days).
+- **Logging:** the ids go to the audit log (`half_life_migrate`). Migrating back to 7 reverses it.
+- **Scope:** new stores record 365 at creation and never migrate. Stores that already hold memories and have no recorded base read as 7 days, and move once.
+- **Opting out:** `defaultHalfLifeDays` in `.hippo/config.json` overrides the default; a store whose setting matches its base is left alone.
+
+## Store size (declared method)
+
+Sleep deletes a memory below strength 0.05, which is 4.3 half-lives with no recall:
+- **7 days:** about 30 days;
+- **365 days:** about 4.3 years.
+
+So at 365 days, sleep's decay step practically stops deleting unused memories, and growth follows the capture rate. The dogfood store's rate is about 12 memories a day (2,119 in roughly 180 days).
+
+| Store | Memories per year | Size per year (2.2 KB each, with mirrors) | Days to 10,000 memories |
+|---|---|---|---|
+| One developer | about 4,300 | about 9 MB | about 850 |
+| Shared server, 50 developers | about 215,000 | about 460 MB | about 17 |
+| Shared server, 200 developers | about 860,000 | about 1.8 GB | about 4 |
+
+- **For a single developer's store this is acceptable.** The 10,000-memory measurement (ROADMAP, Capture and scale findings) gives recall in 0.58 s. A 10,000-memory store takes about 2.3 years at this rate.
+- **A shared company server is not covered by this default.** It needs Postgres (EI10) and a per-store cap or retention policy before it runs at 365 days (ROADMAP Part XII).
+- **The dormant store's 180-day retention is unchanged.**
+
+## Cross-check on a public dataset (undeclared, retrieval only)
+
+On the same free LoCoMo check as `2026-09-24-public-benchmarks-dryrun.md` (all 1,531 questions with evidence, no embeddings):
+- **7-day default:** hippo trails BM25 at top 10 by -6.9 pp [-8.5, -5.5].
+- **365 days:** the gap narrows to -1.0 [-1.9, 0.0] at top 10 and -1.3 [-2.1, -0.6] at top 50.
+
+Hippo still does not beat BM25 on this one-shot benchmark, which is consistent with the dating caveat above.
+
 ## NOT-DONE
 
-- The confirmation on fresh seeds under the corrected rule.
-- The migration for memories stored at 7 days.
-- The store-size check with sleep on.
-- The lane with lookalikes dated inside each fact's window.
+- The lane with lookalikes dated inside each fact's window (needed before any claim against BM25).
+- A per-store cap or retention policy for shared servers at 365 days.

@@ -1554,7 +1554,7 @@ Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 ca
 
 1. **Weeks 0-4:**
    - Review and merge PR #227.
-   - Decide the half-life and physics defaults on the audit evidence.
+   - Decide the half-life and physics defaults on the audit evidence. **Done 2026-09-24:** 365 days, pre-registered and confirmed on fresh seeds (`docs/evals/2026-09-24-decay-default-result.md`); physics off.
    - Re-run the mechanism audit on release code.
    - CD1 agent plugin: first check that VS Code's hook accepts `additionalContext`.
    - CD10 remaining: registry publish with the next release.

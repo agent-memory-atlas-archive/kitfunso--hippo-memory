@@ -299,16 +299,15 @@ sequenceDiagram
 
 ### Decay by default
 
-Every memory has a half-life. 7 days by default. Persistence is earned.
+Every memory has a half-life: 365 days by default. Persistence is earned. Until 1.46.0 the default was 7 days. A pre-registered evaluation found 7 days lost the current version of a fact far more often: it was in the top five 29% of the time at 7 days and 75% at 365 ([result](docs/evals/2026-09-24-decay-default-result.md)). 730 days and decay off both tied with 365. `hippo sleep` moves memories still on the old 7-day base to the new one, once, and records each move in the audit log. Set `defaultHalfLifeDays` in `.hippo/config.json` to choose your own.
 
 ```bash
 hippo remember "always check cache contents after refresh"
-# stored with half_life: 7d, strength: 1.0
+# stored with half_life: 365d, strength: 1.0
 
-# 14 days later with no retrieval:
+# two years later with no retrieval:
 hippo inspect mem_a1b2c3
 # strength: 0.25  (decayed by 2 half-lives)
-# at risk of removal on next sleep
 ```
 
 ---
@@ -320,12 +319,12 @@ Use it or lose it. Each recall boosts the half-life by 2 days.
 ```bash
 hippo recall "cache issues"
 # finds mem_a1b2c3, retrieval_count: 1 -> 2
-# half_life extended: 7d -> 9d
+# half_life extended: 365d -> 367d
 # strength recalculated from retrieval timestamp
 
 hippo recall "cache issues"   # again next week
 # retrieval_count: 2 -> 3
-# half_life: 9d -> 11d
+# half_life: 367d -> 369d
 # this memory is learning to survive
 ```
 

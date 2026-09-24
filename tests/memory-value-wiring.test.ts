@@ -41,6 +41,9 @@ import { MEMORY_VALUE_WEIGHTS, SOURCE_ARTIFACT_SHA256 } from '../src/memory-valu
 // @ts-expect-error - .mjs harness modules have no type declarations
 import { computeFeatures } from '../benchmarks/memory-value/extract.mjs';
 
+/** Sleep and decay here run on the pre-1.46 7-day base, so memories fade within the test's horizon. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 // File-unique scratch root (see file header comment).
@@ -85,7 +88,7 @@ function condemnedEntry(
   opts: { layer?: Layer; tenantId?: string; tags?: string[]; confidence?: MemoryEntry['confidence'] } = {},
 ): MemoryEntry {
   const created = ancientDate(3650);
-  const base = createMemory(content, {
+  const base = createMemory7(content, {
     layer: opts.layer ?? Layer.Semantic,
     tenantId: opts.tenantId,
     tags: opts.tags,
@@ -140,7 +143,7 @@ describe('(a) feature parity vs extract.mjs computeFeatures', () => {
   it('computeMvFeatures matches the benchmark for all 8 shared dims on real store-round-tripped entries', () => {
     initStore(dir);
     const built: MemoryEntry[] = [
-      createMemory('alpha short note about a topic', { layer: Layer.Episodic }),
+      createMemory7('alpha short note about a topic', { layer: Layer.Episodic }),
       {
         ...createMemory(
           'a much longer memory entry with considerably more words describing something in detail',
@@ -192,11 +195,11 @@ describe('(b) normalization parity vs evaluate.mjs min-max', () => {
   it('scoreEntries matches an independently-computed min-max normalization + weighted dot product', () => {
     initStore(dir);
     const built: MemoryEntry[] = [
-      createMemory('one', { layer: Layer.Semantic }),
-      createMemory('two two', { layer: Layer.Semantic }),
-      createMemory('three three three words here', { layer: Layer.Semantic }),
-      createMemory('four four four four word entry with extra padding text', { layer: Layer.Semantic }),
-      createMemory(
+      createMemory7('one', { layer: Layer.Semantic }),
+      createMemory7('two two', { layer: Layer.Semantic }),
+      createMemory7('three three three words here', { layer: Layer.Semantic }),
+      createMemory7('four four four four word entry with extra padding text', { layer: Layer.Semantic }),
+      createMemory7(
         'five five five five five word entry with even more extra padding text added here',
         { layer: Layer.Semantic },
       ),
@@ -296,7 +299,7 @@ describe('(d) flag-off byte-identical', () => {
     // DEFAULT_CONFIG.memoryValue.enabled === false. Dormant is pinned off:
     // this gate was pre-registered on the delete path.
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
-    const fresh = createMemory('a perfectly healthy fresh memory entry', { layer: Layer.Semantic });
+    const fresh = createMemory7('a perfectly healthy fresh memory entry', { layer: Layer.Semantic });
     const ancient = condemnedEntry('an old memory that should decay away in the usual way');
     const pinned = { ...createMemory('a pinned rule', { pinned: true }), created: ancientDate(3650), last_retrieved: ancientDate(3650), half_life_days: 1 };
     for (const e of [fresh, ancient, pinned]) writeEntry(dir, e);
@@ -329,7 +332,7 @@ describe('(d) flag-off byte-identical', () => {
     const built: MemoryEntry[] = [];
     for (const tenantId of tenants) {
       for (let i = 0; i < 10; i++) {
-        built.push(createMemory(`${tenantId} healthy entry ${i} with distinct padding text`, {
+        built.push(createMemory7(`${tenantId} healthy entry ${i} with distinct padding text`, {
           layer: Layer.Semantic,
           tenantId,
         }));

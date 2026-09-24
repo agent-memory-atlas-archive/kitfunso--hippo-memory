@@ -20,15 +20,14 @@
  * (7 days when never recorded) to the configured `defaultHalfLifeDays`.
  */
 import { deriveHalfLife, type MemoryEntry } from './memory.js';
-import { loadAllEntries, batchWriteAndDelete } from './store.js';
+import { loadAllEntries, batchWriteAndDelete, HALF_LIFE_BASE_META_KEY } from './store.js';
 import { openHippoDb, closeHippoDb, getMeta, setMeta } from './db.js';
 import { appendAuditEvent } from './audit.js';
 
 /** The base every store used before the base was recorded. */
 export const LEGACY_HALF_LIFE_BASE = 7;
 
-/** `meta` key holding the base a store's memories are on. */
-export const HALF_LIFE_BASE_META_KEY = 'default_half_life_base';
+export { HALF_LIFE_BASE_META_KEY };
 
 /** What {@link migrateDefaultHalfLife} did, or would do under `dryRun`. */
 export interface HalfLifeMigrationResult {

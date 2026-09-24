@@ -6,6 +6,9 @@ import { consolidate } from '../src/consolidate.js';
 import { initStore, writeEntry, loadAllEntries, readEntry, listMemoryConflicts } from '../src/store.js';
 import { createMemory, Layer, calculateStrength, resolveConfidence } from '../src/memory.js';
 
+/** Sleep and decay here run on the pre-1.46 7-day base, so memories fade within the test's horizon. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 let tmpDir: string;
 
 beforeEach(() => {
@@ -22,7 +25,7 @@ describe('Decay pass', () => {
     fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
 
     // Create an entry that's very old (strength will be effectively 0)
-    const entry = createMemory('ancient memory');
+    const entry = createMemory7('ancient memory');
     const veryOldDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000 * 10).toISOString(); // 10 years
     const ancient = { ...entry, last_retrieved: veryOldDate, pinned: false };
     writeEntry(tmpDir, ancient);
@@ -37,7 +40,7 @@ describe('Decay pass', () => {
   it('keeps pinned entries regardless of age', async () => {
     initStore(tmpDir);
 
-    const entry = createMemory('permanent rule', { pinned: true });
+    const entry = createMemory7('permanent rule', { pinned: true });
     const veryOldDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000 * 10).toISOString();
     const ancient = { ...entry, last_retrieved: veryOldDate, pinned: true };
     writeEntry(tmpDir, ancient);
@@ -53,7 +56,7 @@ describe('Decay pass', () => {
     initStore(tmpDir);
     fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ dormant: { enabled: false } }), 'utf8');
 
-    const entry = createMemory('ancient memory');
+    const entry = createMemory7('ancient memory');
     const veryOldDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000 * 10).toISOString();
     const ancient = { ...entry, last_retrieved: veryOldDate, pinned: false };
     writeEntry(tmpDir, ancient);
@@ -70,7 +73,7 @@ describe('Decay pass', () => {
   it('keeps the stored confidence tier for old non-verified memories through sleep, while resolveConfidence reports stale', async () => {
     initStore(tmpDir);
 
-    const entry = createMemory('stale memory candidate', { confidence: 'observed', tags: ['error'] });
+    const entry = createMemory7('stale memory candidate', { confidence: 'observed', tags: ['error'] });
     const now = new Date();
     const oldDate = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString();
     const staleCandidate = { ...entry, last_retrieved: oldDate, confidence: 'observed' as const };
@@ -93,14 +96,14 @@ describe('Replay pass (integration)', () => {
 
     // 8 distinct memories, no text overlap → merge pass won't fire.
     const memories = [
-      createMemory('elephants have long memories according to field study', { layer: Layer.Episodic }),
-      createMemory('production pipeline deploys every friday at noon UTC', { layer: Layer.Episodic }),
-      createMemory('ravens can use tools and solve multi-step puzzles', { layer: Layer.Episodic }),
-      createMemory('rust borrow checker prevents iterator invalidation bugs', { layer: Layer.Episodic }),
-      createMemory('soybean oil futures ticker is ZL=F on yahoo finance', { layer: Layer.Episodic }),
-      createMemory('quantum error correction requires logical qubit overhead', { layer: Layer.Episodic }),
-      createMemory('the postgres vacuum process reclaims dead tuple space', { layer: Layer.Episodic }),
-      createMemory('marine otters wrap kelp around themselves while sleeping', { layer: Layer.Episodic }),
+      createMemory7('elephants have long memories according to field study', { layer: Layer.Episodic }),
+      createMemory7('production pipeline deploys every friday at noon UTC', { layer: Layer.Episodic }),
+      createMemory7('ravens can use tools and solve multi-step puzzles', { layer: Layer.Episodic }),
+      createMemory7('rust borrow checker prevents iterator invalidation bugs', { layer: Layer.Episodic }),
+      createMemory7('soybean oil futures ticker is ZL=F on yahoo finance', { layer: Layer.Episodic }),
+      createMemory7('quantum error correction requires logical qubit overhead', { layer: Layer.Episodic }),
+      createMemory7('the postgres vacuum process reclaims dead tuple space', { layer: Layer.Episodic }),
+      createMemory7('marine otters wrap kelp around themselves while sleeping', { layer: Layer.Episodic }),
     ];
     for (const m of memories) writeEntry(tmpDir, m);
 
@@ -136,8 +139,8 @@ describe('Replay pass (integration)', () => {
     fs.writeFileSync(configPath, JSON.stringify({ replay: { count: 0 } }, null, 2));
 
     const memories = [
-      createMemory('memory one with enough content to pass validation', { layer: Layer.Episodic }),
-      createMemory('memory two also sufficiently long to store properly', { layer: Layer.Episodic }),
+      createMemory7('memory one with enough content to pass validation', { layer: Layer.Episodic }),
+      createMemory7('memory two also sufficiently long to store properly', { layer: Layer.Episodic }),
     ];
     for (const m of memories) writeEntry(tmpDir, m);
 
@@ -154,8 +157,8 @@ describe('Replay pass (integration)', () => {
 
     // Default config count is 5; write only 2 entries.
     const memories = [
-      createMemory('first unique memory for cap test scenario', { layer: Layer.Episodic }),
-      createMemory('second unique memory for cap test scenario', { layer: Layer.Episodic }),
+      createMemory7('first unique memory for cap test scenario', { layer: Layer.Episodic }),
+      createMemory7('second unique memory for cap test scenario', { layer: Layer.Episodic }),
     ];
     for (const m of memories) writeEntry(tmpDir, m);
 
@@ -173,8 +176,8 @@ describe('Merge pass', () => {
     initStore(tmpDir);
 
     // Two very similar episodic entries
-    const e1 = createMemory('cache refresh failure data pipeline error', { layer: Layer.Episodic });
-    const e2 = createMemory('cache refresh failure data pipeline problem', { layer: Layer.Episodic });
+    const e1 = createMemory7('cache refresh failure data pipeline error', { layer: Layer.Episodic });
+    const e2 = createMemory7('cache refresh failure data pipeline problem', { layer: Layer.Episodic });
     writeEntry(tmpDir, e1);
     writeEntry(tmpDir, e2);
 
@@ -191,8 +194,8 @@ describe('Merge pass', () => {
   it('does not merge dissimilar entries', async () => {
     initStore(tmpDir);
 
-    const e1 = createMemory('Python dict ordering is guaranteed since 3.7', { layer: Layer.Episodic });
-    const e2 = createMemory('Gold model uses TIPS 10y inflation signal', { layer: Layer.Episodic });
+    const e1 = createMemory7('Python dict ordering is guaranteed since 3.7', { layer: Layer.Episodic });
+    const e2 = createMemory7('Gold model uses TIPS 10y inflation signal', { layer: Layer.Episodic });
     writeEntry(tmpDir, e1);
     writeEntry(tmpDir, e2);
 
@@ -204,8 +207,8 @@ describe('Merge pass', () => {
   it('demotes merged source episodics via half_life_days, not the inert stored-strength field', async () => {
     initStore(tmpDir);
 
-    const e1 = createMemory('cache refresh failure data pipeline error', { layer: Layer.Episodic });
-    const e2 = createMemory('cache refresh failure data pipeline problem', { layer: Layer.Episodic });
+    const e1 = createMemory7('cache refresh failure data pipeline error', { layer: Layer.Episodic });
+    const e2 = createMemory7('cache refresh failure data pipeline problem', { layer: Layer.Episodic });
     writeEntry(tmpDir, e1);
     writeEntry(tmpDir, e2);
 
@@ -247,11 +250,11 @@ describe('Merge pass', () => {
   it('detects overlapping contradictory memories and records open conflicts', async () => {
     initStore(tmpDir);
 
-    const a = createMemory('The feature flag is enabled for production users', {
+    const a = createMemory7('The feature flag is enabled for production users', {
       layer: Layer.Episodic,
       tags: ['feature-flag', 'prod'],
     });
-    const b = createMemory('The feature flag is disabled for production users', {
+    const b = createMemory7('The feature flag is disabled for production users', {
       layer: Layer.Episodic,
       tags: ['feature-flag', 'prod'],
     });
@@ -273,11 +276,11 @@ describe('Merge pass', () => {
   it('detects reworded contradictions, not just near-duplicate wording', async () => {
     initStore(tmpDir);
 
-    const a = createMemory('API auth must be enabled in prod', {
+    const a = createMemory7('API auth must be enabled in prod', {
       layer: Layer.Episodic,
       tags: ['auth', 'prod'],
     });
-    const b = createMemory('Disable API auth in prod', {
+    const b = createMemory7('Disable API auth in prod', {
       layer: Layer.Episodic,
       tags: ['auth', 'prod'],
     });
@@ -322,8 +325,8 @@ describe('Merge pass', () => {
       try {
         initStore(caseDir);
 
-        const a = createMemory(left, { layer: Layer.Episodic, tags: ['conflict-check'] });
-        const b = createMemory(right, { layer: Layer.Episodic, tags: ['conflict-check'] });
+        const a = createMemory7(left, { layer: Layer.Episodic, tags: ['conflict-check'] });
+        const b = createMemory7(right, { layer: Layer.Episodic, tags: ['conflict-check'] });
         writeEntry(caseDir, a);
         writeEntry(caseDir, b);
 
@@ -340,11 +343,11 @@ describe('Merge pass', () => {
   it('does not flag unrelated policy memories just because they share tags and opposite polarity words', async () => {
     initStore(tmpDir);
 
-    const a = createMemory('Always create a worktree when working in exemem-workspace', {
+    const a = createMemory7('Always create a worktree when working in exemem-workspace', {
       layer: Layer.Episodic,
       tags: ['feedback', 'policy'],
     });
-    const b = createMemory('Never touch other agents worktrees', {
+    const b = createMemory7('Never touch other agents worktrees', {
       layer: Layer.Episodic,
       tags: ['feedback', 'policy'],
     });
@@ -377,11 +380,11 @@ describe('Merge pass', () => {
     ] as const;
 
     const ids = pairs.flatMap(([left, right], index) => {
-      const leftEntry = createMemory(left, {
+      const leftEntry = createMemory7(left, {
         layer: Layer.Episodic,
         tags: [`pair-${index}`, 'feedback', 'policy'],
       });
-      const rightEntry = createMemory(right, {
+      const rightEntry = createMemory7(right, {
         layer: Layer.Episodic,
         tags: [`pair-${index}`, 'feedback', 'policy'],
       });
@@ -401,11 +404,11 @@ describe('Merge pass', () => {
   it('resolves open conflicts when the contradiction disappears', async () => {
     initStore(tmpDir);
 
-    const a = createMemory('The feature flag is enabled for production users', {
+    const a = createMemory7('The feature flag is enabled for production users', {
       layer: Layer.Episodic,
       tags: ['feature-flag', 'prod'],
     });
-    const b = createMemory('The feature flag is disabled for production users', {
+    const b = createMemory7('The feature flag is disabled for production users', {
       layer: Layer.Episodic,
       tags: ['feature-flag', 'prod'],
     });
