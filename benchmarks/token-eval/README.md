@@ -12,7 +12,7 @@ Shared statistics and four-bucket cost accounting are in `src/eval-stats.ts`.
 
 ## What is and is not established
 
-- **Established, with records:** on the bundled synthetic traces, skipping unchanged hook blocks cuts the text hippo itself injects by 85-90%. The run is deterministic: two runs give identical per-prompt counts, and the record is `replay-results.json`.
+- **Established, with records:** on the bundled synthetic traces, skipping unchanged hook blocks cuts the text hippo itself injects by 85-90% (the cache-priced cost of that text by 84-89%, the table below). The run is deterministic: two runs give identical per-prompt counts, and the record is `replay-results.json`.
 - **Not established:** that hippo saves anyone tokens or money. The replay prices only hippo's own text (tens of tokens per prompt in these traces), and its token counts are an estimate (characters / 4). For comparison, one long Claude Code session in the container this was built in recorded about 207 million cache-read tokens, as counted by the API. Cutting hippo's overhead is housekeeping. A saving claim needs the paired A/B (TE5) on real tasks.
 - **Needs checking on a real machine:** that Claude Code keeps hook `additionalContext` in the transcript, which the cache model assumes. `claude-usage.mjs` below reads the real records.
 

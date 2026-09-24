@@ -9,6 +9,8 @@ read through search summaries because the sandbox proxy blocked most direct fetc
 figures marked *secondary* come from write-ups, not primary pages, and every figure should
 be re-checked before it goes on a slide. arXiv items from 2026 are preprints.
 
+
+Corrections after an independent review (2026-09-24), applied in ROADMAP Part VIII: `src/sso.ts` (the SSO stubs cited below) was deleted in 1.45.0; Atlassian Connect reaches end of support on 31 Jan 2027 (updates froze 31 Mar 2026); Azure DevOps organisation-scoped PATs keep working after global PATs end; Slack's 2025 rate limit exempts customer-internal custom apps; arXiv 2606.15017 studies web agents, not coding agents; arXiv 2606.20882 is a single-author position paper; the MINJA "95%+" figure is its injection success rate, and its attack success rate is lower.
 ## Bottom line
 
 1. **Most companies do not keep code "somewhere exotic". They keep it in Git, hosted where

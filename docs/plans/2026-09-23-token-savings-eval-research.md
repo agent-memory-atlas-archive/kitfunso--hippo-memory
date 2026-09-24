@@ -6,6 +6,8 @@ Update, same day: the first slices of TE0 (token ledger, `hippo tokens`), TE1 (s
 rendering) and TE2 (skip unchanged hook blocks) shipped in PR #227, along with the MCP budget
 description fix. Section 1 describes the code before that change.
 
+Corrections after an independent review (2026-09-24): the "input outnumbers output more than 150 to 1" and "76% of tokens on reads" figures attributed to arXiv 2604.22750 did not appear in any excerpt checked, so treat them as unverified (the paper's verified findings are about 1000x the tokens of single-turn reasoning, input-driven cost, and up to 30x run-to-run variance). The 40-turn upper bound's cache reads come to about 1,170k token-reads, about 117k uncached-equivalent rather than 123k; the roughly 200k total stands.
+
 Method: two parallel passes. The first was a read-only audit of how hippo counts, spends and
 reports tokens at v1.44.0 plus PR #227. The second was a literature and industry review of how
 memory systems and coding-agent benchmarks measure token and cost savings. arxiv.org and
