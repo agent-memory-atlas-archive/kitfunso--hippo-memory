@@ -1766,3 +1766,39 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
   - CD11 and CD12, scoped to the first design partner's agent;
   - EV1 and EV2, so the pilot runs the edition that will be sold.
 
+---
+
+## Part XIII - 2026-09-24 update: forgetting by evidence, not by the clock (Track FE)
+
+**Why.** The decay decision (`docs/evals/2026-09-24-decay-default-result.md`) moved the default half-life from 7 days to 365, and 365 tied with decay switched off. So the shipped default effectively removes time-based decay from ranking. 365 was not tuned, and the release notes and site should say that plainly.
+
+Three facts drove the decision:
+- **Public benchmarks cannot reward time decay.** LongMemEval and LoCoMo ingest once and ask once, so any decay can only hurt there.
+- **E1 was built to reward decay, and 7 days still lost** (29% against 75%). Its one win was on facts with a newer version (cleanStaleR5 +12.6 for 7 days), but only 7.1% of the dogfood store is superseded.
+- **The mechanisms that measured helpful are not the clock:** outcome feedback (marked-wrong suppression), supersession and strengthening.
+
+What stays open:
+- No half-life between 7 and 365 was tested.
+- E1's dating caveat, the lookalikes dated inside each fact's window, is untested.
+- Real memories go stale when code changes, which no test models.
+- At 365 days sleep practically stops deleting, which a shared server cannot run without a cap.
+
+#### FE1. Split ranking from retention [planned]
+- **Ranking:** uses outcomes, supersession and strengthening. Time applies only as a tie-break among competing versions of the same fact, not as a penalty on every memory.
+- **Retention:** deletion and dormancy are decided by value (never recalled, never confirmed, low outcomes), not by age alone.
+
+#### FE2. Staleness from code churn [planned]
+A lesson that names a file, symbol or command is marked stale when that file changes or is deleted after the lesson was stored. It builds on `src/invalidation.ts`. Staleness lowers the lesson's rank and flags it for confirmation; it never deletes it.
+
+#### FE3. Registered test of the new forgetting [planned, before FE1 or FE2 ship as defaults]
+**E1 on fresh seeds (61 to 80),** with these arms:
+- full@365, the current default;
+- full@30 and full@90, the untested middle;
+- version-aware recency (FE1);
+- decay off.
+
+It runs with the in-window dating lane as well. It also includes a **replay of real recall queries** from the founder's store: LC1 retrieval traces with their later outcomes, scored for each arm. This is the only test that reflects actual use, and it runs on the founder's machine.
+
+#### FE4. Messaging [now]
+Pitch "learns what is wrong and stops repeating it", not "decay by default". "Good memory is knowing what to forget" stays only where forgetting means wrong, superseded or unused, never age.
+
