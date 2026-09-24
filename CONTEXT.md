@@ -5,6 +5,24 @@ claim cards. These terms have one fixed meaning in the hippo code, the `hippo` C
 
 ## Language
 
+### Memory lifecycle
+
+**Dormant memory**:
+A memory sleep moved out of active memory instead of deleting it, because it faded
+(`dormant.enabled`, on by default). It keeps its content and can be restored or forgotten for
+good until `dormant.retentionDays` expires it.
+_Avoid_: archived memory (the raw archive keeps metadata only), deleted, cold
+
+**Raw receipt**:
+A `kind='raw'` memory: a connector message or imported note, append-only. Sleep never
+deletes one; only the raw archive removes it.
+_Avoid_: raw memory, transcript
+
+**Token ledger**:
+The record of every block of memory text hippo handed an agent: surface, session, estimated
+tokens, and whether it was sent or skipped as unchanged. Counts only, never the text.
+_Avoid_: usage log, telemetry, cost log
+
 ### Work queue
 
 **Card**:

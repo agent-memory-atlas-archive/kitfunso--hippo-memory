@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createMemory, computeSchemaFit, deriveHalfLife, type MemoryEntry } from '../src/memory.js';
+import { createMemory, computeSchemaFit, deriveHalfLife, DEFAULT_HALF_LIFE_DAYS, type MemoryEntry } from '../src/memory.js';
 
 function makePool(): MemoryEntry[] {
   return [
@@ -123,8 +123,8 @@ describe('end-to-end: schema_fit flows through createMemory', () => {
     const lowFit = createMemory('test', { schema_fit: 0.15 });
     const neutral = createMemory('test', { schema_fit: 0.5 });
 
-    expect(highFit.half_life_days).toBe(7 * 1.5);
-    expect(lowFit.half_life_days).toBe(7 * 0.5);
-    expect(neutral.half_life_days).toBe(7);
+    expect(highFit.half_life_days).toBe(DEFAULT_HALF_LIFE_DAYS * 1.5);
+    expect(lowFit.half_life_days).toBe(DEFAULT_HALF_LIFE_DAYS * 0.5);
+    expect(neutral.half_life_days).toBe(DEFAULT_HALF_LIFE_DAYS);
   });
 });

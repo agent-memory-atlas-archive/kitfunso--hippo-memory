@@ -22,7 +22,7 @@ function makeRepo(version: string, overrides: Overrides = {}): string {
   const root = mkdtempSync(join(tmpdir(), 'hippo-vgate-'));
   mkdirSync(join(root, 'extensions', 'openclaw-plugin'), { recursive: true });
   mkdirSync(join(root, 'src'), { recursive: true });
-  for (const path of ['package.json', 'openclaw.plugin.json', 'extensions/openclaw-plugin/package.json', 'extensions/openclaw-plugin/openclaw.plugin.json']) {
+  for (const path of ['package.json', 'openclaw.plugin.json', 'extensions/openclaw-plugin/package.json', 'extensions/openclaw-plugin/openclaw.plugin.json', 'server.json']) {
     writeFileSync(join(root, path), JSON.stringify({ name: 'fixture', version }));
   }
   writeFileSync(join(root, 'src', 'version.ts'), `export const PACKAGE_VERSION = '${version}';\n`);

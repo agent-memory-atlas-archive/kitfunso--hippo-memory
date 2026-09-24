@@ -15,6 +15,9 @@ import { openHippoDb, closeHippoDb } from '../src/db.js';
 import { queryAuditEvents } from '../src/audit.js';
 import { renderSleepResult } from '../src/cli.js';
 
+/** Sleep and decay here run on the pre-1.46 7-day base, so memories fade within the test's horizon. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 const DAY = 86_400_000;
 const roots: string[] = [];
 
@@ -27,7 +30,7 @@ function newRoot(configJson?: string): string {
 }
 
 const rawRow = (content: string): MemoryEntry =>
-  createMemory(content, { kind: 'raw', artifact_ref: 'slack://T1/C1/1.0', owner: 'user:U1' });
+  createMemory7(content, { kind: 'raw', artifact_ref: 'slack://T1/C1/1.0', owner: 'user:U1' });
 const ctxFor = (hippoRoot: string): Context =>
   ({ hippoRoot, tenantId: 'default', actor: { subject: 'sleep-test', role: 'admin' } });
 const sixtyDaysOn = (): Date => new Date(Date.now() + 60 * DAY);
@@ -50,7 +53,7 @@ describe('C1: consolidate never deletes a raw row', () => {
   it.each([false, true])('memoryValue.enabled=%s: the decayed raw row stays, the plain row goes', async (mv) => {
     const root = newRoot(JSON.stringify({ memoryValue: { enabled: mv } }));
     const raw = rawRow('slack message: the deploy moved to friday');
-    const plain = createMemory('an ordinary memory that should decay away');
+    const plain = createMemory7('an ordinary memory that should decay away');
     writeEntry(root, raw);
     writeEntry(root, plain);
 
@@ -66,8 +69,8 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
   it('audit deletes only the plain junk row and logs the caller and a reason', async () => {
     const root = newRoot();
     const raw = rawRow('yes!');
-    const pinned = createMemory('ok ok', { pinned: true });
-    const plain = createMemory('nope');
+    const pinned = createMemory7('ok ok', { pinned: true });
+    const plain = createMemory7('nope');
     for (const e of [raw, pinned, plain]) writeEntry(root, e);
 
     const result = await sleep(ctxFor(root), { noShare: true });
@@ -89,7 +92,7 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
 
   it('dedup keeps a pinned duplicate', () => {
     const root = newRoot();
-    const keeper = createMemory(CACHE_FACT);
+    const keeper = createMemory7(CACHE_FACT);
     const pinnedCopy = { ...createMemory(CACHE_FACT, { pinned: true }), strength: 0.5 };
     writeEntry(root, keeper);
     writeEntry(root, pinnedCopy);
@@ -102,7 +105,7 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
 
   it('an automatic delete refuses a pinned or raw row; an explicit forget still deletes', () => {
     const root = newRoot();
-    const pinned = createMemory('ok ok', { pinned: true });
+    const pinned = createMemory7('ok ok', { pinned: true });
     const raw = rawRow('yes!');
     for (const e of [pinned, raw]) writeEntry(root, e);
 
@@ -114,7 +117,7 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
 
   it('the sleep audit keeps a row pinned after its snapshot was taken', async () => {
     const root = newRoot();
-    const pinned = createMemory('nope', { pinned: true });
+    const pinned = createMemory7('nope', { pinned: true });
     writeEntry(root, pinned);
     const staleIssue = { memoryId: pinned.id, content: 'nope', severity: 'error' as const, reason: 'too short' };
 
@@ -129,7 +132,7 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
 
   it('a dry run previews the dedup and audit deletes and deletes nothing', async () => {
     const root = newRoot();
-    const rows = [createMemory('nope'), createMemory(CACHE_FACT), { ...createMemory(CACHE_FACT), strength: 0.5 }];
+    const rows = [createMemory7('nope'), createMemory7(CACHE_FACT), { ...createMemory(CACHE_FACT), strength: 0.5 }];
     for (const e of rows) writeEntry(root, e);
 
     const result = await sleep(ctxFor(root), { dryRun: true, noShare: true });
@@ -158,9 +161,9 @@ describe('H10: the sleep audit and dedup respect raw and pinned rows', () => {
 describe('C1: a row changed while sleep awaits the LLM keeps the change', () => {
   it('a mid-sleep pin, forget and supersede all survive the batch flush', async () => {
     const root = newRoot();
-    const condemned = createMemory('a fact that decays below the threshold by day sixty');
-    const forgotten = createMemory('the staging cluster restarts every sunday at noon', { baseHalfLifeDays: 30 });
-    const replaced = createMemory('invoices are exported as csv files on the first monday', { baseHalfLifeDays: 30 });
+    const condemned = createMemory7('a fact that decays below the threshold by day sixty');
+    const forgotten = createMemory7('the staging cluster restarts every sunday at noon', { baseHalfLifeDays: 30 });
+    const replaced = createMemory7('invoices are exported as csv files on the first monday', { baseHalfLifeDays: 30 });
     for (const e of [condemned, forgotten, replaced]) writeEntry(root, e);
 
     let calls = 0;
@@ -189,7 +192,7 @@ describe('C1: a row changed while sleep awaits the LLM keeps the change', () => 
   it('facts linked to a new summary keep the link, so the next sleep pays for no duplicate or rebuild', async () => {
     const root = newRoot();
     const facts = ['alice moved the deploy to friday', 'alice owns the billing service', 'alice reviews every schema change']
-      .map((text) => createMemory(text, { layer: Layer.Semantic, dag_level: 1, tags: ['extracted', 'speaker:alice'] }));
+      .map((text) => createMemory7(text, { layer: Layer.Semantic, dag_level: 1, tags: ['extracted', 'speaker:alice'] }));
     for (const f of facts) writeEntry(root, f);
     const fetcher = summarizer('Alice moved the deploy to Friday, owns billing and reviews schema changes.');
 
@@ -205,11 +208,11 @@ describe('C1: a row changed while sleep awaits the LLM keeps the change', () => 
 
   it('a summary rebuilt during sleep keeps its new text', async () => {
     const root = newRoot();
-    const summary = createMemory('alice owns the billing service', {
+    const summary = createMemory7('alice owns the billing service', {
       layer: Layer.Semantic, dag_level: 2, tags: ['speaker:alice', 'dag-summary'],
     });
     writeEntry(root, summary);
-    writeEntry(root, createMemory('alice now also runs the friday deploy', {
+    writeEntry(root, createMemory7('alice now also runs the friday deploy', {
       layer: Layer.Semantic, dag_level: 1, dag_parent_id: summary.id, tags: ['extracted', 'speaker:alice'],
     }));
     const rebuilt = 'Alice owns the billing service and runs the Friday deploy.';
@@ -221,7 +224,7 @@ describe('C1: a row changed while sleep awaits the LLM keeps the change', () => 
 
   it('a row queued twice in one flush keeps its last version, even a field set back to its loaded value', () => {
     const root = newRoot();
-    writeEntry(root, createMemory('the deploy runs on friday'));
+    writeEntry(root, createMemory7('the deploy runs on friday'));
     const [loaded] = loadAllEntries(root);
     const snapshot = new Map([[loaded!.id, structuredClone(loaded!)]]);
 

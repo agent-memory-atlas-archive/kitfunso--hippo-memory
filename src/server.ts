@@ -51,6 +51,7 @@ import {
   getContext,
   sleep,
   adminActor,
+  recordTokens,
   type Context,
   type RecallOpts,
   type AssembleOpts,
@@ -215,6 +216,8 @@ const VALID_AUDIT_OPS: ReadonlySet<AuditOp> = new Set<AuditOp>([
   'reject_refusal',        // AT1 — emitted when the rejection guard refuses a write; lockstep
   'unreject_value',        // AT1 — emitted by `hippo unreject`; lockstep
   'conflict_resolve',      // AT1 — emitted by resolveConflict on every resolution path; lockstep
+  'half_life_migrate',     // Decay default change — emitted by migrateDefaultHalfLife; lockstep with AuditOp union
+  'dormant_restore',       // Dormant memories — emitted by api.restoreDormant; lockstep with AuditOp union + cli.ts VALID_AUDIT_OPS
 ]);
 
 // Cap on GET /v1/audit?limit=. Matches docs/api.md (when written) and is large
@@ -447,6 +450,9 @@ function mapApiError<E>(err: E) {
   }
   if (/already superseded/.test(lower)) {
     return { status: 409, message };
+  }
+  if (/requires admin role/.test(lower)) {
+    return { status: 403, message };
   }
   return { status: 400, message };
 }
@@ -979,6 +985,7 @@ async function handleRequest(
     if (includeContinuity) {
       res.setHeader('Cache-Control', 'no-store');
     }
+    recordTokens(ctx, 'http_recall', { items: result.results.length, tokens: result.tokens + (result.continuityTokens ?? 0), sessionId: sessionId ?? null });
     sendJson(res, 200, result);
     return;
   }
@@ -1017,6 +1024,7 @@ async function handleRequest(
     if (summarizeOlder !== undefined) assembleExtra.summarizeOlder = summarizeOlder;
     if (scope !== undefined) assembleExtra.scope = scope;
     const result = assemble(ctx, assembleMatch.id!, assembleExtra);
+    recordTokens(ctx, 'http_assemble', { items: result.items.length, tokens: result.tokens, sessionId: assembleMatch.id! });
     sendJson(res, 200, result);
     return;
   }
@@ -1220,6 +1228,7 @@ async function handleRequest(
       crossProject,
       currentProject: resolveProjectIdentity(dirname(resolve(opts.hippoRoot))).name,
     });
+    recordTokens(ctx, 'http_context', { items: result.entries.length, tokens: result.tokens });
     sendJson(res, 200, result);
     return;
   }
@@ -3232,6 +3241,8 @@ async function handleRequest(
         tenantId: ctx.tenantId,
         // v1.12.0: McpContext.actor stays string; extract subject at the boundary.
         actor: ctx.actor.subject,
+        // The caller's real role: MCP tools must not run a member key as admin.
+        role: ctx.actor.role,
         clientKey: buildMcpClientKey(req),
       });
     } catch (err) {

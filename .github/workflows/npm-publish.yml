@@ -1,0 +1,44 @@
+name: Publish to npm
+
+# Publishes hippo-memory from CI with npm provenance: a signed record of the
+# commit and workflow that built the package, shown on npmjs.com and checked
+# by `npm audit signatures`. Trigger: push a v*.*.* tag cut from master.
+# Python has its own tag scheme (python-v*.*.*) in pypi-publish.yml.
+#
+# One-time setup (npmjs.com, package settings > Trusted publishing): add a
+# GitHub Actions publisher for kitfunso/hippo-memory with workflow file
+# npm-publish.yml. No NPM_TOKEN secret is needed after that.
+# docs/release-policy.md covers tags and the `stable` channel.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write   # OIDC token for npm trusted publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: Tag matches package.json
+        run: |
+          want="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json ($want)"; exit 1
+          fi
+      # prepublishOnly runs the full release gate: manifest versions, changelog,
+      # build:all, the openclaw smoke install and the test suite.
+      - run: npm publish --provenance --access public

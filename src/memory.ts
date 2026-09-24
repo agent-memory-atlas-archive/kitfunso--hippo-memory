@@ -476,7 +476,15 @@ export function resolveConfidence(entry: MemoryEntry, now: Date = evalNow()): Co
   return isAgedOut(entry, now) ? 'stale' : entry.confidence;
 }
 
-export const DEFAULT_HALF_LIFE_DAYS = 7;
+/**
+ * Base half-life for a new memory, in days, before `deriveHalfLife`'s
+ * write-time multipliers. 365 since 1.46.0: the pre-registered E1 decision
+ * (docs/evals/2026-09-24-decay-default-result.md and prereg-2) found 7 days
+ * lost the current fact far more often (29% vs 75% in the top five), and
+ * 730 days and decay off tied with 365. `hippo sleep` moves memories still
+ * on an older base (src/half-life-migration.ts).
+ */
+export const DEFAULT_HALF_LIFE_DAYS = 365;
 
 // Pinned means keep; raw rows leave only through archiveRawMemory. The SQL twin guards the DELETE itself.
 export const AUTO_DELETABLE_SQL = "pinned = 0 AND kind != 'raw'";

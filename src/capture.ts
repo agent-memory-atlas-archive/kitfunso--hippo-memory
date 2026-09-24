@@ -623,6 +623,31 @@ function errorMessage(cause: unknown): string {
  *
  * Exported for tests.
  */
+
+/** Leading markers of the command lines Claude Code writes with type 'user'. */
+const CLAUDE_CODE_COMMAND_PREFIXES = ['<local-command-', '<command-name>', '<command-message>', '<command-args>'];
+
+/**
+ * Claude Code writes several lines with `type: 'user'` that the human never
+ * typed: meta caveats (`isMeta`), sub-agent turns (`isSidechain`), the
+ * summary it writes after compacting (`isCompactSummary`), and slash-command
+ * wrappers and their output (`<command-name>`, `<local-command-stdout>`).
+ * Mining them stored Claude Code's own boilerplate as a memory.
+ */
+/** The transcript-line flags isNonHumanUserLine reads; any may be absent. */
+interface TranscriptLineFlags {
+  type?: unknown;
+  isMeta?: unknown;
+  isSidechain?: unknown;
+  isCompactSummary?: unknown;
+}
+
+function isNonHumanUserLine(entry: TranscriptLineFlags, content: string): boolean {
+  if (entry.isMeta === true || entry.isSidechain === true || entry.isCompactSummary === true) return true;
+  const head = content.trimStart();
+  return CLAUDE_CODE_COMMAND_PREFIXES.some((p) => head.startsWith(p));
+}
+
 export function summariseTranscript(jsonl: string): string {
   const lines = jsonl.split('\n').filter((l) => l.trim());
   const userMessages: string[] = [];
@@ -643,8 +668,9 @@ export function summariseTranscript(jsonl: string): string {
       const content = 'content' in message ? message.content : undefined;
 
       if (entry.type === 'user') {
-        // Plain text user messages only (skip tool_result arrays)
-        if (isStringValue(content) && content.trim()) {
+        // Plain text user messages only (skip tool_result arrays), and only
+        // ones the human wrote (see isNonHumanUserLine).
+        if (isStringValue(content) && content.trim() && !isNonHumanUserLine(entry, content)) {
           userMessages.push(content.trim());
         }
       } else if (Array.isArray(content)) {
@@ -1125,7 +1151,7 @@ function lastPlainUserMessage(jsonl: string): string {
     const message = 'message' in entry && isObjectLike(entry.message) ? entry.message : undefined;
     if (!message) continue;
     const content = 'content' in message ? message.content : undefined;
-    if (isStringValue(content) && content.trim()) return content.trim();
+    if (isStringValue(content) && content.trim() && !isNonHumanUserLine(entry, content)) return content.trim();
   }
   return '';
 }
@@ -1201,12 +1227,41 @@ function isReadableFile(filePath: string): boolean {
   }
 }
 
+/** What one pre-compact run saved, reported to the user after compaction. */
+export interface PreCompactReport {
+  snapshotSaved: boolean;
+  captured: number;
+  /** Claude Code session the run belonged to, when the payload named one. */
+  sessionId: string | null;
+}
+
+/**
+ * The line shown to the user after compaction, or null when nothing was
+ * saved. Without it the only sign was Claude Code's generic
+ * "PreCompact [...] completed successfully".
+ */
+export function preCompactMessage(report: Pick<PreCompactReport, 'snapshotSaved' | 'captured'>): string | null {
+  if (!report.snapshotSaved && report.captured === 0) return null;
+  const parts: string[] = [];
+  if (report.snapshotSaved) parts.push('your task snapshot');
+  if (report.captured > 0) parts.push(`${report.captured} new memor${report.captured === 1 ? 'y' : 'ies'}`);
+  return `Hippo saved ${parts.join(' and ')} before compacting.${report.snapshotSaved ? ' The snapshot is restored into the new context.' : ''}`;
+}
+
+/**
+ * Where pre-compact leaves its report for `hippo post-compact`: next to the
+ * pre-compact log, so both hooks find it from the same `--log-file`.
+ */
+export function preCompactReportPath(logFile: string): string {
+  return path.join(path.dirname(logFile), 'pre-compact-last.json');
+}
+
 /**
  * Runs the PreCompact producer. Returns any `embedMemory` promises kicked
  * off along the way (empty on every skip path) so `cmdPreCompact` can await
  * them, bounded, before it exits (X6).
  */
-function runPreCompact(hippoRoot: string, stdinText: string | undefined, stdinTimedOut: boolean, logFile: string): Promise<unknown>[] {
+function runPreCompact(hippoRoot: string, stdinText: string | undefined, stdinTimedOut: boolean, logFile: string, report: PreCompactReport): Promise<unknown>[] {
   // X3: the PreCompact hook fires in every Claude Code project, including
   // ones that never ran `hippo init`, so gate before any store-opening call
   // (saveActiveTaskSnapshot etc. call initStore, which would create one).
@@ -1249,6 +1304,7 @@ function runPreCompact(hippoRoot: string, stdinText: string | undefined, stdinTi
       return [];
     }
     if ('session_id' in payload && isStringValue(payload.session_id)) sessionId = payload.session_id;
+    report.sessionId = sessionId;
     payloadTranscriptPath = payload.transcript_path;
   }
 
@@ -1390,6 +1446,7 @@ function runPreCompact(hippoRoot: string, stdinText: string | undefined, stdinTi
         session_id: sessionId,
       });
       appendPreCompactLog(logFile, 'snapshot saved');
+      report.snapshotSaved = true;
     } catch (err) {
       appendPreCompactLog(logFile, `snapshot save failed: ${errorMessage(err)}`);
     }
@@ -1399,6 +1456,7 @@ function runPreCompact(hippoRoot: string, stdinText: string | undefined, stdinTi
   // the next SessionEnd capture (existing dedup absorbs the overlap).
   try {
     const { captured, skipped, rejected, embeds } = writeExtractedItems(hippoRoot, tenantId, extracted);
+    report.captured = captured;
     appendPreCompactLog(
       logFile,
       `capture: ${captured} items captured, ${skipped} skipped` +
@@ -1433,8 +1491,9 @@ const EMBED_SETTLE_TIMEOUT_MS = 3000;
 export async function cmdPreCompact(hippoRoot: string, options: PreCompactOptions): Promise<void> {
   const logFile = options.logFile ?? defaultPreCompactLogPath();
   let embeds: Promise<unknown>[] = [];
+  const report: PreCompactReport = { snapshotSaved: false, captured: 0, sessionId: null };
   try {
-    embeds = runPreCompact(hippoRoot, options.stdinText, options.stdinTimedOut ?? false, logFile);
+    embeds = runPreCompact(hippoRoot, options.stdinText, options.stdinTimedOut ?? false, logFile, report);
   } catch (err) {
     appendPreCompactLog(logFile, `pre-compact failed: ${errorMessage(err)}`);
   }
@@ -1451,5 +1510,57 @@ export async function cmdPreCompact(hippoRoot: string, options: PreCompactOption
     appendPreCompactLog(logFile, outcome === 'settled' ? 'embeddings settled' : 'embeddings timeout');
   }
 
+  // Nothing goes to stdout: Claude Code passes PreCompact stdout to the
+  // summarising model as extra instructions. The PostCompact hook
+  // (`hippo post-compact`) tells the user instead, from this report.
+  if (report.snapshotSaved || report.captured > 0) {
+    try {
+      fs.writeFileSync(preCompactReportPath(logFile), JSON.stringify({ ...report, at: new Date().toISOString() }));
+    } catch {
+      // Losing the message must never fail the hook.
+    }
+  }
+
   process.exit(0);
+}
+
+/** How old a pre-compact report may be and still describe this compaction. */
+const POST_COMPACT_REPORT_MAX_AGE_MS = 10 * 60_000;
+
+/**
+ * The message for the PostCompact hook, from the report pre-compact left,
+ * or null when there is nothing to say. Consumes the report, so the message
+ * shows once. A report from another session, or an old one, is dropped.
+ * Never throws.
+ */
+export function postCompactMessage(stdinText: string | undefined, logFile: string = defaultPreCompactLogPath(), now: Date = new Date()): string | null {
+  const reportFile = preCompactReportPath(logFile);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(reportFile, 'utf8');
+    fs.rmSync(reportFile, { force: true });
+  } catch {
+    return null;
+  }
+  try {
+    const report: unknown = JSON.parse(raw);
+    if (!isObjectLike(report)) return null;
+    const at = 'at' in report && isStringValue(report.at) ? Date.parse(report.at) : Number.NaN;
+    if (Number.isNaN(at) || now.getTime() - at > POST_COMPACT_REPORT_MAX_AGE_MS) return null;
+    let payloadSession: string | null = null;
+    try {
+      const payload: unknown = JSON.parse((stdinText ?? '').trim() || 'null');
+      if (isObjectLike(payload) && 'session_id' in payload && isStringValue(payload.session_id)) payloadSession = payload.session_id;
+    } catch {
+      // No usable payload: fall back to the age check alone.
+    }
+    const reportSession = 'sessionId' in report && isStringValue(report.sessionId) ? report.sessionId : null;
+    if (payloadSession !== null && reportSession !== null && payloadSession !== reportSession) return null;
+    return preCompactMessage({
+      snapshotSaved: 'snapshotSaved' in report && report.snapshotSaved === true,
+      captured: 'captured' in report && Number.isInteger(report.captured) ? Number(report.captured) : 0,
+    });
+  } catch {
+    return null;
+  }
 }

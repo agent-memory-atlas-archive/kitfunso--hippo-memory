@@ -44,6 +44,15 @@ import {
 } from './store.js';
 import { RejectedValueError, type RejectedValueRow } from './rejection.js';
 import { rejectValue, unrejectValue, listRejectionsForTenant } from './reject-flow.js';
+import {
+  listDormantRows,
+  readDormantSnapshot,
+  deleteDormantRow,
+  hasDormantRow,
+  type DormantMemory,
+  type ListDormantOpts,
+} from './dormant.js';
+import { recordTokenUse, summarizeTokenUse, type TokenSummary, type TokenSurface } from './token-ledger.js';
 import { formatHandoffEvidenceLine, type SessionHandoff } from './handoff.js';
 import {
   createMemory,
@@ -177,9 +186,10 @@ export class ForbiddenError extends Error {
 // back-compat (`api.isPrivateScope`, test imports). NOTE: the import statement
 // is required — a bare `export { x } from` re-export does not bind the local
 // names this module's ~9 call sites use.
-import { isPrivateScope, passesScopeFilterForRecall } from './recall-scope.js';
+import { isPrivateScope, passesScopeFilterForRecall, assertScopeRequestAllowed } from './recall-scope.js';
 export { isPrivateScope, passesScopeFilterForRecall };
-export { passesCliRecallScopeFilter } from './recall-scope.js';
+export { passesCliRecallScopeFilter, ScopeForbiddenError } from './recall-scope.js';
+export type { TokenSummary, TokenSurface, TokenSurfaceSummary } from './token-ledger.js';
 
 // v39: classifyOriginProject lives in project-identity.ts (leaf) so
 // shared.ts can use it without an api.ts import cycle. Re-exported here for
@@ -704,12 +714,15 @@ export function buildSuppressionSummary(counts: {
  * `tests/api-recall-no-side-effects.test.ts`.
  */
 export function recall(ctx: Context, opts: RecallOpts): RecallResult {
+  // A member key may not unlock a private or quarantined scope by naming it.
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
   const windowSize = recallWindowSize(opts);
   return recallFrom(ctx, opts, windowSize, loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope, 'exact', false));
 }
 
 /** Mode-aware recall that strengthens each returned row; never writes last_retrieval_ids (v1.11.5 lock). */
 export async function retrieve(ctx: Context, opts: RecallOpts): Promise<RecallResult> {
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
   const windowSize = recallWindowSize(opts);
   let candidates = loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope, 'exact', false);
   if (opts.mode === 'hybrid' || opts.mode === 'physics') {
@@ -1014,7 +1027,7 @@ function recallFrom(ctx: Context, opts: RecallOpts, windowSize: number, all: Mem
   freshTailAddedCount = freshRanked.length;
 
   rankedOut = [...freshRanked, ...baseRanked, ...summaryRanked];
-  tokensOut = rankedOut.reduce((acc, r) => acc + Math.ceil(r.content.length / 4), 0);
+  tokensOut = rankedOut.reduce((acc, r) => acc + estimateTokens(r.content), 0);
   totalOut = entries.length;
 
   // TODO(a1-task-4): emit via the shared audit hook in store.ts so we don't
@@ -1103,7 +1116,7 @@ function recallFrom(ctx: Context, opts: RecallOpts, windowSize: number, all: Mem
       recentSessionEvents: filteredEvents,
     };
     const tokenize = (s?: string | null): number =>
-      s ? Math.ceil(s.length / 4) : 0;
+      s ? estimateTokens(s) : 0;
     continuityTokens =
       tokenize(filteredSnapshot?.task) +
       tokenize(filteredSnapshot?.summary) +
@@ -1345,6 +1358,7 @@ export function assemble(
   sessionId: string,
   opts: AssembleOpts = {},
 ): AssembleResult {
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
   const budget = opts.budget ?? 4000;
   const freshTailCount = opts.freshTailCount ?? 10;
   const summarizeOlder = opts.summarizeOlder ?? true;
@@ -1451,7 +1465,7 @@ export function assemble(
   tailItems.sort((a, b) => cmpIso(a.createdAt, b.createdAt));
   let items: AssembledContextItem[] = [...olderItems, ...tailItems];
 
-  let tokens = items.reduce((acc, it) => acc + Math.ceil(it.content.length / 4), 0);
+  let tokens = items.reduce((acc, it) => acc + estimateTokens(it.content), 0);
   let evicted = 0;
   while (tokens > budget && items.length > 0) {
     let worstIdx = -1;
@@ -1464,7 +1478,7 @@ export function assemble(
       }
     }
     if (worstIdx === -1) break;
-    const cost = Math.ceil(items[worstIdx].content.length / 4);
+    const cost = estimateTokens(items[worstIdx].content);
     items = items.filter((_, i) => i !== worstIdx);
     tokens -= cost;
     evicted++;
@@ -1602,7 +1616,7 @@ export function drillDown(
     const out: MemoryEntry[] = [];
     let used = 0;
     for (const c of collected) {
-      const t = Math.ceil(c.content.length / 4);
+      const t = estimateTokens(c.content);
       if (out.length > 0 && used + t > opts.budget) {
         truncated = true;
         break;
@@ -2917,9 +2931,187 @@ export interface SleepOpts {
   __phases?: Partial<SleepPhases>;
 }
 
+/**
+ * Record memory text handed to an agent in the token ledger (ROADMAP TE0).
+ * Best-effort: never throws, because a ledger failure must not fail the
+ * recall or context call that produced the text.
+ */
+export function recordTokens(
+  ctx: Context,
+  surface: TokenSurface,
+  use: { items: number; tokens: number; sessionId?: string | null },
+): void {
+  try {
+    const db = openHippoDb(ctx.hippoRoot);
+    try {
+      recordTokenUse(db, {
+        tenantId: ctx.tenantId,
+        sessionId: use.sessionId ?? null,
+        surface,
+        event: 'inject',
+        items: use.items,
+        tokens: use.tokens,
+      });
+    } finally {
+      closeHippoDb(db);
+    }
+  } catch {
+    // Ledger is best-effort.
+  }
+}
+
+/**
+ * Token ledger totals for the tenant over the last `days` days (default 30):
+ * tokens sent per surface, blocks skipped as unchanged and the tokens that
+ * saved, and mean tokens per session.
+ */
+export function tokenSummary(ctx: Context, opts: { days?: number } = {}): TokenSummary {
+  const days = opts.days !== undefined && Number.isFinite(opts.days) && opts.days > 0 ? opts.days : 30;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    return summarizeTokenUse(db, ctx.tenantId, since);
+  } finally {
+    closeHippoDb(db);
+  }
+}
+
+/**
+ * A tenant's dormant memories (src/dormant.ts): what sleep moved out of
+ * active memory instead of deleting, when `dormant.enabled` is on. Newest
+ * first; `opts.query` keeps rows containing every term (case-insensitive).
+ */
+export function listDormant(ctx: Context, opts: ListDormantOpts = {}): DormantMemory[] {
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    return listDormantRows(db, ctx.tenantId, opts);
+  } finally {
+    closeHippoDb(db);
+  }
+}
+
+/**
+ * Bring a dormant memory back into active memory. It returns as if just
+ * recalled: `last_retrieved` is now, so it gets a full half-life before it
+ * can fade again. Every other field is the snapshot taken when it went
+ * dormant.
+ *
+ * Throws when the tenant has no dormant memory with that id (another
+ * tenant's id reads the same way), when a live memory already holds the id,
+ * and RejectedValueError when the value has been rejected since. On any
+ * throw the dormant copy stays where it is.
+ */
+export function restoreDormant(ctx: Context, id: string): MemoryEntry {
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    let restored: MemoryEntry;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const dormant = readDormantSnapshot(db, ctx.tenantId, id);
+      if (!dormant) {
+        throw new Error(`dormant memory not found: ${id}`);
+      }
+      if (db.prepare(`SELECT 1 FROM memories WHERE id = ?`).get(id) !== undefined) {
+        throw new Error(`memory ${id} is already active; forget it before restoring its dormant copy`);
+      }
+      const now = new Date();
+      // Dormant rows are long-lived, so a snapshot can predate a field added
+      // later: createMemory supplies a default for anything it lacks, then
+      // the snapshot overrides every field it does carry, content included.
+      // (The placeholder only satisfies createMemory's minimum length, so a
+      // legacy row shorter than 3 chars can still be restored.)
+      const revived: MemoryEntry = {
+        ...createMemory('dormant snapshot defaults'),
+        ...dormant.entry,
+        last_retrieved: now.toISOString(),
+      };
+      restored = stampOriginProject(ctx.hippoRoot, { ...revived, strength: calculateStrength(revived, now) });
+      writeEntryDbOnly(db, restored, { actor: ctx.actor.subject });
+      deleteDormantRow(db, ctx.tenantId, id);
+      // A restore is a labelled "forgot it, then needed it" event: the
+      // signal a learned lifecycle (ROADMAP LC3) trains on. Same transaction
+      // as the restore, so the label exists exactly when the restore does.
+      appendAuditEvent(db, {
+        tenantId: ctx.tenantId,
+        actor: ctx.actor.subject,
+        op: 'dormant_restore',
+        targetId: id,
+        metadata: {
+          reason: dormant.reason,
+          strengthAtDormancy: dormant.strength,
+          dormantAt: dormant.dormantAt,
+          daysDormant: Math.max(0, (now.getTime() - Date.parse(dormant.dormantAt)) / (24 * 60 * 60 * 1000)),
+        },
+      });
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+      if (err instanceof RejectedValueError) {
+        auditRejectionRefusal(db, err, ctx.actor.subject);
+      }
+      throw err;
+    }
+    writeEntryMirrors(ctx.hippoRoot, db, restored);
+    return restored;
+  } finally {
+    closeHippoDb(db);
+  }
+}
+
+/**
+ * Permanently delete a dormant memory: the explicit "forget it for good"
+ * that dormant storage leaves to the user. Throws when the tenant has no
+ * dormant memory with that id.
+ */
+export function forgetDormant(ctx: Context, id: string): void {
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    if (!deleteDormantRow(db, ctx.tenantId, id)) {
+      throw new Error(`dormant memory not found: ${id}`);
+    }
+    try {
+      appendAuditEvent(db, {
+        tenantId: ctx.tenantId,
+        actor: ctx.actor.subject,
+        op: 'forget',
+        targetId: id,
+        metadata: { dormant: true },
+      });
+    } catch {
+      // Best-effort, like every other forget audit row: the delete stands.
+    }
+  } finally {
+    closeHippoDb(db);
+  }
+  // Counted like every other permanent removal (forget, archiveRaw).
+  updateStats(ctx.hippoRoot, { forgotten: 1 });
+}
+
+/** Whether the tenant holds a dormant memory with this id (for "not found" hints). */
+export function isDormant(ctx: Context, id: string): boolean {
+  const db = openHippoDb(ctx.hippoRoot);
+  try {
+    return hasDormantRow(db, ctx.tenantId, id);
+  } finally {
+    closeHippoDb(db);
+  }
+}
+
 export interface SleepResult {
   active: number;
   removed: number;
+  /**
+   * Faded memories the decay pass moved to the dormant store instead of
+   * deleting (config `dormant.enabled`). Absent when 0. Per-invocation
+   * activity counter, same class as `removed`.
+   */
+  dormant?: number;
+  /**
+   * Dormant memories deleted for good this sleep because they outlived
+   * `dormant.retentionDays`. Absent when 0. Same per-invocation class as
+   * `removed`.
+   */
+  dormantExpired?: number;
   mergedEpisodic: number;
   newSemantic: number;
   dryRun: boolean;
@@ -3069,6 +3261,14 @@ export async function sleep(
       dryRun,
       details: consolidateResult.details,
     };
+    // Set only when non-zero, so a store without dormant memories gets a
+    // byte-identical result (HTTP /v1/sleep, the CLI render snapshot).
+    if (consolidateResult.dormant > 0) {
+      result.dormant = consolidateResult.dormant;
+    }
+    if (consolidateResult.dormantExpired > 0) {
+      result.dormantExpired = consolidateResult.dormantExpired;
+    }
 
     // Phase 2: Dedup (post-consolidate near-duplicate cleanup).
     const dedupResult = phases.deduplicateStore(ctx.hippoRoot, { dryRun, actor: ctx.actor.subject });

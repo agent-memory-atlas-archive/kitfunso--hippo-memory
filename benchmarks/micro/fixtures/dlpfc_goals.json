@@ -1,27 +1,48 @@
 {
   "name": "dlpfc-goals",
   "mechanic": "dlpfc-goals",
-  "description": "dlPFC goal-conditioned recall MVP (RESEARCH.md §PFC.dlPFC). When --goal <tag> is set, memories whose tags array contains the goal tag get a 1.5x score boost and results are re-sorted. Five memories share the same topic. Three are untagged 'plan note' entries with the same query-aligned phrasing as the tagged ones (so baseline BM25 ranks them similarly). Two are tagged with `auth-rewrite`. Without --goal, BM25 ties are broken by recency / index order and at least one untagged 'plan note' enters top-3, blocking the tagged pair from filling top-3 alone — top-3 is dominated by 'plan note'. With --goal auth-rewrite, the 1.5x boost lifts both tagged entries above all untagged, surfacing both markers.",
+  "description": "dlPFC goal-conditioned recall MVP (RESEARCH.md §PFC.dlPFC). When --goal <tag> is set, memories whose tags array contains the goal tag get a 1.5x score boost and results are re-sorted. Three untagged 'plan note' entries lead with the query and differ from each other; two memories tagged `auth-rewrite` mention only 'migration'. Without --goal the three plan notes fill top-3. With --goal auth-rewrite the 1.5x boost lifts both tagged entries above every plan note. Recalibrated 2026-09-24 for classic hybrid ranking (physics off by default): the old three near-identical plan notes were diversified out of top-3. Measured on the default path: weakest plan note 1.05 vs strongest tagged 0.93 without --goal; tagged 1.39 vs strongest plan note 1.12 with it.",
   "remembers": [
-    "auth migration plan note one for the auth migration",
-    "auth migration plan note two for the auth migration",
-    "auth migration plan note three for the auth migration",
-    {"text": "marker-tagged-A: auth migration step for the auth migration", "tags": ["auth-rewrite"]},
-    {"text": "marker-tagged-B: auth migration step for the auth migration", "tags": ["auth-rewrite"]}
+    "auth migration plan note: rotate the signing keys before the auth migration",
+    "auth migration plan note: dry-run the auth migration on staging first",
+    "auth migration plan note: email SSO customers a week ahead of the auth migration",
+    {
+      "text": "marker-tagged-A: a step for the migration",
+      "tags": [
+        "auth-rewrite"
+      ]
+    },
+    {
+      "text": "marker-tagged-B: a step for the migration",
+      "tags": [
+        "auth-rewrite"
+      ]
+    }
   ],
   "queries": [
     {
       "q": "auth migration",
-      "must_contain_any": ["plan note"],
-      "must_not_contain_any": ["marker-tagged-A", "marker-tagged-B"],
+      "must_contain_any": [
+        "plan note"
+      ],
+      "must_not_contain_any": [
+        "marker-tagged-A",
+        "marker-tagged-B"
+      ],
       "top_k": 3,
       "cli_args": []
     },
     {
       "q": "auth migration",
-      "must_contain_any": ["marker-tagged-A", "marker-tagged-B"],
+      "must_contain_any": [
+        "marker-tagged-A",
+        "marker-tagged-B"
+      ],
       "top_k": 3,
-      "cli_args": ["--goal", "auth-rewrite"]
+      "cli_args": [
+        "--goal",
+        "auth-rewrite"
+      ]
     }
   ]
 }

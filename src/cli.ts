@@ -19,6 +19,9 @@
  *   hippo reject <id>|--value "<text>" --reason "<why>"
  *   hippo rejections
  *   hippo unreject <digest-prefix>
+ *   hippo dormant [<query>] [--limit <n>] [--json] | restore <id> | forget <id>
+ *   hippo tokens [--days <n>] [--json] [--global]
+ *   hippo doctor [--json]
  *   hippo inspect <id>
  *   hippo embed [--status]
  *   hippo watch "<command>"
@@ -137,6 +140,10 @@ import { loadPhysicsState, resetAllPhysicsState } from './physics-state.js';
 import { computeSystemEnergy, vecNorm } from './physics.js';
 import { loadConfig } from './config.js';
 import { openHippoDb, closeHippoDb } from './db.js';
+import { runDoctor, formatDoctor } from './doctor.js';
+import { captureToolFailure } from './capture-error.js';
+import type { JsonValue } from './working-memory.js';
+import { blockHash, hookPayloadSessionId, lastSentState, recordTokenUse, shouldSkipUnchanged, type TokenSurface } from './token-ledger.js';
 import { getActiveGoalsWithDb, MAX_FINAL_MULTIPLIER, pushGoal, getActiveGoals, completeGoal, suspendGoal, resumeGoal, applyGoalStackBoost } from './goals.js';
 import type { RetrievalPolicy, PolicyType, Goal, GoalRow } from './goals.js';
 import { rowToGoal } from './goals.js';
@@ -180,7 +187,7 @@ import {
   importVault,
   ImportOptions,
 } from './importers.js';
-import { cmdCapture, CaptureOptions, cmdPreCompact, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage } from './capture.js';
+import { cmdCapture, CaptureOptions, cmdPreCompact, postCompactMessage, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage } from './capture.js';
 import { readStdinBounded } from './stdin.js';
 import {
   auditMemories,
@@ -715,17 +722,18 @@ function autoInstallHooks(quiet: boolean): void {
     // Skip if we already installed a hook into this file
     if (installed.has(targetPath)) continue;
 
-    // Skip if hook already present
-    if (fs.existsSync(targetPath)) {
-      const content = fs.readFileSync(targetPath, 'utf8');
-      if (content.includes(HOOK_MARKERS.start)) continue;
-    }
+    // An instruction block already present is not rewritten, but the JSON
+    // hooks and plugins below still run: they are idempotent, and skipping
+    // them meant a store set up by an older hippo never got hooks added in
+    // later releases (PreCompact, PostToolUseFailure) on a re-run of init.
+    const blockPresent = fs.existsSync(targetPath)
+      && fs.readFileSync(targetPath, 'utf8').includes(HOOK_MARKERS.start);
 
     // Only patch the agent-instructions file if it already exists.
     // Never create a new CLAUDE.md / AGENTS.md / etc. just because a sibling
     // marker file (.claude/settings.json, .codex, etc.) was detected — that
     // pollutes dirs the user didn't intend to configure.
-    if (fs.existsSync(targetPath)) {
+    if (!blockPresent && fs.existsSync(targetPath)) {
       const block = `${HOOK_MARKERS.start}\n${hookDef.content}\n${HOOK_MARKERS.end}`;
       const existing = fs.readFileSync(targetPath, 'utf8');
       const sep = existing.endsWith('\n') ? '\n' : '\n\n';
@@ -737,7 +745,7 @@ function autoInstallHooks(quiet: boolean): void {
     // The Codex session-capture wrapper swaps the codex launcher binary, so
     // init never installs it silently — it points at the explicit opt-in
     // command instead (issue #133).
-    if (hook === 'codex' && !isCodexWrapperInstalled()) {
+    if (hook === 'codex' && !blockPresent && !isCodexWrapperInstalled()) {
       console.log('   Codex detected. To capture Codex sessions: hippo hook install codex');
     }
 
@@ -760,6 +768,12 @@ function autoInstallHooks(quiet: boolean): void {
       }
       if (result.installedCompactResume) {
         console.log(`   Auto-installed hippo compact-resume SessionStart(compact) hook in ${hook} settings`);
+      }
+      if (result.installedPostCompact) {
+        console.log(`   Auto-installed hippo post-compact PostCompact hook in ${hook} settings`);
+      }
+      if (result.installedCaptureError) {
+        console.log(`   Auto-installed hippo capture-error PostToolUseFailure hook in ${hook} settings`);
       }
       if (result.migratedFromStop) {
         console.log(`   Migrated legacy Stop hook → SessionEnd (no longer runs every turn)`);
@@ -1884,7 +1898,7 @@ async function cmdRecall(
       rawHandoff && passesScopeFilterForRecall(rowScope(rawHandoff), effectiveScope) ? rawHandoff : null;
     recentSessionEvents = rawEvents.filter((e) => passesScopeFilterForRecall(rowScope(e), effectiveScope));
     const tokenize = (s?: string | null): number =>
-      s ? Math.ceil(s.length / 4) : 0;
+      s ? estimateTokens(s) : 0;
     continuityTokens =
       tokenize(activeSnapshot?.task) +
       tokenize(activeSnapshot?.summary) +
@@ -1903,6 +1917,17 @@ async function cmdRecall(
     activeSnapshot !== null
     || sessionHandoff !== null
     || recentSessionEvents.length > 0;
+
+  // TE0 token ledger: the memory text this recall hands back (results plus
+  // any continuity block), recorded once per query.
+  withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+    tenantId,
+    sessionId: hostSessionId() ?? null,
+    surface: 'recall',
+    event: 'inject',
+    items: results.length,
+    tokens: results.reduce((acc, r) => acc + (r.tokens || 0), 0) + continuityTokens,
+  }));
 
   if (results.length === 0) {
     // LC1 F1 structural fix (docs/plans/2026-08-02-lc1-recall-trace-persistence.md):
@@ -3057,6 +3082,14 @@ export function renderSleepResult(result: api.SleepResult): void {
   console.log(`\nResults:`);
   console.log(`   Active memories:  ${result.active}`);
   console.log(`   Removed (decayed): ${result.removed}`);
+  // Only when dormant.enabled moved something, so every other render stays
+  // byte-identical (tests/cli-context-render-snapshot.test.ts).
+  if (result.dormant !== undefined && result.dormant > 0) {
+    console.log(`   Kept dormant:      ${result.dormant}  (hippo dormant to list)`);
+  }
+  if (result.dormantExpired !== undefined && result.dormantExpired > 0) {
+    console.log(`   Expired dormant:   ${result.dormantExpired}  (past dormant.retentionDays)`);
+  }
   console.log(`   Merged episodic:   ${result.mergedEpisodic}`);
   console.log(`   New semantic:      ${result.newSemantic}`);
 
@@ -3866,6 +3899,13 @@ function cmdForget(
       // The delete was refused by the append-only trigger — this is a raw
       // memory, not a missing one. Point the user at the archive path.
       console.error(rawForgetRefusal(id));
+    } else if (api.isDormant(ctx, id)) {
+      // Sleep moved it to the dormant store: it is not in active memory, so
+      // point at the command that owns it.
+      console.error(
+        `${id} is dormant, not in active memory. Delete it for good: hippo dormant forget ${id} ` +
+        `(or bring it back: hippo dormant restore ${id})`,
+      );
     } else {
       console.error(`Memory not found: ${id}`);
     }
@@ -4198,6 +4238,122 @@ function cmdUnreject(
   }
 
   console.log(`Unrejected [${outcome.digest.slice(0, 12)}...] (was: ${outcome.reason ?? 'none given'})`);
+}
+
+/**
+ * `hippo dormant [list] [<query>...] [--limit <n>] [--json] [--global]`,
+ * `hippo dormant restore <id>`, `hippo dormant forget <id>`.
+ * Dormant memories are what sleep keeps instead of deleting (on by default;
+ * `"dormant": { "enabled": false }` in .hippo/config.json deletes instead).
+ */
+function cmdDormant(
+  hippoRoot: string,
+  args: string[],
+  flags: Record<string, string | boolean | string[]>,
+): void {
+  const root = resolveAuthRoot(hippoRoot, flags);
+  const ctx: api.Context = {
+    hippoRoot: root,
+    tenantId: resolveTenantId({}),
+    actor: api.adminActor('cli'),
+  };
+  const sub = args[0];
+
+  if (sub === 'restore' || sub === 'forget') {
+    const id = (args[1] ?? '').trim();
+    if (!id) {
+      console.error(`Usage: hippo dormant ${sub} <id>`);
+      process.exit(1);
+    }
+    try {
+      if (sub === 'restore') {
+        api.restoreDormant(ctx, id);
+        console.log(`Restored ${id} to active memory.`);
+      } else {
+        api.forgetDormant(ctx, id);
+        console.log(`Forgot dormant memory ${id} permanently.`);
+      }
+    } catch (err) {
+      if (err instanceof RejectedValueError) {
+        console.error(`Cannot restore ${id}: its value was rejected (${err.reason ?? 'no reason given'}). Run \`hippo unreject\` first to allow it.`);
+      } else {
+        console.error(`Could not ${sub} ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      process.exit(1);
+    }
+    return;
+  }
+
+  const queryArgs = sub === 'list' ? args.slice(1) : args;
+  const limit = parseCountFlag(flags['limit']);
+  const rows = api.listDormant(ctx, {
+    query: queryArgs.join(' '),
+    limit: limit > 0 ? limit : undefined,
+  });
+
+  if (flags['json']) {
+    console.log(JSON.stringify({ dormant: rows }, null, 2));
+    return;
+  }
+  if (rows.length === 0) {
+    console.log(queryArgs.length > 0 ? 'No dormant memories match.' : 'No dormant memories.');
+    if (!loadConfig(root).dormant.enabled) {
+      console.log(`Sleep deletes faded memories. To keep them dormant instead, set "dormant": { "enabled": true } in ${path.join(root, 'config.json')}.`);
+    }
+    return;
+  }
+
+  console.log(`${rows.length} dormant memor${rows.length === 1 ? 'y' : 'ies'}${queryArgs.length > 0 ? ' matching' : ''} (newest first):\n`);
+  for (const row of rows) {
+    const preview = row.content.length > 100 ? `${row.content.slice(0, 100)}...` : row.content;
+    console.log(`--- ${row.id}`);
+    console.log(`    ${preview}`);
+    console.log(`    Dormant since ${row.dormantAt.slice(0, 10)} (${row.reason}, strength ${row.strength.toFixed(3)})${row.tags.length > 0 ? `  tags: ${row.tags.join(', ')}` : ''}`);
+    console.log('');
+  }
+  console.log('Bring one back: hippo dormant restore <id>   Delete for good: hippo dormant forget <id>');
+}
+
+/**
+ * `hippo tokens [--days <n>] [--json] [--global]`: the token ledger
+ * (ROADMAP TE0). Tokens of memory text handed to agents per surface, blocks
+ * the per-prompt hook skipped as unchanged (TE2) and the tokens that saved.
+ * Counts are estimates (characters / 4), the same estimate every budget uses.
+ */
+function cmdTokens(
+  hippoRoot: string,
+  flags: Record<string, string | boolean | string[]>,
+): void {
+  const root = resolveAuthRoot(hippoRoot, flags);
+  const ctx: api.Context = {
+    hippoRoot: root,
+    tenantId: resolveTenantId({}),
+    actor: api.adminActor('cli'),
+  };
+  const days = parseCountFlag(flags['days']);
+  const summary = api.tokenSummary(ctx, { days: days > 0 ? days : undefined });
+  if (flags['json']) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+  const windowDays = days > 0 ? days : 30;
+  if (summary.surfaces.length === 0) {
+    console.log(`No memory text recorded in the last ${windowDays} days.`);
+    return;
+  }
+  console.log(`Memory text handed to agents, last ${windowDays} days (estimated tokens)\n`);
+  console.log(`  ${'surface'.padEnd(14)}${'sent'.padStart(8)}${'tokens'.padStart(12)}${'skipped'.padStart(10)}${'saved'.padStart(12)}`);
+  for (const row of summary.surfaces) {
+    console.log(
+      `  ${row.surface.padEnd(14)}${String(row.injected).padStart(8)}${String(row.tokens).padStart(12)}`
+      + `${String(row.skipped).padStart(10)}${String(row.tokensAvoided).padStart(12)}`,
+    );
+  }
+  console.log('');
+  console.log(`  Total sent: ${summary.totalTokens} tokens. Saved by skipping unchanged blocks: ${summary.totalTokensAvoided}.`);
+  if (summary.meanTokensPerSession > 0) {
+    console.log(`  Mean per session (rows with a session id): ${summary.meanTokensPerSession} tokens.`);
+  }
 }
 
 function cmdSnapshot(
@@ -6635,35 +6791,60 @@ async function cmdContext(
       origin: r.origin ?? null,
       category: r.category ?? null,
     }));
-    console.log(JSON.stringify({
+    const jsonText = JSON.stringify({
       query: query || '*',
       activeSnapshot: result.activeSnapshot ?? null,
       sessionHandoff: result.sessionHandoff ?? null,
       recentSessionEvents: result.recentEvents ?? [],
       memories: output,
       tokens: result.tokens,
+    });
+    console.log(jsonText);
+    withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+      tenantId: ctx.tenantId, sessionId: currentSessionId, surface: pinnedOnly ? 'hook' : 'context',
+      event: 'inject', items: output.length, tokens: estimateTokens(jsonText),
     }));
   } else if (format === 'additional-context') {
     // Claude Code UserPromptSubmit hook JSON shape. Capture print* helpers'
     // output into a string buffer and wrap as `additionalContext`.
-    const lines: string[] = [];
-    const realLog = console.log;
-    console.log = (...parts: unknown[]) => { lines.push(parts.map(String).join(' ')); };
-    try {
+    const textBlock = captureConsole(() => {
       if (result.activeSnapshot) printActiveTaskSnapshot(result.activeSnapshot);
       if (result.sessionHandoff) printHandoff(result.sessionHandoff);
       if (result.recentEvents && result.recentEvents.length > 0) {
         printSessionEvents(result.recentEvents);
       }
       if (renderItems.length > 0) {
-        printContextMarkdown(renderItems, result.tokens, framing);
+        // TE1: no live strength percentage, so an unchanged set of memories
+        // renders byte-identically turn after turn.
+        printContextMarkdown(renderItems, result.tokens, framing, { showStrength: false });
       }
       printCrossProjectSection(crossEntries);
-    } finally {
-      console.log = realLog;
-    }
-    const textBlock = lines.join('\n');
+    });
     if (!textBlock.trim()) return;
+    const surface: TokenSurface = pinnedOnly ? 'hook' : 'context';
+    const hash = blockHash(textBlock);
+    const tokens = estimateTokens(textBlock);
+    // TE2: the per-prompt hook skips a block identical to the one this
+    // session already has, and resends it every refreshTurns skips. Only
+    // with a session id from the hook payload itself: an inherited env id
+    // (a manual run inside an agent's shell) must never suppress output.
+    if (pinnedOnly && payloadSessionId !== undefined) {
+      const injectCfg = loadConfig(hippoRoot).pinnedInject;
+      if (injectCfg.skipUnchanged !== false) {
+        const refreshTurns = Number.isFinite(injectCfg.refreshTurns) && injectCfg.refreshTurns >= 0
+          ? injectCfg.refreshTurns
+          : 10;
+        const last = withLedgerDb(hippoRoot, (db) =>
+          lastSentState(db, ctx.tenantId, payloadSessionId, surface));
+        if (shouldSkipUnchanged(last ?? null, hash, refreshTurns)) {
+          withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+            tenantId: ctx.tenantId, sessionId: payloadSessionId, surface, event: 'skip',
+            items: renderItems.length, tokens, hash,
+          }));
+          return;
+        }
+      }
+    }
     const payload = {
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
@@ -6671,25 +6852,106 @@ async function cmdContext(
       },
     };
     process.stdout.write(JSON.stringify(payload));
+    withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+      tenantId: ctx.tenantId, sessionId: currentSessionId, surface, event: 'inject',
+      items: renderItems.length, tokens, hash,
+    }));
   } else {
     // markdown (default)
-    if (result.activeSnapshot) {
-      printActiveTaskSnapshot(result.activeSnapshot);
-    }
-    if (result.sessionHandoff) {
-      printHandoff(result.sessionHandoff);
-    }
-    if (result.recentEvents && result.recentEvents.length > 0) {
-      printSessionEvents(result.recentEvents);
-    }
-    if (renderItems.length > 0) {
-      printContextMarkdown(renderItems, result.tokens, framing);
-    }
-    printCrossProjectSection(crossEntries);
+    const text = captureConsole(() => {
+      if (result.activeSnapshot) {
+        printActiveTaskSnapshot(result.activeSnapshot);
+      }
+      if (result.sessionHandoff) {
+        printHandoff(result.sessionHandoff);
+      }
+      if (result.recentEvents && result.recentEvents.length > 0) {
+        printSessionEvents(result.recentEvents);
+      }
+      if (renderItems.length > 0) {
+        printContextMarkdown(renderItems, result.tokens, framing);
+      }
+      printCrossProjectSection(crossEntries);
 
-    if (result.ambientState) {
-      console.log(`\n${renderAmbientSummary(result.ambientState)}`);
-    }
+      if (result.ambientState) {
+        console.log(`\n${renderAmbientSummary(result.ambientState)}`);
+      }
+    });
+    if (text.length > 0) console.log(text);
+    withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+      tenantId: ctx.tenantId, sessionId: currentSessionId, surface: pinnedOnly ? 'hook' : 'context',
+      event: 'inject', items: renderItems.length, tokens: estimateTokens(text),
+    }));
+  }
+}
+
+/**
+ * TE2: compaction drops the pinned blocks the per-prompt hook injected
+ * earlier, so record a `reset` for the payload's session and the next prompt
+ * injects again even if nothing changed. `requiredSource` limits it to hook
+ * payloads with that `source` (SessionStart fires for other reasons too).
+ * Best-effort and silent: a malformed payload records nothing.
+ */
+function resetHookInjection(hippoRoot: string, stdinText: string | undefined, requiredSource: string | null): void {
+  const sessionId = hookPayloadSessionId(stdinText, requiredSource);
+  if (sessionId === null) return;
+  withLedgerDb(hippoRoot, (db) => recordTokenUse(db, {
+    tenantId: resolveTenantId({}), sessionId, surface: 'hook', event: 'reset', items: 0, tokens: 0,
+  }));
+}
+
+/**
+ * Run `fn` with console.log captured; returns the captured lines joined by
+ * newlines (what the same calls would have printed, minus the final newline).
+ */
+function captureConsole(fn: () => void): string {
+  const lines: string[] = [];
+  const realLog = console.log;
+  console.log = (...parts: unknown[]) => { lines.push(parts.map(String).join(' ')); };
+  try {
+    fn();
+  } finally {
+    console.log = realLog;
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The store a Claude Code hook writes to: the project store when there is
+ * one, else an existing global store, else the project path (which the hook
+ * then skips, since hooks fire in every directory and must not create one).
+ * Pre-compact and compact-resume must agree, or a snapshot saved to one store
+ * is looked for in the other.
+ */
+function hookStoreRoot(hippoRoot: string): string {
+  if (isInitialized(hippoRoot)) return hippoRoot;
+  const globalRoot = getGlobalRoot();
+  return isInitialized(globalRoot) ? globalRoot : hippoRoot;
+}
+
+/**
+ * Run `fn` against the token ledger's store: the local store when it is
+ * initialized, else the global one (the per-prompt hook runs in directories
+ * without a local store). Best-effort: returns undefined and never throws,
+ * because a ledger failure must not break context or recall.
+ */
+function withLedgerDb<T>(hippoRoot: string, fn: (db: ReturnType<typeof openHippoDb>) => T): T | undefined {
+  let root: string | null = null;
+  try {
+    if (isInitialized(hippoRoot)) root = hippoRoot;
+    else if (isInitialized(getGlobalRoot())) root = getGlobalRoot();
+  } catch {
+    return undefined;
+  }
+  if (root === null) return undefined;
+  let db: ReturnType<typeof openHippoDb> | undefined;
+  try {
+    db = openHippoDb(root);
+    return fn(db);
+  } catch {
+    return undefined;
+  } finally {
+    if (db) closeHippoDb(db);
   }
 }
 
@@ -6712,14 +6974,17 @@ function printCrossProjectSection(items: api.ContextResultEntry[]): void {
 export function printContextMarkdown(
   items: Array<{ entry: MemoryEntry; score: number; tokens: number; isGlobal: boolean }>,
   totalTokens: number,
-  framing: string = 'observe'
+  framing: string = 'observe',
+  opts: { showStrength?: boolean } = {}
 ): void {
   const now = evalNow();
+  const showStrength = opts.showStrength !== false;
   console.log(`## Project Memory (${items.length} entries, ${totalTokens} tokens)\n`);
   for (const item of items) {
     const e = item.entry;
     const tagStr = e.tags.length > 0 ? ` [${e.tags.join(', ')}]` : '';
     const strengthPct = Math.round(calculateStrength(e) * 100);
+    const strengthStr = showStrength ? ` (${strengthPct}%)` : '';
     const globalPrefix = item.isGlobal ? '[global] ' : '';
     const effectiveConf = confidenceFacets(e, now).tier;
     const label = confidenceLabel(e, now);
@@ -6730,17 +6995,17 @@ export function printContextMarkdown(
       const dateStr = new Date(e.created).toISOString().slice(0, 10);
       if (effectiveConf === 'verified') {
         // Verified: no date prefix, just the rule
-        console.log(`- **${confTag} ${globalPrefix}${e.content}**${tagStr} (${strengthPct}%)`);
+        console.log(`- **${confTag} ${globalPrefix}${e.content}**${tagStr}${strengthStr}`);
       } else if (effectiveConf === 'stale') {
-        console.log(`- **${confTag} Previously observed (${dateStr}): ${globalPrefix}${e.content}**${tagStr} (${strengthPct}%)`);
+        console.log(`- **${confTag} Previously observed (${dateStr}): ${globalPrefix}${e.content}**${tagStr}${strengthStr}`);
       } else {
-        console.log(`- **${confTag} Previously observed (${dateStr}): ${globalPrefix}${e.content}**${tagStr} (${strengthPct}%)`);
+        console.log(`- **${confTag} Previously observed (${dateStr}): ${globalPrefix}${e.content}**${tagStr}${strengthStr}`);
       }
     } else if (framing === 'suggest') {
-      console.log(`- **${confTag} Consider checking: ${globalPrefix}${e.content}**${tagStr} (${strengthPct}%)`);
+      console.log(`- **${confTag} Consider checking: ${globalPrefix}${e.content}**${tagStr}${strengthStr}`);
     } else {
       // framing === 'assert': no prefix (bare facts)
-      console.log(`- **${confTag} ${globalPrefix}${e.content}**${tagStr} (${strengthPct}%)`);
+      console.log(`- **${confTag} ${globalPrefix}${e.content}**${tagStr}${strengthStr}`);
     }
   }
 }
@@ -6902,7 +7167,7 @@ async function cmdWatch(command: string, hippoRoot: string): Promise<void> {
   const existingWatch = loadAllEntries(hippoRoot, entry.tenantId);
   const watchFit = computeSchemaFit(entry.content, entry.tags, existingWatch);
   entry.schema_fit = watchFit;
-  entry.half_life_days = deriveHalfLife(7, entry);
+  entry.half_life_days = deriveHalfLife(loadConfig(hippoRoot).defaultHalfLifeDays, entry);
   entry.strength = calculateStrength(entry);
   // AT1 (plan §3 containment): mechanical content from a failed command — a
   // rejection-guard refusal here must not crash the watcher. Skip silently
@@ -6952,7 +7217,9 @@ function learnFromRepo(
     return { added: 0, skipped: 0, lowInfo: 0 };
   }
 
-  const parsedLessons = extractLessons(gitLog);
+  // Same patterns as MCP hippo_learn: config.gitLearnPatterns (whose default
+  // equals extractLessons' built-in list) so a custom list applies everywhere.
+  const parsedLessons = extractLessons(gitLog, loadConfig(hippoRoot).gitLearnPatterns);
   if (parsedLessons.length === 0) {
     console.log(`${prefix}No fix/revert/bug commits found in the specified period.`);
     return { added: 0, skipped: 0, lowInfo: 0 };
@@ -7567,6 +7834,12 @@ function cmdHook(
       if (result.installedCompactResume) {
         console.log(`Installed hippo compact-resume SessionStart(compact) hook in ${result.target} settings`);
       }
+      if (result.installedPostCompact) {
+        console.log(`Installed hippo post-compact PostCompact hook in ${result.target} settings`);
+      }
+      if (result.installedCaptureError) {
+        console.log(`Installed hippo capture-error PostToolUseFailure hook in ${result.target} settings`);
+      }
       if (result.migratedFromStop) {
         console.log(`Migrated legacy Stop hook → SessionEnd (was running every turn; now fires once on session exit)`);
       }
@@ -7691,6 +7964,8 @@ function cmdSetup(flags: Record<string, string | boolean | string[]>): void {
     if (result.installedUserPromptSubmit) bits.push('UserPromptSubmit (pinned-inject)');
     if (result.installedPreCompact) bits.push('PreCompact (pre-compact)');
     if (result.installedCompactResume) bits.push('SessionStart(compact) (compact-resume)');
+    if (result.installedPostCompact) bits.push('PostCompact (post-compact)');
+    if (result.installedCaptureError) bits.push('PostToolUseFailure (capture-error)');
     if (result.migratedFromStop) bits.push('migrated legacy Stop');
     if (result.migratedSplitSessionEnd) bits.push('migrated split SessionEnd → session-end');
     else if (result.migratedLegacySessionEnd) bits.push('migrated legacy SessionEnd');
@@ -8276,6 +8551,8 @@ const VALID_AUDIT_OPS: ReadonlySet<AuditOp> = new Set<AuditOp>([
   'reject_refusal',        // AT1 — emitted when the rejection guard refuses a write; lockstep
   'unreject_value',        // AT1 — emitted by `hippo unreject`; lockstep
   'conflict_resolve',      // AT1 — emitted by resolveConflict on every resolution path; lockstep
+  'half_life_migrate',     // Decay default change — emitted by migrateDefaultHalfLife; lockstep with AuditOp union
+  'dormant_restore',       // Dormant memories — emitted by api.restoreDormant; lockstep with AuditOp union + server.ts VALID_AUDIT_OPS
 ]);
 
 function formatAuditRow(ev: AuditEvent): string {
@@ -9062,6 +9339,23 @@ Commands:
     --global               Operate on the global store
   unreject <digest-prefix> Delete a tombstone (the only escape hatch)
     --global               Operate on the global store
+  dormant [<query>]        List faded memories sleep kept instead of deleting
+                           (on by default; "dormant": {"enabled": false} deletes instead)
+    --limit <n>            Max rows, newest first (default: 20)
+    --json                 Output as JSON
+    --global               Operate on the global store
+    dormant restore <id>   Bring a dormant memory back to active memory
+    dormant forget <id>    Delete a dormant memory permanently
+  capture-error            Store a failed tool call as an error memory (reads the Claude Code
+                           PostToolUseFailure hook payload on stdin; skips routine failures)
+  doctor                   Check the install: Node, store, schema, sleep, agent hooks
+    --json                 Machine-readable report (exit code 1 on any failure)
+  tokens                   Tokens of memory text hippo handed agents, per surface
+                           (hook, context, recall, MCP, HTTP), and what skipping
+                           unchanged hook blocks saved
+    --days <n>             Window in days (default: 30)
+    --json                 Output as JSON
+    --global               Operate on the global store
   snapshot <sub>           Persist or inspect the current active task
     snapshot save          Save active task state
       --task <task>
@@ -9189,6 +9483,8 @@ Commands:
   pre-compact              PreCompact hook: snapshot + capture the tail before compaction
     --log-file <p>         Diagnostic log path (default: ~/.hippo/logs/pre-compact.log)
   compact-resume           SessionStart(compact) hook: re-print the snapshot + session trail
+  post-compact             PostCompact hook: tell the user what pre-compact saved
+    --log-file <p>         Same log path as pre-compact (default: ~/.hippo/logs/pre-compact.log)
   codex-run [-- ...args]   Launch real Codex behind Hippo's session-end wrapper
   hook <sub> [target]      Manage framework integrations
     hook list              Show available hooks
@@ -9353,6 +9649,9 @@ Examples:
   hippo reject --value "never store my key again" --reason "secret"
   hippo rejections
   hippo unreject a1b2c3d4e5f6
+  hippo dormant "staging hostname"
+  hippo dormant restore mem_abc123
+  hippo tokens --days 7
   hippo session log --id sess_123 --task "Ship feature" --type progress --content "Build is green, next step is docs"
   hippo session latest --json
   hippo session resume
@@ -9619,7 +9918,8 @@ async function main(
     case 'pre-compact': {
       // Bounded wait, not a TTY guard: an idle non-TTY pipe must not hang.
       const { text: stdinText, timedOut: stdinTimedOut } = await readStdinBounded();
-      await cmdPreCompact(hippoRoot, {
+      resetHookInjection(hippoRoot, stdinText, null);
+      await cmdPreCompact(hookStoreRoot(hippoRoot), {
         stdinText,
         stdinTimedOut,
         logFile: typeof flags['log-file'] === 'string' ? (flags['log-file'] as string) : undefined,
@@ -9627,9 +9927,37 @@ async function main(
       break;
     }
 
+    case 'post-compact': {
+      // PostCompact hook: tells the user what pre-compact saved. Plain text,
+      // because Claude Code shows this hook's stdout as-is. Always exits 0.
+      const { text } = await readStdinBounded();
+      const logFlag = flags['log-file'];
+      const message = postCompactMessage(text, logFlag === true || logFlag === false || Array.isArray(logFlag) ? undefined : logFlag);
+      if (message !== null) console.log(message);
+      break;
+    }
+
+    case 'capture-error': {
+      // PostToolUseFailure hook: every path exits 0, and nothing is created
+      // when no store exists (the hook fires in every directory).
+      const { text } = await readStdinBounded();
+      try {
+        const root = hookStoreRoot(hippoRoot);
+        const payload = (text ?? '').trim();
+        if (isInitialized(root) && payload) {
+          // SAFETY: JSON.parse returns a JSON value by definition.
+          captureToolFailure(root, resolveTenantId({}), JSON.parse(payload) as JsonValue);
+        }
+      } catch {
+        // A malformed payload or store error must never fail the agent's tool call.
+      }
+      break;
+    }
+
     case 'compact-resume': {
       const { text: stdinText, timedOut: stdinTimedOut } = await readStdinBounded();
-      cmdCompactResume(hippoRoot, stdinText, stdinTimedOut);
+      resetHookInjection(hippoRoot, stdinText, 'compact');
+      cmdCompactResume(hookStoreRoot(hippoRoot), stdinText, stdinTimedOut);
       break;
     }
 
@@ -9784,6 +10112,23 @@ async function main(
     case 'unreject':
       cmdUnreject(hippoRoot, args, flags);
       break;
+
+    case 'dormant':
+      cmdDormant(hippoRoot, args, flags);
+      break;
+
+    case 'tokens':
+      cmdTokens(hippoRoot, flags);
+      break;
+
+    case 'doctor': {
+      // SAFETY: package.json always carries a string "version" (checked at release by check-manifest-versions).
+      const pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8')) as { version: string };
+      const report = runDoctor({ version: pkg.version });
+      console.log(flags['json'] ? JSON.stringify(report, null, 2) : formatDoctor(report));
+      if (!report.ok) process.exit(1);
+      break;
+    }
 
     case 'snapshot':
       cmdSnapshot(hippoRoot, args, flags);

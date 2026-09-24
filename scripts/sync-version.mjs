@@ -11,6 +11,7 @@ const JSON_MANIFESTS = [
   'openclaw.plugin.json',
   'extensions/openclaw-plugin/package.json',
   'extensions/openclaw-plugin/openclaw.plugin.json',
+  'server.json',
 ];
 
 for (const path of JSON_MANIFESTS) {

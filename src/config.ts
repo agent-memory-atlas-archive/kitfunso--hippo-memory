@@ -68,6 +68,13 @@ export interface HippoConfig {
   pinnedInject: {
     enabled: boolean;
     budget: number;
+    /** Skip a block identical to the one already injected this session
+     *  (ROADMAP TE2). Default true. Needs a session id from the hook payload. */
+    skipUnchanged: boolean;
+    /** Resend an unchanged block after this many consecutive skips, so long
+     *  sessions still see pinned rules near the latest turn. Default 10; 0
+     *  never resends an unchanged block. */
+    refreshTurns: number;
   };
   /** Memory scope isolation (v39): when true (default), ambient context
    *  (`hippo context`, the UserPromptSubmit hook, /v1/context, MCP
@@ -101,6 +108,19 @@ export interface HippoConfig {
    *  tied to E2 evidence, not user-tunable). */
   memoryValue: {
     enabled: boolean;
+  };
+  /** Dormant memories (src/dormant.ts): when enabled (the default), the
+   *  sleep decay pass moves a memory that faded below the threshold into the
+   *  dormant store instead of deleting it. A dormant memory leaves recall and
+   *  context like a deleted one, but `hippo dormant restore <id>` brings it
+   *  back and `hippo dormant forget <id>` deletes it for good. A faded memory
+   *  the secret detector flags is always deleted, never kept dormant.
+   *  `{"enabled": false}` restores the old delete-on-fade behaviour. */
+  dormant: {
+    enabled: boolean;
+    /** Days a dormant memory is kept before sleep deletes it for good.
+     *  Default 180. 0 keeps dormant memories forever. */
+    retentionDays: number;
   };
 }
 
@@ -144,6 +164,8 @@ const DEFAULT_CONFIG: HippoConfig = {
   pinnedInject: {
     enabled: true,
     budget: 1500,
+    skipUnchanged: true,
+    refreshTurns: 10,
   },
   contextProjectIsolation: true,
   extraction: {
@@ -166,11 +188,21 @@ const DEFAULT_CONFIG: HippoConfig = {
   memoryValue: {
     enabled: false,
   },
+  dormant: {
+    enabled: true,
+    retentionDays: 180,
+  },
 };
 
 function isMemoryValueConfig(
   value: HippoConfig['memoryValue'] | undefined,
 ): value is HippoConfig['memoryValue'] {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDormantConfig(
+  value: HippoConfig['dormant'] | undefined,
+): value is HippoConfig['dormant'] {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -198,6 +230,35 @@ export function loadConfig(hippoRoot: string): HippoConfig {
     }
     const memoryValueOverride: Partial<HippoConfig['memoryValue']> =
       memoryValueRaw !== undefined && isMemoryValueConfig(memoryValueRaw) ? memoryValueRaw : {};
+    // Same rule as memoryValue above: a malformed value never silently
+    // changes what sleep does. Anything but a real object / boolean / number
+    // warns and falls back to the default, which keeps faded memories.
+    const dormantRaw = raw.dormant;
+    if (dormantRaw !== undefined && !isDormantConfig(dormantRaw)) {
+      console.error(
+        `Warning: config.json's "dormant" must be an object like {"enabled": false} ` +
+        `(got ${JSON.stringify(dormantRaw)}) - using the default (faded memories kept dormant).`,
+      );
+    }
+    const dormantOverride: Partial<HippoConfig['dormant']> =
+      dormantRaw !== undefined && isDormantConfig(dormantRaw) ? dormantRaw : {};
+    // Only a real boolean counts: {"enabled": "false"} is a truthy string.
+    let dormantEnabled = dormantOverride.enabled ?? DEFAULT_CONFIG.dormant.enabled;
+    if (dormantEnabled !== true && dormantEnabled !== false) {
+      console.error(
+        `Warning: config.json's "dormant.enabled" must be true or false ` +
+        `(got ${JSON.stringify(dormantEnabled)}) - using the default (faded memories kept dormant).`,
+      );
+      dormantEnabled = DEFAULT_CONFIG.dormant.enabled;
+    }
+    let dormantRetentionDays = dormantOverride.retentionDays ?? DEFAULT_CONFIG.dormant.retentionDays;
+    if (!Number.isFinite(dormantRetentionDays) || dormantRetentionDays < 0) {
+      console.error(
+        `Warning: config.json's "dormant.retentionDays" must be a number of days, 0 or more ` +
+        `(got ${JSON.stringify(dormantRetentionDays)}) - using ${DEFAULT_CONFIG.dormant.retentionDays}.`,
+      );
+      dormantRetentionDays = DEFAULT_CONFIG.dormant.retentionDays;
+    }
     return {
       defaultHalfLifeDays: raw.defaultHalfLifeDays ?? DEFAULT_CONFIG.defaultHalfLifeDays,
       defaultBudget: raw.defaultBudget ?? DEFAULT_CONFIG.defaultBudget,
@@ -224,6 +285,10 @@ export function loadConfig(hippoRoot: string): HippoConfig {
       memoryValue: {
         ...DEFAULT_CONFIG.memoryValue,
         ...memoryValueOverride,
+      },
+      dormant: {
+        enabled: dormantEnabled,
+        retentionDays: dormantRetentionDays,
       },
     };
   } catch (err) {

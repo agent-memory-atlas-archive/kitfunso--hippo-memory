@@ -1,0 +1,928 @@
+{
+  "meta": {
+    "harness": "scripts/token-eval/budget-curve.mjs",
+    "generatedAt": "2026-09-23T19:50:40.777Z",
+    "data": "benchmarks/longmemeval/data/synthetic_smoke.json",
+    "embeddings": false,
+    "tokenEstimate": "characters / 4",
+    "scoring": "evidence recall: any answer_session_id among the packed memories"
+  },
+  "summary": {
+    "questions": 10,
+    "curve": [
+      {
+        "budget": 250,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      },
+      {
+        "budget": 500,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      },
+      {
+        "budget": 1000,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      },
+      {
+        "budget": 2000,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      },
+      {
+        "budget": 4000,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      },
+      {
+        "budget": 8000,
+        "hippo": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "recency": {
+          "evidenceRecall": 1,
+          "meanTokens": 213
+        },
+        "hippoMinusRecency": {
+          "estimate": 0,
+          "low": 0,
+          "high": 0,
+          "iterations": 5000
+        }
+      }
+    ],
+    "fullContext": {
+      "evidenceRecall": 1,
+      "meanTokens": 213
+    },
+    "noMemory": {
+      "evidenceRecall": 0,
+      "meanTokens": 0
+    },
+    "minTokensToAnswer": {
+      "hippo": {
+        "answered": 10,
+        "median": 211.5
+      },
+      "recency": {
+        "answered": 10,
+        "median": 211.5
+      },
+      "fullContextMedian": 211.5
+    }
+  },
+  "perQuestion": [
+    {
+      "questionId": "syn_001",
+      "questionType": "single-session-user",
+      "sessions": 4,
+      "fullContextTokens": 237,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 237
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 237
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 237
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 237
+        }
+      }
+    },
+    {
+      "questionId": "syn_002",
+      "questionType": "single-session-user",
+      "sessions": 4,
+      "fullContextTokens": 203,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 203
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 203
+        }
+      }
+    },
+    {
+      "questionId": "syn_003",
+      "questionType": "multi-session",
+      "sessions": 4,
+      "fullContextTokens": 250,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 250
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 250
+        }
+      }
+    },
+    {
+      "questionId": "syn_004",
+      "questionType": "multi-session",
+      "sessions": 4,
+      "fullContextTokens": 218,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 218
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 218
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 218
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 218
+        }
+      }
+    },
+    {
+      "questionId": "syn_005",
+      "questionType": "knowledge-update",
+      "sessions": 4,
+      "fullContextTokens": 203,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 203
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 203
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 203
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 203
+        }
+      }
+    },
+    {
+      "questionId": "syn_006",
+      "questionType": "knowledge-update",
+      "sessions": 3,
+      "fullContextTokens": 138,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 138
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 138
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 138
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 138
+        }
+      }
+    },
+    {
+      "questionId": "syn_007",
+      "questionType": "temporal-reasoning",
+      "sessions": 4,
+      "fullContextTokens": 231,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 231
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 231
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 231
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 231
+        }
+      }
+    },
+    {
+      "questionId": "syn_008",
+      "questionType": "temporal-reasoning",
+      "sessions": 4,
+      "fullContextTokens": 205,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 205
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 205
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 205
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 205
+        }
+      }
+    },
+    {
+      "questionId": "syn_009",
+      "questionType": "single-session-user",
+      "sessions": 3,
+      "fullContextTokens": 193,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 193
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 193
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 193
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 193
+        }
+      }
+    },
+    {
+      "questionId": "syn_010",
+      "questionType": "multi-session",
+      "sessions": 4,
+      "fullContextTokens": 250,
+      "fullContextHit": true,
+      "perBudget": {
+        "250": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "500": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "1000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "2000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "4000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        },
+        "8000": {
+          "hippo": {
+            "hit": true,
+            "tokens": 250
+          },
+          "recency": {
+            "hit": true,
+            "tokens": 250
+          }
+        }
+      },
+      "minToAnswer": {
+        "hippo": {
+          "budget": 250,
+          "tokens": 250
+        },
+        "recency": {
+          "budget": 250,
+          "tokens": 250
+        }
+      }
+    }
+  ]
+}

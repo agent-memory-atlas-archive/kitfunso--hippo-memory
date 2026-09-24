@@ -1,19 +1,19 @@
 ---
 name: hippo-memory.com
-direction: dark-premium, receipts-led developer marketing
-updated: 2026-06-10
+direction: terminal-native, receipts-led developer marketing (2026-09-24 redesign)
+updated: 2026-09-24
 source_of_truth: true
 tokens:
   font:
-    display: "Bricolage Grotesque Variable"   # h1-h3 only
-    sans: "Hanken Grotesk Variable"           # body
-    mono: "JetBrains Mono Variable"           # code, numbers, eyebrows, stats
+    display: "Martian Mono"                   # h1-h3, code, numbers, eyebrows, stats
+    sans: "Onest Variable"                    # body
+    mono: "Martian Mono"
   color:
-    bg: "#08080b"
-    accent_violet: "#a78bfa"
-    accent_cyan: "#22d3ee"
-    gradient: "linear-gradient(110deg, #a78bfa 0%, #22d3ee 100%)"  # surgical: one headline keyword, CTA ring, decay curve. Never a background fill.
-    gradient_fallback: "#c4b5fd"
+    bg: "#0b0f0c"                   # ink
+    accent_mint: "#7ce38b"          # recalled; token names acc-violet/acc-cyan kept, both resolve to mint
+    accent_mint_light: "#a7f0b1"
+    accent_amber: "#f2b84b"         # marked wrong, published losses, in-development labels
+    neutrals: "zinc scale overridden in global.css with ink-tinted greys"
     text_body: "zinc-100"
     text_muted: "zinc-400"          # FLOOR for any prose on bg (7.8:1). zinc-500 is decoration only, never sentences.
     term_bg: "#0c0c12"
@@ -41,6 +41,8 @@ tokens:
 ---
 
 # hippo-memory.com design system
+
+**2026-09-24 redesign:** Terminal Native direction. The hero shows the product (a Claude Code session with hippo's real output), the brand mark is the Spiral (a hippocampus drawn with memories: mint recalled, dim fading, amber marked wrong; `scripts/make-logo.mjs` for the flat mark, `MemorySpiral.astro` for the three.js one, loaded lazily), receipts include published losses, and `/teams` carries the company pitch. Rules below still apply where they do not name the old violet/cyan palette.
 
 Codified from the shipped site plus the 2026-06-10 design audit
 (C:/Users/skf_s/design-audits/hippo-memory-2026-06-10/REPORT.md). The audit's

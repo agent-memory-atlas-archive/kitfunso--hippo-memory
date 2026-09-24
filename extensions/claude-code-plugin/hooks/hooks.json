@@ -51,13 +51,25 @@
         ]
       }
     ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hippo post-compact 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUseFailure": [
       {
         "matcher": ".*",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/capture-error.sh\""
+            "command": "hippo capture-error 2>/dev/null || true",
+            "timeout": 10
           }
         ]
       }

@@ -27,3 +27,5 @@ hippo (npm package `hippo-memory`) is an open-source memory system for AI agents
 npm install -g hippo-memory
 hippo init --scan ~
 ```
+
+Agents installing hippo: follow https://github.com/kitfunso/hippo-memory/blob/master/llms-install.md (install, wire in, verify with `hippo doctor --json`). Zero-install MCP: `npx -y hippo-memory mcp`.

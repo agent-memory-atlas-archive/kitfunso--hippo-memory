@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId, AUTO_DELETABLE_SQL } from './memory.js';
+import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId, AUTO_DELETABLE_SQL, DEFAULT_HALF_LIFE_DAYS } from './memory.js';
 import { dumpFrontmatter, parseFrontmatter } from './yaml.js';
 import {
   openHippoDb,
@@ -40,6 +40,7 @@ import {
 // inside function bodies (never at module-evaluation time), so the cycle
 // is the standard safe mutual-function-reference shape under NodeNext ESM.
 import { archiveRawMemory } from './raw-archive.js';
+import { insertDormantRow, type DormantMove } from './dormant.js';
 
 /** A value that round-trips through JSON.stringify/JSON.parse unchanged. */
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -320,9 +321,25 @@ export function initStore(hippoRoot: string): void {
     if (bootstrapped) {
       syncMirrorFiles(hippoRoot, db);
     }
+    recordHalfLifeBaseForNewStore(db);
   } finally {
     closeHippoDb(db);
   }
+}
+
+/** `meta` key holding the default half-life base a store's memories are on (src/half-life-migration.ts). */
+export const HALF_LIFE_BASE_META_KEY = 'default_half_life_base';
+
+/**
+ * A store with no memories starts on the current default half-life base, so
+ * `hippo sleep` never migrates it. A store that already holds memories and
+ * no recorded base predates the record, and keeps reading as the legacy
+ * 7-day base until sleep migrates it.
+ */
+function recordHalfLifeBaseForNewStore(db: DatabaseSyncLike): void {
+  if (getMeta(db, HALF_LIFE_BASE_META_KEY, '') !== '') return;
+  if (db.prepare(`SELECT 1 AS x FROM memories LIMIT 1`).get() !== undefined) return;
+  setMeta(db, HALF_LIFE_BASE_META_KEY, String(DEFAULT_HALF_LIFE_DAYS));
 }
 
 function ensureMirrorDirectories(hippoRoot: string): void {
@@ -2071,14 +2088,20 @@ function mergeOwnChanges(base: MemoryEntry, ours: MemoryEntry, live: MemoryEntry
 }
 
 /** Consolidation's flush, one transaction. With `snapshot` (rows as the caller loaded them), a write keeps only
- *  the fields the caller changed, takes the rest from the live row, and never resurrects a row that is gone. */
+ *  the fields the caller changed, takes the rest from the live row, and never resurrects a row that is gone.
+ *
+ *  `dormant` (src/dormant.ts): each move's snapshot is inserted into `dormant_memories` and its `memories` row
+ *  leaves exactly like a delete (FTS row, DAG parent dirty-mark, mirrors), in the same transaction, so a memory
+ *  is never in both places or in neither. Deletes and moves both skip rows that are no longer auto-deletable
+ *  (pinned or raw since the caller decided). Returns the ids that left `memories`, deleted or moved. */
 export function batchWriteAndDelete(
   hippoRoot: string,
   toWrite: MemoryEntry[],
   toDeleteIds: string[],
-  opts?: { snapshot?: ReadonlyMap<string, MemoryEntry> },
+  opts?: { snapshot?: ReadonlyMap<string, MemoryEntry>; dormant?: DormantMove[] },
 ): string[] {
-  if (toWrite.length === 0 && toDeleteIds.length === 0) return [];
+  const dormantMoves = opts?.dormant ?? [];
+  if (toWrite.length === 0 && toDeleteIds.length === 0 && dormantMoves.length === 0) return [];
 
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
@@ -2192,7 +2215,28 @@ export function batchWriteAndDelete(
         tenantById.set(row.dag_parent_id, row.tenantId);
       }
     }
-    for (const id of deletableIds) {
+    // Dormant moves: same eligibility and DAG bookkeeping as deletes.
+    const movable: DormantMove[] = [];
+    if (dormantMoves.length > 0) {
+      const byId = new Map(dormantMoves.map((m) => [m.entry.id, m]));
+      const placeholders = dormantMoves.map(() => '?').join(',');
+      // SAFETY: rows' shape matches the three columns named in the SELECT.
+      const rows = db.prepare(
+        `SELECT id, dag_parent_id, tenant_id FROM memories WHERE id IN (${placeholders}) AND ${AUTO_DELETABLE_SQL}`,
+      ).all(...byId.keys()) as Array<{ id: string; dag_parent_id: string | null; tenant_id: string | null }>;
+      for (const row of rows) {
+        movable.push(byId.get(row.id)!);
+        if (row.dag_parent_id) {
+          dirtyParents.add(row.dag_parent_id);
+          tenantById.set(row.dag_parent_id, row.tenant_id ?? 'default');
+        }
+      }
+    }
+    for (const move of movable) {
+      insertDormantRow(db, move);
+    }
+    const removedIds = [...deletableIds, ...movable.map((m) => m.entry.id)];
+    for (const id of removedIds) {
       db.prepare('DELETE FROM memories WHERE id = ?').run(id);
       deleteFtsRow(db, id);
     }
@@ -2215,9 +2259,9 @@ export function batchWriteAndDelete(
     mirrorBestEffort('markdown mirrors', () => {
       for (const entry of written) writeMarkdownMirror(hippoRoot, entry);
     });
-    for (const id of deletableIds) purgeMirrorBestEffort(hippoRoot, id, false, 'batchWriteAndDelete');
+    for (const id of removedIds) purgeMirrorBestEffort(hippoRoot, id, false, 'batchWriteAndDelete');
     writeIndexMirror(hippoRoot, buildIndexFromDb(db));
-    return deletableIds;
+    return removedIds;
   } catch (error) {
     try { db.exec('ROLLBACK'); } catch { /* ignore */ }
     throw error;

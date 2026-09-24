@@ -18,6 +18,8 @@ npm install -g hippo-memory && hippo init --scan ~
 
 One command. Every git repo on your machine gets memory.
 
+Having an AI agent install it? Point it at [llms-install.md](llms-install.md): it installs, wires hippo into the agents it finds, and verifies with `hippo doctor`.
+
 ```
 Works with:    Claude Code, Codex, Cursor, OpenClaw, OpenCode, Pi, any MCP client
 Imports from:  ChatGPT, Claude (CLAUDE.md), Cursor (.cursorrules), Slack, markdown
@@ -297,16 +299,15 @@ sequenceDiagram
 
 ### Decay by default
 
-Every memory has a half-life. 7 days by default. Persistence is earned.
+Every memory has a half-life: 365 days by default. Persistence is earned. Until 1.46.0 the default was 7 days. A pre-registered evaluation found 7 days lost the current version of a fact far more often: it was in the top five 29% of the time at 7 days and 75% at 365 ([result](docs/evals/2026-09-24-decay-default-result.md)). 730 days and decay off both tied with 365. `hippo sleep` moves memories still on the old 7-day base to the new one, once, and records each move in the audit log. Set `defaultHalfLifeDays` in `.hippo/config.json` to choose your own.
 
 ```bash
 hippo remember "always check cache contents after refresh"
-# stored with half_life: 7d, strength: 1.0
+# stored with half_life: 365d, strength: 1.0
 
-# 14 days later with no retrieval:
+# two years later with no retrieval:
 hippo inspect mem_a1b2c3
 # strength: 0.25  (decayed by 2 half-lives)
-# at risk of removal on next sleep
 ```
 
 ---
@@ -318,12 +319,12 @@ Use it or lose it. Each recall boosts the half-life by 2 days.
 ```bash
 hippo recall "cache issues"
 # finds mem_a1b2c3, retrieval_count: 1 -> 2
-# half_life extended: 7d -> 9d
+# half_life extended: 365d -> 367d
 # strength recalculated from retrieval timestamp
 
 hippo recall "cache issues"   # again next week
 # retrieval_count: 2 -> 3
-# half_life: 9d -> 11d
+# half_life: 367d -> 369d
 # this memory is learning to survive
 ```
 
@@ -467,6 +468,34 @@ usage, NOT real usage value — treat the flag as an experiment, not a recommend
 Tenants with fewer than 10 non-pinned memories never rescue (rank statistics are noise at
 tiny scale).
 
+**Faded memories go dormant, not gone (on by default).** Sleep moves a memory that faded
+below the decay threshold into a dormant store instead of deleting it. A dormant memory
+leaves recall and context exactly like a deleted one and sits out every later sleep, so
+your agent's context stays as lean as before, but nothing is lost:
+
+```bash
+hippo dormant                     # list, newest first (--json, --limit <n>)
+hippo dormant "staging hostname"  # search: every term must match
+hippo dormant restore mem_a1b2c3  # back to active memory, as if just recalled
+hippo dormant forget mem_a1b2c3   # delete for good
+```
+
+A restored memory comes back with a fresh recall clock, so it gets a full half-life before
+it can fade again, and every restore is logged (`hippo audit list --op dormant_restore`) as
+a "forgot it, then needed it" signal. Two guardrails: a faded memory that the secret
+detector flags is deleted, never kept dormant, and a dormant memory nobody restores within
+`dormant.retentionDays` (default 180, `0` keeps them forever) is deleted for good. Rejecting
+a value (`hippo reject`) removes its dormant copies too. To delete faded memories straight
+away as before, set `{"dormant":{"enabled":false}}` in `.hippo/config.json`. Sleep never
+removes pinned memories or raw receipts (Slack, GitHub, vault imports) either way, and
+duplicate removal and junk cleanup still delete.
+
+**See what memory costs in tokens.** Every block of memory text hippo hands an agent (the
+per-prompt hook, `hippo context`, `hippo recall`, the MCP tools, the HTTP API) is recorded
+in a token ledger: counts, surface and session, never the text. `hippo tokens` shows the
+totals for the last 30 days (`--days`, `--json`). Counts are estimates (characters / 4), the
+same estimate every budget uses. Rows older than 90 days are pruned.
+
 ---
 
 ### Outcome feedback
@@ -592,6 +621,11 @@ hippo watch "npm run build"
 | `hippo outcome --id <id> --good` | Target a specific memory |
 | `hippo inspect <id>` | Full detail on one memory |
 | `hippo forget <id>` | Force remove a memory |
+| `hippo dormant [<query>]` | List faded memories sleep kept instead of deleting |
+| `hippo dormant restore <id>` | Bring a dormant memory back to active memory |
+| `hippo dormant forget <id>` | Delete a dormant memory permanently |
+| `hippo doctor [--json]` | Check the install: Node, store, schema, sleep, agent hooks; each problem names its fix |
+| `hippo tokens [--days n]` | Estimated tokens of memory text handed to agents, per surface, and what skipping unchanged hook blocks saved |
 | `hippo embed` | Embed all memories for semantic search |
 | `hippo embed --status` | Show embedding coverage |
 | `hippo watch "<command>"` | Run command, auto-learn from failures |
@@ -683,9 +717,11 @@ This adds a `<!-- hippo:start -->` ... `<!-- hippo:end -->` block that tells the
 For Claude Code, it also adds:
 - a `SessionEnd` hook so `hippo sleep` runs automatically when the session exits
 - a `SessionStart` hook that prints the previous session's consolidation output
-- a `UserPromptSubmit` hook that runs `hippo context --pinned-only --include-recent 5 --format additional-context` every turn. It re-injects pinned memories (`hippo remember <text> --pin`) plus the last 5 writes, so fresh same-session lessons appear on the next prompt before you pin them. Opt out with `{"pinnedInject":{"enabled":false}}` in `.hippo/config.json`.
+- a `UserPromptSubmit` hook that runs `hippo context --pinned-only --include-recent 5 --format additional-context` every turn. It re-injects pinned memories (`hippo remember <text> --pin`) plus the last 5 writes, so fresh same-session lessons appear on the next prompt before you pin them. The block is rendered without live strength percentages, so it stays byte-identical while its memories do not change, and it is sent only when it changed since the session's last prompt: an unchanged block is skipped, resent every 10 skips (`pinnedInject.refreshTurns`, `0` never resends) and resent after compaction. `{"pinnedInject":{"skipUnchanged":false}}` sends it every turn as before. Opt out entirely with `{"pinnedInject":{"enabled":false}}` in `.hippo/config.json`.
 - a `PreCompact` hook that runs `hippo pre-compact` before the transcript gets summarized. It saves a working-state snapshot (task/summary/next step) and extracts durable memories from the tail, so mid-session compaction can't drop them.
 - a second `SessionStart` hook (matcher `compact`) that runs `hippo compact-resume`, printing that snapshot plus the recent session trail back into context right after compaction.
+- a `PostCompact` hook that runs `hippo post-compact`, which tells you what was saved ("Hippo saved your task snapshot and 2 new memories before compacting"). It prints nothing when nothing was saved.
+- a `PostToolUseFailure` hook that runs `hippo capture-error`, which stores a failed tool call as an error memory. It skips interrupts, declined permissions and searches that found nothing, and stores a repeated failure once.
 
 To remove: `hippo hook uninstall claude-code`
 
@@ -725,7 +761,9 @@ Add to your MCP config (e.g. `.cursor/mcp.json` or `claude_desktop_config.json`)
 }
 ```
 
-Exposes tools: `hippo_recall`, `hippo_remember`, `hippo_outcome`, `hippo_context`, `hippo_status`, `hippo_learn`, `hippo_wm_push`.
+No global install needed: `"command": "npx", "args": ["-y", "hippo-memory", "mcp"]` works too. With no store anywhere, the first tool call creates the global store (`~/.hippo`); `hippo init` in a project adds a project store. Check any install with `hippo doctor`.
+
+Exposes 13 tools: `hippo_recall`, `hippo_assemble`, `hippo_drill`, `hippo_remember`, `hippo_outcome`, `hippo_context`, `hippo_status`, `hippo_learn`, `hippo_conflicts`, `hippo_resolve`, `hippo_share`, `hippo_peers`, `hippo_predict_baserate`.
 
 ### OpenClaw Plugin
 

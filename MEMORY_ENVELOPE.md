@@ -22,14 +22,14 @@ Every row in `memories` carries the canonical envelope as of schema v14 (A3) + v
 
 ## CLI surface (v15)
 
-- `--kind` accepts `distilled` (default) or `superseded` only. `raw` is reserved for ingestion connectors (E1.x: Slack/Jira/Gmail) that route deletions through `archiveRawMemory`. Existing `hippo forget` / consolidation / conflict-resolution paths abort on `kind='raw'` via the append-only trigger, so exposing `--kind raw` would create unforgettable memories. `archived` is an internal sentinel set only inside `archiveRawMemory`'s SAVEPOINT.
+- `--kind` accepts `distilled` (default) or `superseded` only. `raw` is reserved for ingestion connectors (E1.x: Slack/Jira/Gmail) that route deletions through `archiveRawMemory`. `hippo forget` and conflict resolution abort on `kind='raw'` via the append-only trigger, and sleep never deletes one (the decay pass keeps a faded raw row in place, and the quality audit skips raw rows), so exposing `--kind raw` would create unforgettable memories. `archived` is an internal sentinel set only inside `archiveRawMemory`'s SAVEPOINT.
 - `--scope <value>` writes the envelope `scope` column AND adds a `scope:<value>` tag (additive dual-write). Recall's `--scope` filter currently matches the tag form. When envelope-column-based filtering lands (post-A5), this dual-write becomes a transition aid; until then the duplication is intentional.
 - `--owner <value>` and `--artifact-ref <uri>` are passed through unchanged; format is advisory (`user:<id>` / `agent:<id>` for owner; URI scheme for artifact_ref).
 
 ## Footguns to avoid
 
 - **Do not use `INSERT OR REPLACE` on `memories`.** SQLite fires the `BEFORE DELETE` trigger during conflict resolution; on a `kind='raw'` row this aborts the upsert. Use `upsertEntryRow` (ON CONFLICT DO UPDATE) in `src/store.ts` or `archiveRawMemory` for raw rows.
-- **Do not directly `DELETE FROM memories` for `kind='raw'`.** Always go through `archiveRawMemory(db, id, { reason, who })` so the audit trail in `raw_archive` is preserved.
+- **Do not directly `DELETE FROM memories` for `kind='raw'`.** Always go through `archiveRawMemory(db, id, { reason, who })` so the audit trail in `raw_archive` is preserved. A cleanup pass that deletes rows (decay, dedup, the quality audit) must skip raw rows: one refused DELETE rolls back the whole batch, and the same row refuses it again on every later run.
 - **Ingestion code must declare `kind` explicitly** when writing genuinely raw transcripts. The default in `createMemory()` is `'distilled'`; current callers (`importers.ts` for ChatGPT/Claude/Cursor pastes, `capture.ts` for session capture) keep this default because their content is curated/processed, not raw transcript. When E1.x connectors land (Slack/Jira/Gmail), they MUST set `kind: 'raw'` explicitly.
 
 ## Surfacing
@@ -40,7 +40,7 @@ Every row in `memories` carries the canonical envelope as of schema v14 (A3) + v
 
 ## What this enables
 
-- **A4 right-to-be-forgotten.** `archiveRawMemory` is the primitive; A4 will wrap it in a `hippo forget --user X --everywhere` workflow.
+- **A4 right-to-be-forgotten.** `archiveRawMemory` is the primitive; A4 will wrap it in a `hippo forget --user X --everywhere` workflow. That workflow must also cover `dormant_memories` (schema v44, below), which keeps full content.
 - **A5 multi-tenancy.** `scope` + `owner` are the foundation; A5 adds `tenant_id` and RLS / app-layer enforcement.
 - **E1 ingestion connectors.** Every Slack/Jira/GitHub message lands as `kind='raw'` with full provenance; `hippo sleep` promotes selected receipts to `kind='distilled'`.
 - **E3 graph layer.** Graph indexer reads only `kind IN ('distilled','superseded')` rows; `kind='raw'` is structurally inaccessible.
@@ -155,6 +155,33 @@ Matching is exact-normalized-value only. A paraphrase of a rejected fact —
 different words, same meaning — is not caught. This is out of scope for v1;
 semantic/paraphrase-tolerant matching is research, not a documented gap in
 the guard's correctness.
+
+## Dormant memories (schema v44)
+
+The sleep decay pass moves a memory that faded below the threshold into
+`dormant_memories` instead of deleting it (`src/dormant.ts`; on by default,
+`{"dormant":{"enabled":false}}` opts out). The snapshot insert and the
+`memories` delete run in one transaction, so a memory is never in both tables
+or in neither.
+
+- **Content is kept.** Unlike `raw_archive` (metadata only), a dormant row
+  holds the full content plus a `MemoryEntry` snapshot, so treat it as stored
+  memory for privacy purposes: `hippo dormant forget <id>` deletes one for
+  good, and a right-to-be-forgotten sweep must include this table.
+- **Out of every read path.** A dormant memory is no longer a `memories` row,
+  so recall, context, dedup, merge and conflict detection never see it.
+- **Tombstones win.** `hippo reject` deletes dormant copies with the same
+  digest, and `hippo dormant restore` goes through the normal write path, so
+  the rejection guard refuses a value rejected by an older binary too.
+- **Never raw.** A faded `kind='raw'` row stays in `memories` (append-only);
+  it is neither deleted nor made dormant.
+- **Never secrets.** A faded memory the secret detector flags is deleted, not
+  kept dormant.
+- **Bounded.** Sleep deletes a dormant row older than `dormant.retentionDays`
+  (default 180; 0 keeps them forever), even with the feature switched off.
+- **Restores are labels.** Each restore writes a `dormant_restore` audit row
+  (reason, strength at dormancy, days dormant): training signal for a learned
+  lifecycle.
 
 ## Out of scope here (deferred)
 

@@ -1,0 +1,132 @@
+{
+ "name": "steady",
+ "description": "40 prompts, three pinned rules, nothing new learned",
+ "synthetic": true,
+ "pinned": [
+  "NEVER force-push to master; it rewrites shared history",
+  "Run npm run build before npm test; tests import dist/",
+  "Changelog entries go in changelog.d/<branch>.md, never CHANGELOG.md"
+ ],
+ "events": [
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  },
+  {
+   "type": "prompt"
+  }
+ ]
+}

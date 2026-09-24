@@ -1,0 +1,20 @@
+{
+  "name": "hippo-memory",
+  "owner": {
+    "name": "Keith So",
+    "url": "https://github.com/kitfunso/hippo-memory"
+  },
+  "metadata": {
+    "description": "Hippo: a local-first memory layer for AI coding agents."
+  },
+  "plugins": [
+    {
+      "name": "hippo-memory",
+      "source": "./extensions/claude-code-plugin",
+      "description": "Memory that decays, strengthens with use and learns from errors. Session-start context, per-prompt pinned rules, compaction snapshot and resume, session-end sleep.",
+      "version": "0.6.0",
+      "homepage": "https://github.com/kitfunso/hippo-memory",
+      "license": "MIT"
+    }
+  ]
+}

@@ -26,6 +26,8 @@ import { textOverlap, markRetrieved } from './search.js';
 import { compareEntryIdentity } from './compare.js';
 import { openHippoDb, closeHippoDb, type DatabaseSyncLike } from './db.js';
 import { rejectionDigest, findRejectedValue } from './rejection.js';
+import { countExpiredDormant, purgeExpiredDormant, type DormantMove } from './dormant.js';
+import { detectSecret } from './secret-detect.js';
 import { loadPhysicsState, savePhysicsState, refreshParticleProperties } from './physics-state.js';
 import { simulate, type ForceContext } from './physics.js';
 import { loadConfig } from './config.js';
@@ -35,6 +37,7 @@ import { resolveTenantId } from './tenant.js';
 import { rescueSet, rankNonPinnedByTenant, validateWeights, type MvRankInfo } from './memory-value.js';
 import { MEMORY_VALUE_WEIGHTS, SOURCE_ARTIFACT_SHA256 } from './memory-value-weights.js';
 import { appendAuditEvent } from './audit.js';
+import { migrateDefaultHalfLife } from './half-life-migration.js';
 
 const DECAY_THRESHOLD = 0.05;
 const MERGE_OVERLAP_THRESHOLD = 0.35;  // Jaccard similarity for "related"
@@ -74,6 +77,12 @@ const CONFLICT_STOPWORDS = new Set([
 export interface ConsolidationResult {
   decayed: number;
   removed: number;
+  /** Faded memories moved to the dormant store instead of deleted (config
+   *  `dormant.enabled`; src/dormant.ts). Always 0 when that is off. */
+  dormant: number;
+  /** Dormant memories deleted for good this sleep because they outlived
+   *  `dormant.retentionDays` without a restore. */
+  dormantExpired: number;
   merged: number;
   semanticCreated: number;
   replayed: number;
@@ -113,6 +122,36 @@ function isJsonString(value: JsonValue): value is string {
   return typeof value === 'string';
 }
 
+/** Tables whose rows keep a first-class object's backing memory in `memory_id` (ON DELETE SET NULL). */
+const MEMORY_BACKED_TABLES = ['predictions', 'decisions', 'processes', 'policies', 'skills', 'project_briefs', 'customer_notes'] as const;
+
+/**
+ * Ids of memories that back a first-class object (a decision, prediction,
+ * process, policy, skill, project brief or customer note). Sleep never
+ * retires these: deleting or moving one to dormant storage fires the
+ * object's ON DELETE SET NULL and a restore cannot repair the link. Their
+ * lifecycle belongs to the object. A table missing from an older schema is
+ * skipped.
+ */
+function memoriesBackingObjects(hippoRoot: string): Set<string> {
+  const ids = new Set<string>();
+  const db = openHippoDb(hippoRoot);
+  try {
+    for (const table of MEMORY_BACKED_TABLES) {
+      try {
+        // SAFETY: SELECT of one nullable TEXT column, filtered to non-null.
+        const rows = db.prepare(`SELECT memory_id FROM ${table} WHERE memory_id IS NOT NULL`).all() as { memory_id: string }[];
+        for (const r of rows) ids.add(r.memory_id);
+      } catch {
+        // Table not present in this schema version.
+      }
+    }
+  } finally {
+    closeHippoDb(db);
+  }
+  return ids;
+}
+
 /**
  * Run a full consolidation pass.
  */
@@ -126,6 +165,8 @@ export async function consolidate(
   const result: ConsolidationResult = {
     decayed: 0,
     removed: 0,
+    dormant: 0,
+    dormantExpired: 0,
     merged: 0,
     semanticCreated: 0,
     replayed: 0,
@@ -145,11 +186,21 @@ export async function consolidate(
     physicsSimulated: 0,
   };
 
+  // A changed default half-life moves memories still on the old base first,
+  // so this pass decays them at the new one (src/half-life-migration.ts).
+  const halfLife = migrateDefaultHalfLife(hippoRoot, loadConfig(hippoRoot).defaultHalfLifeDays, { dryRun });
+  if (halfLife.rescaled > 0) {
+    result.details.push(`  ⏳ ${dryRun ? 'would move' : 'moved'} ${halfLife.rescaled} memories from the ${halfLife.from}-day to the ${halfLife.to}-day half-life`);
+  }
+
   // L9: host-wide by design. Consolidation runs across all tenants in one
   // pass — per-tenant filtering would create N consolidation runs per host
   // with no cross-tenant dedup. The api.sleep audit row tags this with the
   // admin synthetic actor; see api.ts:2050 for the rationale.
   const all = loadAllEntries(hippoRoot);
+  const backingObjects = memoriesBackingObjects(hippoRoot);
+  // Retirable: auto-deletable (never pinned, never raw) and not backing a first-class object.
+  const retirable = (entry: MemoryEntry): boolean => canAutoDelete(entry) && !backingObjects.has(entry.id);
   const snapshot = new Map(structuredClone(all).map((e) => [e.id, e]));
 
   // Load decay options from config + session context
@@ -164,6 +215,29 @@ export async function consolidate(
   // Collect all writes/deletes and batch them at the end
   const pendingWrites: MemoryEntry[] = [];
   const pendingDeletes: string[] = [];
+  const pendingDormant: DormantMove[] = [];
+
+  // A faded, unpinned, unrescued memory leaves active memory one of three
+  // ways. A raw receipt is append-only: trg_memories_raw_append_only aborts
+  // a DELETE, and with it this whole cycle's batch and every later sleep,
+  // so it stays where it is (stored strength refreshed) but sits out the
+  // rest of this cycle the way a deleted row would. Anything else goes
+  // dormant when config.dormant is on, and is deleted otherwise.
+  // Only called for rows `retirable` allows (never pinned, never raw, never backing a first-class object).
+  const retireFaded = (entry: MemoryEntry, strength: number): void => {
+    const why = `(strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`;
+    // A faded secret is deleted, never kept dormant: keeping it would hold a
+    // credential on disk that the user reasonably expects forgetting removed.
+    if (config.dormant.enabled && !detectSecret(entry).flagged) {
+      result.dormant++;
+      result.details.push(`  💤 dormant ${entry.id} ${why}`);
+      pendingDormant.push({ entry: { ...entry, strength }, strength, reason: 'decay', dormantAt: now.toISOString() });
+      return;
+    }
+    result.removed++;
+    result.details.push(`  🗑  removed ${entry.id} ${why}`);
+    pendingDeletes.push(entry.id);
+  };
 
   // -------------------------------------------------------------------------
   // 1. Decay pass
@@ -194,7 +268,7 @@ export async function consolidate(
     for (const entry of all) {
       const strength = calculateStrength(entry, now, decayOpts);
       strengthById.set(entry.id, strength);
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
         condemned.push(entry);
       }
     }
@@ -241,7 +315,7 @@ export async function consolidate(
     // preserves flag-off's ordering semantics exactly.)
     for (const entry of all) {
       const strength = strengthById.get(entry.id)!;
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
         if (rescuedIds.has(entry.id)) {
           // Rescued (D1): standard survivor stored-strength refresh (P2-1).
           // Confidence is left alone here: it is an epistemic tier, not a
@@ -259,9 +333,7 @@ export async function consolidate(
             : ' - rescued';
           result.details.push(`  🛟 ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})${rankNote}`);
         } else {
-          result.removed++;
-          result.details.push(`  🗑  removed ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`);
-          pendingDeletes.push(entry.id);
+          retireFaded(entry, strength);
         }
       } else {
         const updated = { ...entry, strength };
@@ -276,10 +348,8 @@ export async function consolidate(
     for (const entry of all) {
       const strength = calculateStrength(entry, now, decayOpts);
 
-      if (canAutoDelete(entry) && strength < DECAY_THRESHOLD) {
-        result.removed++;
-        result.details.push(`  🗑  removed ${entry.id} (strength ${strength.toFixed(4)} < ${DECAY_THRESHOLD})`);
-        pendingDeletes.push(entry.id);
+      if (retirable(entry) && strength < DECAY_THRESHOLD) {
+        retireFaded(entry, strength);
       } else {
         // Only strength is a cached computation; confidence stays as stored.
         const updated = { ...entry, strength };
@@ -832,13 +902,32 @@ export async function consolidate(
 
   result.removedIds = pendingDeletes;
   // One transaction; the snapshot keeps what the DAG passes and other writers changed while sleep ran.
+  // Dormant moves ride in the same transaction (src/dormant.ts).
   if (!dryRun) {
-    const deleted = new Set(batchWriteAndDelete(hippoRoot, pendingWrites, pendingDeletes, { snapshot }));
-    for (const id of pendingDeletes) {
-      if (!deleted.has(id)) result.details.push(`  ↩  ${id} not removed: pinned or already gone before sleep saved`);
+    const left = new Set(batchWriteAndDelete(hippoRoot, pendingWrites, pendingDeletes, { snapshot, dormant: pendingDormant }));
+    for (const id of [...pendingDeletes, ...pendingDormant.map((m) => m.entry.id)]) {
+      if (!left.has(id)) result.details.push(`  ↩  ${id} not removed: pinned or already gone before sleep saved`);
     }
-    result.removedIds = pendingDeletes.filter((id) => deleted.has(id));
+    result.removedIds = pendingDeletes.filter((id) => left.has(id));
     result.removed = result.removedIds.length;
+    result.dormant = pendingDormant.filter((m) => left.has(m.entry.id)).length;
+  }
+
+  // Dormant retention: a dormant memory nobody restored within
+  // dormant.retentionDays is deleted for good (0 keeps them forever). Runs
+  // even when dormant.enabled is off, so turning it off still ages out what
+  // earlier sleeps kept.
+  if (config.dormant.retentionDays > 0) {
+    const cutoff = new Date(now.getTime() - config.dormant.retentionDays * 24 * 60 * 60 * 1000).toISOString();
+    const db = openHippoDb(hippoRoot);
+    try {
+      result.dormantExpired = dryRun ? countExpiredDormant(db, cutoff) : purgeExpiredDormant(db, cutoff);
+    } finally {
+      closeHippoDb(db);
+    }
+    if (result.dormantExpired > 0) {
+      result.details.push(`  ⌛ ${dryRun ? 'would expire' : 'expired'} ${result.dormantExpired} dormant memor${result.dormantExpired === 1 ? 'y' : 'ies'} older than ${config.dormant.retentionDays} days`);
+    }
   }
 
   // -------------------------------------------------------------------------

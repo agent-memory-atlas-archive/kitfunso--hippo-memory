@@ -28,6 +28,9 @@ import {
 } from '../src/store.js';
 import { search, markRetrieved, estimateTokens } from '../src/search.js';
 
+/** These tests pin decay arithmetic to the pre-1.46 7-day base; the default itself is tested in half-life-migration and schema-fit. */
+const createMemory7 = (content: string, options: Parameters<typeof createMemory>[1] = {}) => createMemory(content, { baseHalfLifeDays: 7, ...options });
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -45,7 +48,7 @@ function seed(
   content: string,
   opts: Parameters<typeof createMemory>[1] = {}
 ): MemoryEntry {
-  const entry = createMemory(content, opts);
+  const entry = createMemory7(content, opts);
   // Use label as a deterministic ID fragment so tests are readable
   const withLabel: MemoryEntry = { ...entry, id: `bm_${label}` };
   writeEntry(tmpDir, withLabel);
@@ -568,7 +571,7 @@ describe('Retrieval quality benchmark', () => {
 describe('Decay mechanics', () => {
   it('strength drops below 0.25 after 14 days without retrieval (default half-life=7d)', () => {
     initStore(tmpDir); // already init, no-op if exists
-    const entry = createMemory('temporary note');
+    const entry = createMemory7('temporary note');
     const fourteenDaysAgo = daysAgo(14);
     const aged: MemoryEntry = { ...entry, last_retrieved: fourteenDaysAgo };
 
@@ -581,8 +584,8 @@ describe('Decay mechanics', () => {
     const now = new Date();
     const sevenDaysAgo = daysAgo(7);
 
-    const errorMem = createMemory('cache failure lesson', { tags: ['error'] });
-    const neutralMem = createMemory('cache failure lesson', { tags: [] });
+    const errorMem = createMemory7('cache failure lesson', { tags: ['error'] });
+    const neutralMem = createMemory7('cache failure lesson', { tags: [] });
 
     const agedError: MemoryEntry = { ...errorMem, last_retrieved: sevenDaysAgo };
     const agedNeutral: MemoryEntry = { ...neutralMem, last_retrieved: sevenDaysAgo };
@@ -601,7 +604,7 @@ describe('Retrieval strengthening', () => {
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    let recalled = createMemory('recalled memory about deployment');
+    let recalled = createMemory7('recalled memory about deployment');
     // Write to store so markRetrieved can use
     recalled = { ...recalled, last_retrieved: sevenDaysAgo.toISOString() };
     const originalHalfLife = recalled.half_life_days;
@@ -637,8 +640,8 @@ describe('Retrieval strengthening', () => {
 
 describe('Error priority', () => {
   it('error-tagged memory has 2x the half_life of identical neutral memory', () => {
-    const errorMem = createMemory('same content here', { tags: ['error'] });
-    const neutralMem = createMemory('same content here', { tags: [] });
+    const errorMem = createMemory7('same content here', { tags: ['error'] });
+    const neutralMem = createMemory7('same content here', { tags: [] });
     // error tag -> half_life * 2
     expect(errorMem.half_life_days).toBe(neutralMem.half_life_days * 2);
   });
@@ -647,8 +650,8 @@ describe('Error priority', () => {
     const sevenDaysAgo = daysAgo(7);
     const now = new Date();
 
-    const errorMem = createMemory('rule violation', { tags: ['error'] });
-    const neutralMem = createMemory('rule violation', { tags: [] });
+    const errorMem = createMemory7('rule violation', { tags: ['error'] });
+    const neutralMem = createMemory7('rule violation', { tags: [] });
 
     const agedE: MemoryEntry = { ...errorMem, last_retrieved: sevenDaysAgo };
     const agedN: MemoryEntry = { ...neutralMem, last_retrieved: sevenDaysAgo };
@@ -663,7 +666,7 @@ describe('Error priority', () => {
 
 describe('Outcome feedback', () => {
   it('--good increments outcome_positive counter', () => {
-    const entry = createMemory('some lesson');
+    const entry = createMemory7('some lesson');
     const updated = applyOutcome(entry, true);
     expect(updated.outcome_positive).toBe(1);
     expect(updated.outcome_negative).toBe(0);
@@ -672,7 +675,7 @@ describe('Outcome feedback', () => {
   });
 
   it('--bad increments outcome_negative counter', () => {
-    const entry = createMemory('some lesson');
+    const entry = createMemory7('some lesson');
     const updated = applyOutcome(entry, false);
     expect(updated.outcome_positive).toBe(0);
     expect(updated.outcome_negative).toBe(1);
@@ -692,7 +695,7 @@ describe('Token budget', () => {
 
   it('returns at least some results even with tight budget', () => {
     // With budget=50 we should still get at least 1 result (short memories)
-    const shortEntry = createMemory('Use ; not && in PowerShell.');
+    const shortEntry = createMemory7('Use ; not && in PowerShell.');
     writeEntry(tmpDir, shortEntry);
 
     const entries = loadAllEntries(tmpDir);

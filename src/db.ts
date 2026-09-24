@@ -28,7 +28,7 @@ const { DatabaseSync } = require('node:sqlite') as {
   DatabaseSync: new (path: string) => DatabaseSyncLike;
 };
 
-const CURRENT_SCHEMA_VERSION = 43;
+const CURRENT_SCHEMA_VERSION = 45;
 
 /**
  * Context passed to migrations that need to know WHERE the store lives.
@@ -2422,6 +2422,62 @@ const MIGRATIONS: Migration[] = [
 
         CREATE INDEX IF NOT EXISTS idx_session_handoffs_tenant_card
           ON session_handoffs(tenant_id, card_id, created_at DESC);
+      `);
+    },
+  },
+  {
+    version: 44,
+    up: (db) => {
+      // Dormant memories (src/dormant.ts): with `dormant.enabled`, the sleep
+      // decay pass moves a faded memory here instead of deleting it. The row
+      // leaves `memories` in the same transaction, so recall, context and
+      // every sleep pass stop seeing it; entry_json is the full MemoryEntry
+      // snapshot `hippo dormant restore` writes back. No FK to memories (the
+      // memories row is gone by design). Additive only, v41 precedent: no
+      // min_compatible_binary bump. An older binary ignores the table and
+      // keeps deleting faded memories as it always did.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dormant_memories (
+          tenant_id  TEXT NOT NULL DEFAULT 'default',
+          id         TEXT NOT NULL,
+          content    TEXT NOT NULL,
+          entry_json TEXT NOT NULL,
+          reason     TEXT NOT NULL,
+          strength   REAL NOT NULL,
+          dormant_at TEXT NOT NULL,
+          PRIMARY KEY (tenant_id, id)
+        ) WITHOUT ROWID;
+        CREATE INDEX IF NOT EXISTS idx_dormant_memories_tenant_time
+          ON dormant_memories(tenant_id, dormant_at DESC);
+      `);
+    },
+  },
+  {
+    version: 45,
+    up: (db) => {
+      // Token ledger (src/token-ledger.ts, ROADMAP TE0): one row per block of
+      // memory text hippo hands an agent (hook, CLI, MCP, HTTP). `event` is
+      // 'inject' (sent), 'skip' (unchanged since the session's last inject,
+      // not sent) or 'reset' (compaction dropped earlier injections, so the
+      // next one must be sent). block_hash lets the per-prompt hook skip an
+      // unchanged block. Rows older than the retention window are pruned on
+      // write. Additive only: no min_compatible_binary bump.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS token_ledger (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts         TEXT NOT NULL,
+          tenant_id  TEXT NOT NULL DEFAULT 'default',
+          session_id TEXT,
+          surface    TEXT NOT NULL,
+          event      TEXT NOT NULL,
+          items      INTEGER NOT NULL DEFAULT 0,
+          tokens     INTEGER NOT NULL DEFAULT 0,
+          block_hash TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_token_ledger_session
+          ON token_ledger(tenant_id, session_id, surface, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_token_ledger_ts
+          ON token_ledger(ts);
       `);
     },
   },

@@ -128,3 +128,19 @@ in `tests/emotional-multipliers-j5.test.ts`. Skipping the reset hook
 makes test order significant (the cache holds a stale read from a
 previous test); skipping the `afterEach` reset leaks state into the
 NEXT test file that doesn't touch the env var.
+
+## Publishing, provenance and the stable channel
+
+**Publishing.** Push a `v<x.y.z>` tag on the squash commit on master. `.github/workflows/npm-publish.yml` checks that the tag matches `package.json`, runs the `prepublishOnly` gate and publishes with `--provenance`. Do not publish from a laptop: a laptop publish has no provenance. The one-time npm setup is described at the top of the workflow.
+
+**Two channels.**
+- `latest`: every release. This is the default `npm install hippo-memory`.
+- `stable`: a release that has been on `latest` for at least 7 days with no fix release on top of it. Companies pin this with `npm install hippo-memory@stable`.
+
+To promote a release to `stable`:
+
+    npm dist-tag add hippo-memory@<x.y.z> stable
+
+A security fix may go to `stable` straight away. Record each promotion in the changelog entry of the release it promotes.
+
+**Why.** An outside review (2026-09-24) counted 170 versions in six months, 38 in the last 90 days, and none with provenance. For a developer, frequent releases look like momentum. For a company's security team they look like risk. Without a verified build and a slower channel, hippo cannot pass their review.

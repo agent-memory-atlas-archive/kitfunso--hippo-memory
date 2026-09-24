@@ -3,6 +3,7 @@
  * Zero external dependencies when embeddings are not available.
  */
 
+import { estimateTokens } from './token-ledger.js';
 import { MemoryEntry, calculateStrength } from './memory.js';
 import { isOutcomeFastAblated, isRecallBoostAblated, isRecencyAblated, evalRecencyScaleDays, evalNow } from './ablation.js';
 import { extractPathTags, pathBoostMultiplier } from './path-context.js';
@@ -102,12 +103,9 @@ function bm25Score(corpus: BM25Corpus, docIdx: number, queryTerms: string[]): nu
 // Token budget estimation
 // ---------------------------------------------------------------------------
 
-/**
- * Rough token estimate: characters / 4 (works well for English text).
- */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
+// Rough token estimate (characters / 4). Defined once in token-ledger.ts and
+// re-exported here, where callers have always imported it from.
+export { estimateTokens };
 
 // ---------------------------------------------------------------------------
 // Recency boost

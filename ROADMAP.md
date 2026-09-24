@@ -909,6 +909,9 @@ Things hippo will not do. Each one is a deliberate position derived from the pro
 | 11 | An in-process agent loop | Runtimes (Claude Code, Codex, Grok Build, Muse Code) are external processes hippo informs and never starts. Hippo stores state and hands it off; it never runs the agent loop itself | Part VII, Track W boundary, W0 |
 | 12 | A shared transcript as the handoff between agents | A dumped context window blows the token budget and loses the interface-artifact model. The handoff is a structured envelope: summary, next action, constraints, evidence, outcome | Part VII, Track W boundary, W0 |
 | 13 | Starting or supervising agent processes | Hippo informs runtimes and never starts, stops or supervises one, not even behind a human gate. Runtimes claim cards themselves (pull mode). A process hippo starts and feeds with stored context is a path from stored memory to actuation | Part VII, decision 2026-09-20 (`docs/decisions/2026-09-20-no-agent-spawn.md`) |
+| 14 | Hosting, mirroring or searching source code as a product | Code hosts and code search (GitHub, GitLab, Sourcegraph) stay canonical. Hippo reads history and metadata to learn lessons; it stores lessons with provenance, not a copy of the codebase | Part VIII, Track EI |
+| 15 | One model trained across customers' data | Per-company learning stays per tenant and deletable (right to be forgotten must reach the scorer). No pooled cross-customer model | Part VIII, Track EI |
+| 16 | Publishing a token or cost saving that was not measured | A savings figure must come from the paired, cache-accounted task eval (TE5) with its harness published. Raw token counts, full-history strawmen and unmeasured multipliers stay out of the README, decks and grant reports | Part IX, Track TE |
 
 ## Deferred / speculative
 
@@ -1271,3 +1274,531 @@ W0 and W1 first: small, close the last E2 item, no non-goal tension. W2 next. W3
 - **Muse** = Muse Code (Meta), **Grok** = Grok Build (xAI); both real terminal agents with worktree isolation, neither integrated with hippo today.
 
 **Discipline note (same as Part V):** the proposal was LLM-authored and carried three attribution errors, one fabricated product and one overstated paper claim; every item above that cites a paper or a product was re-read at source before it landed here.
+
+---
+
+## Part VIII - 2026-09-23 update: enterprise integration (the corporate memory layer)
+
+Triggered by a founder question: companies keep code in private hosts that are often not github.com, so how does hippo plug into their DevOps, and how does one memory layer tailor itself to each company? Research record: `docs/plans/2026-09-23-enterprise-integration-research.md` (market and platform landscape, literature review, source audit of v1.44.0). **Reviewed 2026-09-24** by an independent pass after merging 1.45.0: factual corrections and item merges below are marked "(review 2026-09-24)".
+
+**Answer (source-verified where it cites hippo):** most companies still use Git, hosted on GitHub Enterprise (Cloud, `*.ghe.com` residency, or self-hosted Server), GitLab (about two thirds of GitLab revenue is self-managed), Bitbucket Data Center or Azure DevOps. Hippo's git learning already works on all of them because it reads the local clone (`src/autolearn.ts:189`). What it cannot reach is the metadata around code (reviews, tickets, incidents, CI failures, chat decisions), and an enterprise will not adopt any memory layer without four things: deployment where its code lives, SSO/SCIM and machine identity, **permission-aware recall**, and an audit trail. Hippo has the audit trail and tenant isolation; the rest is this track.
+
+**Shape:** one core, many source adapters, one company profile, every agent over MCP. The core and the memory envelope do not change; adapters normalize each source into the envelope plus an ACL, the profile holds what differs per company, and deployment matches the company's security posture.
+
+### What hippo already has (read from source, v1.45.0 + PR #227)
+
+| Existing | Where | What it becomes |
+|---|---|---|
+| Host-agnostic git learning (`git log` on local clones), migration-commit invalidation | `src/autolearn.ts`, `src/invalidation.ts` | Git learning v2 (EI1) |
+| Slack and GitHub webhook connectors: HMAC, idempotency, DLQ, backfill, deletion, tenant routing | `src/connectors/` | The pattern the connector kit (EI0) generalizes |
+| Tenants, API keys, roles, audit log, non-loopback gate | `src/server.ts`, `src/auth.ts`, `src/audit.ts` | Base for identity (EI11) and permissions (EI2) |
+| `<source>:private:` default-deny scopes | `src/recall-scope.ts:26` | Starting point for real ACLs (EI2) |
+| Dormant memories on by default, restore labels (`dormant_restore`) | `src/dormant.ts`, PR #227 | Per-tenant learned lifecycle input (EI9) |
+| MCP server (13 tools); a real JSON hook for Claude Code, plugins for OpenCode and OpenClaw, a wrapper for Codex, instruction-file patches for Cursor and Pi | `src/mcp/server.ts`, `src/hooks.ts:1074` | Unchanged delivery surface; registry listing (EI11, CD10) |
+
+### Track EI - Enterprise integration
+
+#### EI0. Connector kit [next, 2w]
+One `Connector` interface plus shared tables for event log, dead-letter queue, cursors and tenant routing, with one CLI (`hippo connector add|list|dlq|backfill`). Port Slack and GitHub onto it with no behaviour change. Host-qualified `artifact_ref` (`github://ghe.corp.example/org/repo/pull/42`). **Success:** Slack and GitHub suites pass unchanged on the kit; a new source is an adapter of a few hundred lines, down from 1,000-1,400.
+
+#### EI1. Git learning v2 [next, 2-3w]
+Read subject, body, trailers (`Fixes`, `Co-authored-by`), ticket keys (`ABC-123`), changed paths and author; skip bot and merge noise; classify with the diff, not the subject alone; link fixes and reverts to the change that introduced the bug (SZZ-lite, `git blame` on the fixed lines); store the commit as `artifact_ref`. (The CLI ignoring `config.gitLearnPatterns` was fixed in PR #227.) Still local-clone based, so it works on every Git host and air-gapped. **Success:** pre-registered eval on the lesson-precision fixture: v2 lessons judged useful at a higher rate than v1 keyword lessons, and every lesson traceable to a commit.
+
+#### EI2. Permission-aware recall [critical, next, 3-4w]
+Every memory carries the ACL of its source (repo visibility and teams, channel membership, Jira project). Callers carry an identity; recall filters by ACL as a hard predicate before ranking; memories derived from several sources inherit the most restrictive ACL; ACLs re-sync on webhook events and on a schedule. **Fixed:** 1.45.0 stopped member keys minting keys or revoking other keys; PR #227 stopped a member key unlocking a private or quarantined scope by naming it, and stopped MCP over HTTP running every caller as admin; the per-scope grants that let a member read a private scope it is entitled to are the remaining EI2 work. **Success:** negative tests that a user without source access recalls nothing from that source, including through summaries and the graph.
+
+#### EI3. GitHub, enterprise grade [next, 2w]
+GitHub App auth (installation tokens) instead of a PAT; configurable API base for GHES and `*.ghe.com` (backfill hardcodes `api.github.com` today, `src/connectors/github/backfill.ts:40`); pull request reviews, reverts and CODEOWNERS as lesson sources; review threads that ended in a code change become convention memories.
+
+#### EI4. GitLab (SaaS, Dedicated, self-managed) [planned, 2w after EI0]
+Group service accounts or OAuth, group webhooks, system hooks on self-managed; merge requests, discussions, pipelines.
+
+#### EI5. Jira and Confluence [planned, 2-3w after EI0; supersedes the Jira half of E1.5]
+Forge or OAuth 3LO for Cloud (Connect apps froze for updates on 31 Mar 2026 and reach end of support on 31 Jan 2027; review 2026-09-24), PATs for Data Center through 2029. Consuming the Rovo MCP server is the default; build a crawler only where it falls short. Ticket keys join tickets to commits (EI1). Optionally consume the Atlassian Rovo MCP server instead of building a crawler.
+
+#### EI6. Azure DevOps [planned, 2w after EI0]
+Repos, Boards and Pipelines through service hooks; Entra ID service principals or managed identity preferred. Global PATs stop working Dec 1, 2026; organisation-scoped PATs still work (review 2026-09-24).
+
+#### EI7. Bitbucket, Teams, incidents [on demand: build when a design partner needs it]
+Bitbucket Cloud and Data Center (DC is exempt from Atlassian's 2029 end of life); Microsoft Teams through Graph; PagerDuty and Jira Service Management postmortems as incident memories. Slack: since May 2025 (new apps) and Sept 2025 (existing installs), non-Marketplace distributed apps get 1 history request a minute; customer-internal custom apps are exempt, so each customer installs hippo's Slack app as their own internal app (review 2026-09-24).
+
+#### EI8. Company profile [planned]; onboarding hindcast [research]
+A per-company profile: sources and repos, ticket-key pattern, commit conventions, ownership from CODEOWNERS or a Backstage catalog, retention and legal hold, sensitivity rules, `.hippoignore`, model endpoint. Onboarding replays a sample of the company's own past issues, compares an agent's attempt with the merged change, and stores the differences as evidence-backed convention memories (Learning to Commit, arXiv:2603.26664). Generated-but-unverified context hurts (arXiv:2602.11988: generated context files about -3% success and +20% cost, developer-written about +4%), so hindcast memories stay probationary until outcomes confirm them. The hindcast is research, not planned (review 2026-09-24): it runs paid agent sessions per customer and reuses TE5's `make-tasks.mjs` and `ab-run.mjs`.
+
+#### EI9. Per-tenant learned lifecycle [research, gated on LC3]
+LC2/LC3 value scorers trained per tenant on that company's outcomes and `dormant_restore` labels, deletable with the tenant's data (non-goal 15).
+
+#### EI10. Deployment tiers [planned, 6-10w; absorbs A6 packaging, A4 encryption and CD8 reliability]
+Single-tenant or customer-VPC (Helm, Terraform, Postgres per A6), fully air-gapped (local embeddings, customer model endpoint, no telemetry), and an outbound-only relay so self-hosted Git servers need no inbound port. TLS, per-key quotas, encryption at rest (A4), plus the central server's backup, restore, high availability and upgrade runbooks (was CD8).
+
+#### EI11. Enterprise identity and governance [planned]
+SAML/OIDC SSO and SCIM (the A5 stubs were deleted in 1.45.0, so this is new work), remote MCP over HTTP with OAuth 2.1 and an MCP-registry entry (was CD2), roles from IdP groups, OIDC workload identity for machines, SIEM export of the audit log, listing in internal MCP registries (Copilot "registry only" policies block unlisted servers).
+
+#### EI12. Tenant evaluation [merged into TE5: the same runner on a design partner's own history]
+Replay a tenant's own history in time order with memory on and off at matched token budgets and several seeds; report resolve rate, tokens per resolved task, review-acceptance and revert rate, and stale-retrieval rate, with verbatim storage as a baseline. This is the number a buyer and an investor both ask for, and it keeps every later claim honest (arXiv:2606.15017 shows memory gains often vanish at matched budgets; note it studies web agents on WebArena, not coding agents). Shares its harness and cost accounting with TE5 (Part IX).
+
+#### EI13. Organisational-memory benchmark [research]
+A public benchmark whose tasks need knowledge that exists only outside the code (review threads, incidents, ticket decisions). No 2025-2026 memory benchmark for coding agents does this (SWE-Bench-CL, SWE Context Bench, DreamBench-SWE all use code or prior trajectories). Publishable; the natural home for the Part III "memory-system eval methodology" item.
+
+#### EI14. Compliance [moved to the Company section in Part X; funding-gated]
+SOC 2 Type II first, then ISO 27001 and ISO 42001; DPA, subprocessor list, SIG/CAIQ answers; FedRAMP only through the self-hosted SKU or a partner.
+
+### Deferred in this track
+Gerrit and Perforce (automotive, games) through Git bridges or partners; observability alerts as memories; a "who knows what" directory built from review and outcome evidence rather than `git blame` (arXiv:2606.20882).
+
+### What not to build
+A code host, a code mirror or a code search engine (non-goal 14); a crawler where the vendor ships an MCP server or events API; long-lived personal tokens as the default auth; one model pooled across customers (non-goal 15); write-back into source systems (non-goal 8).
+
+### Honest forecast
+
+| Goal | Confidence | Why |
+|---|---|---|
+| Git history on any host | High | Already host-agnostic; v2 is reading more of the same data |
+| GitHub, GitLab, Jira, Azure DevOps coverage | High | Well-documented APIs; the kit removes duplication |
+| Permission-aware recall that survives an enterprise security review | Medium | Derived memories (summaries, graph) are the hard part; research literature has no complete answer |
+| Air-gapped and VPC deployment | Medium | Local-first core helps; Postgres and packaging are new work |
+| Measured value per company | Medium | Depends on EI12 and real design partners |
+
+### Sequencing
+Superseded by the single queue at the end of Part X (review 2026-09-24): each Part's own "0-3 months" added up to more than a quarter. Order within this track: EI2 first; EI0 and EI1 when a third source or a design partner needs them; EI3-EI6 per design partner; EI10 and EI11 with the first paid pilot; EI7 on demand; EI9 and EI13 as research.
+
+**Discipline note:** market figures in the research record came through search summaries (the sandbox blocked most direct fetches) and 2026 arXiv items are preprints; re-check any figure at its source before it goes on a slide or into a claim.
+
+---
+
+## Part IX - 2026-09-23 update: token efficiency and the evals that prove it
+
+Triggered by a founder question: can hippo save organisations tokens and make answers smarter, and how would we prove it? Research record: `docs/plans/2026-09-23-token-savings-eval-research.md` (source audit of v1.44.0 plus PR #227, literature and benchmark review).
+
+**Answer (source-verified where it cites hippo):** not provable today, because hippo records nothing about the tokens it spends. It estimated tokens as `chars / 4` (now defined once in `src/token-ledger.ts`, re-exported from `src/search.ts`), printed the count and stored none of it. It also adds tokens of its own: the Claude Code `UserPromptSubmit` hook re-injects the pinned block (cap 1,500 tokens) on every prompt, whether or not it changed, and the rendered lines carry a live strength percentage and dates, so repeated copies are rarely byte-identical for a prompt cache. The literature supports the claim in a narrower form: memory systems report 85-99% fewer context tokens than full-history baselines at similar accuracy (Mem0, Zep, LightMem), focused context beats long context (Lost in the Middle, Context Rot, NoLiMa), and experience reuse cuts steps on later coding tasks (ReasoningBank, SWE-ContextBench). For coding agents most spend is input and most input is file reads, so the saving that matters is work the agent no longer does, measured per task in dollars with cache accounting.
+
+**Rules for this track:**
+1. The headline metric is **dollars per resolved task**, priced over four buckets (uncached input, cache write, cache read, output), paired against a no-memory arm with bootstrap CIs. Raw token counts are supporting data, never the claim.
+2. Hippo's own overhead is measured and reported next to any saving (token ROI is net).
+3. No token or cost figure goes into the README, a deck or a grant report until TE5 measures it (non-goal 16). This covers the existing A9 "5x compute cost reduction" and Track L "5x-cost lever" lines, which are unmeasured.
+
+### What hippo already has (read from source)
+
+| Existing | Where | Status |
+|---|---|---|
+| Token budgets on every surface (recall 4000, context 1500, MCP recall 4000, MCP context 3000, pinned inject 1500) | `src/cli.ts`, `src/api.ts`, `src/config.ts` | Works; the MCP descriptions advertised 1500 for both until PR #227 |
+| Greedy score-ordered packing, dedup, MMR, `minResults` | `src/search.ts:694-785` | Fills the budget; never stops early on weak results |
+| Lifecycle stress eval with a per-condition `tokens` field | `scripts/lifecycle-stress/run.mjs` | The only token-reporting harness; headline NULL (Part III) |
+| Structured handoff and snapshot caps instead of transcripts | `src/handoff.ts`, `src/capture.ts:1026` | Bounded by design (non-goal 12) |
+
+### Track TE - Token efficiency
+
+#### TE0. Token ledger [shipped first slice, PR #227]
+**Status:** `token_ledger` (schema v45) records the hook, CLI context and recall, MCP recall and context, and HTTP recall, context and assemble; `hippo tokens` reports per surface; one `estimateTokens`; MCP descriptions fixed. Remaining: optional exact tokenizer or per-model calibration, continuity blocks inside the `hippo context` budget, an HTTP report endpoint and the A7 rollup, and confirming how each host keeps `additionalContext`.
+Record every injection: surface (hook, CLI, MCP, HTTP), items, estimated tokens, a hash of the rendered block, session id. One `estimateTokens` everywhere (done), optional exact tokenizer or per-model calibration, continuity blocks counted inside the budget, MCP descriptions fixed to the real defaults. `hippo stats tokens` and an HTTP rollup feed A7 (per-tenant usage). Also confirms how each host keeps `additionalContext` in its transcript. **Success:** a week of dogfood sessions produces a per-session injection report.
+
+#### TE1. Cache-stable rendering [shipped for the hook, PR #227]
+**Status:** the hook block drops the live strength percentage and is byte-identical while its memories do not change. Remaining: moving pinned memories into the session-start prefix, and the same treatment for MCP and HTTP text.
+Injected blocks render byte-identically for the same memories: no per-call strength percentage (bucket or drop it), stable date text, deterministic tie order. Pinned memories inject at session start where they can sit in the cached prefix. **Success:** TE4 shows identical hashes for unchanged memory across turns.
+
+#### TE2. Inject only on change [shipped, PR #227; delta-only injection remaining]
+**Status:** an unchanged hook block is skipped when the payload carries a session id, resent every 10 skips (`pinnedInject.refreshTurns`) and after compaction, and logged as tokens saved. Sending only the changed items is not built yet; a changed block is resent whole.
+The per-prompt hook compares the block hash with the last one it sent in this session and sends nothing (or a one-line marker) when unchanged, and only the new or changed items otherwise. **Success:** TE4 shows most per-session hook tokens removed, with no change in which memories the agent has seen.
+
+#### TE3. Token-at-accuracy curve [harness shipped, PR #227; real-data run pending]
+**Status:** `scripts/token-eval/budget-curve.mjs` sweeps budgets per question against recency, full context and no memory, and reports minimum tokens to reach the evidence. Verified on the bundled smoke file only (haystacks too small to discriminate); the LongMemEval_s run needs the dataset, which this container cannot download. LLMLingua-2 arm deferred.
+LongMemEval and LoCoMo at budgets 250 to 8000, reporting answer recall against injected tokens and minimum tokens to answer, against full context, naive top-k at the same budget, LLMLingua-2 compression and no memory. Deterministic, gates CI. Replaces "R@5 at a fixed 4000" as the retrieval chart, since per-haystack R@5 is saturated.
+
+#### TE4. Session replay harness [shipped, PR #227]
+**Status:** `scripts/token-eval/replay.mjs` replays traces through the real hook in every-turn and skip-unchanged arms, cache-priced; a short trace runs in CI. On three synthetic traces skip-unchanged cut hippo's own cache-priced hook text by 84-89% and unchanged blocks were byte-identical every time (`benchmarks/token-eval/README.md`). This is hippo's overhead, not a saving on the agent's work. `scripts/token-eval/claude-usage.mjs` reads Claude Code's own per-message usage records on a desktop and joins them to the ledger by session id; running it on the founder's machine is the next input.
+Replays recorded (anonymised) agent sessions through the hooks with no LLM calls and prices the injected text with a cache model (Anthropic 0.1x read, 1.25x write). Reports tokens injected per session, share re-injected unchanged, and byte-stability. **Success:** runs in CI and fails on a regression, such as a hook that doubles its output.
+
+#### TE5. Paired agent A/B on task sequences [critical; runner, analyzer and protocol shipped in PR #227; scored runs pending; budget about $1-4k]
+**Status:** protocol registered in `docs/evals/2026-09-23-te5-token-ab-preregistration.md`. `scripts/token-eval/make-tasks.mjs` drafts and verifies tasks from git history, `ab-run.mjs` runs real Claude Code sessions per arm (no-memory, hippo, random-text, stale-memory; stale-memory is another repository's memory, so it tests irrelevant rather than outdated memory, and should be renamed irrelevant-memory before the first scored run) with history truncated at the task base and the user's own settings excluded, and `ab-analyze.mjs` reports cost per resolved task with CIs. Plumbing verified with a stand-in in CI and once with real Claude Code on a toy repository. No scored run exists; the next step is a reviewed task set on two or more real repositories, run on the founder's machine.
+Sequences of related coding tasks where early tasks produce lessons later ones can use: SWE-ContextBench plus fresh issues from hippo's own history and post-cutoff public repositories. Six arms on the same model and harness: no memory, hippo as shipped, all memories dumped, naive top-k at equal budget, random repository text at equal budget, stale or irrelevant memories. 3-5 seeds, standard errors clustered by repository, four-bucket costs from provider usage fields, execution-based grading. Reports dollars per resolved task, resolve-rate delta (pass@1, pass^k), turns, file reads and repeated-error rate, and net token ROI. Pre-registered in `docs/evals`; harness and every arm's configuration published (the Mem0/Zep dispute shows vendor-run baselines are not trusted). This is the eval EI12 runs on a tenant's own history. **Success:** a published result with CIs, whatever it says.
+
+#### TE6. Adaptive budget [planned, after TE3]
+Stop packing when relevance falls off (score gap or threshold) and inject nothing when nothing is relevant; the budget becomes a ceiling, not a target. **Success:** fewer tokens on TE3 at equal recall, and no resolve-rate loss on TE5.
+
+#### TE7. Terse agent format [planned, after TE3]
+A compact rendering for agent-facing output without markdown decoration and repeated labels. **Success:** fewer tokens per fact at equal accuracy on TE3.
+
+#### TE8. Lessons that prevent exploration [research, gated on TE5; merged with the "codebase map" item in Deferred, row 6]
+Capture file maps, "where X lives", commands that worked and known dead ends from sessions that read many files, since reads are most of a coding agent's input. Wrong pointers cost more than none (SWE-ContextBench), so this ships only with a TE5 delta.
+
+#### TE9. Consolidation that compresses [research, gated on TE3 and TE5]
+Part III found merge summaries are concatenations and DAG slice 1 cost 6.3pp. Any new attempt starts from a new hypothesis and must win on both evals.
+
+#### TE10. VibeMemBench [next when released; plan fixed 2026-09-24]
+VibeMemBench (arXiv 2609.23570, Alibaba DAMO, September 2026) is the first public benchmark that toggles memory on real repository coding tasks with executable tests: 111 SWE-rebench V2 targets, 3,634 history trajectories, five solvers, 4 seeds. Mem0, SimpleMem, MemoryOS and A-MEM landed at or below memory-off in 11 of 12 pairings. Its code and data are not released yet (the DAMO-ConvAI folder says "Coming"). The protocol for hippo is fixed in `docs/evals/2026-09-24-vibemembench-plan.md` before seeing the data: a like-for-like top-1 arm, a separate hippo-native context arm, an outcome-feedback-off control, and publication whatever the result. Before release: trajectory ingestion (a trajectory becomes hippo memories with its outcome, never the gold patch) and a TE5 run on a few SWE-rebench V2 repositories as an early read.
+
+### What not to build
+LLM-in-the-loop compression at injection time (adds a model call to every prompt to save tokens on the same prompt); a token saving figure from raw token counts without cache accounting; a claim that hippo beats simpler retrieval without the naive top-k arm (the first registration measures savings against no memory only, and defers naive top-k and dump-all; a claim against them needs a second registration that runs them).
+
+### Honest forecast
+
+| Goal | Confidence | Why |
+|---|---|---|
+| Measure hippo's own overhead, and cut it | High | TE0-TE2 are plumbing; the waste is visible in source |
+| A retrieval-level tokens-at-accuracy chart | High | Existing LongMemEval and LoCoMo harnesses, new sweep |
+| A net dollar saving per resolved task on coding sequences | Medium | Literature says yes when retrieval is right and no when it is wrong; hippo's own lifecycle evals so far are NULL or negative |
+| "Smarter" (higher resolve rate) with CIs excluding zero | Low-Medium | Mem0's own table has full context ahead on accuracy; needs TE5 and likely TE8 |
+
+### Sequencing
+TE0, TE1, TE2, TE4 first (measure and remove hippo's own cost, about 0-1 month); TE3 and TE5 next (the proof, 1-3 months, shared with EI12); TE6 and TE7 after TE3; TE8 and TE9 as research gated on TE5.
+
+**Discipline note:** paper figures in the research record were checked through abstracts and secondary write-ups (the sandbox blocked most direct fetches) and 2026 items are preprints; the 40-turn hook cost is an upper bound at the cap, not a measurement. TE0 replaces it with real numbers.
+
+---
+
+## Part X - 2026-09-24 update: selling into companies that roll out GitHub Copilot
+
+Triggered by a founder question: many companies hand AI coding to developers through GitHub Copilot Business or Enterprise in VS Code, so how does hippo reach them, and should it be invisible infrastructure or a tool every developer sees?
+
+**Answer:** mostly invisible infrastructure with a small visible trust layer. The platform or AI-enablement team approves hippo once and switches it on for everyone; developers change nothing. The buyer is that team, not individual developers. Package hippo the way Copilot admins already approve add-ons (an agent plugin plus an approved MCP server), not as a classic VS Code extension first.
+
+### What changed in the market (research 2026-09-24; checked through search excerpts of GitHub, VS Code and vendor pages because the sandbox blocked direct fetches, so re-check before quoting)
+
+- **MCP servers and agent plugins are the main third-party routes into Copilot.** GitHub sunset App-based Copilot Extensions on 2025-11-10 and named MCP servers as the replacement; VS Code extensions were not affected (review 2026-09-24 corrected "MCP is the only route").
+- **Admins opt in.** For Business and Enterprise seats the "MCP servers in Copilot" policy is off by default. Admins can restrict developers to a private MCP registry ("registry only", still in preview), served by GitHub's registry format (MCP Registry v0.1) or Azure API Center.
+- **Agent plugins went GA on 2026-08-12** in VS Code, Copilot CLI and the Copilot app. A plugin bundles MCP servers, hooks, skills and commands; org-wide enabling through managed settings (`enabledPlugins`) is in public preview since 2026-06-05.
+- **VS Code hooks (preview) use the same format as Claude Code**, so hippo's existing hooks may carry over with little change. Unverified: whether VS Code's `UserPromptSubmit` accepts `additionalContext`, which hippo's per-prompt hook relies on; CD1 checks it first.
+- **Built-in memory is now everywhere and free.** Copilot Memory (public preview since 2026-01-15) stores repository-scoped facts with citations, checks them against the current code, re-stores memories that are validated and used, and deletes unused ones after 28 days; it is off by default for Business and Enterprise. Claude Code, Codex and Windsurf ship their own memory. None of them is cross-tool, company-wide, long-lived, self-hosted and audited together, which is where hippo competes.
+
+**Positioning:** "Copilot Memory remembers one repository, inside Copilot. Hippo is your company's memory, for every AI tool, on your own infrastructure." (The earlier "for a month" wording was inaccurate: used memories are kept.) Complement Copilot Memory; do not compete with single-repository recall.
+
+### Track CD - Corporate distribution
+
+#### CD1. Hippo agent plugin [next, 1-2w; the Claude Code marketplace entry shipped in PR #227]
+A Hippo agent plugin bundling the MCP server, the hooks and a short skill. That's the unit an admin can approve and turn on for everyone. Ship it in the agent-plugin format for VS Code and Copilot CLI (same bundle for Claude Code where the format matches), port the existing Claude Code hooks to VS Code's hook events, and publish a listing for the default plugin marketplaces and for private company marketplaces. **Success:** an admin enables it through managed settings and every developer's Copilot agent uses hippo with no per-developer step.
+
+#### CD2. Company-hosted Hippo server with company sign-in [next, 3-4w; delivered by the EI11 OAuth and registry work and the EI10 server tier]
+A company-hosted Hippo server with sign-in that the company's identity system can use (OAuth), listed in the company's approved MCP list. Remote MCP over HTTP with OAuth 2.1 (today the HTTP server has API keys only), an entry in the MCP Registry v0.1 format so it can sit in a company's GitHub or Azure API Center registry, and the CD1 plugin pointing at it. **Success:** works under a "registry only" Copilot policy, and every recall is tied to the signed-in developer for permissions (EI2) and audit.
+
+#### CD3. Small VS Code extension [optional, later; build only on request]
+Optionally, later, a small VS Code extension. It could start Hippo automatically and show what memory was used. Only build it once someone asks. It would register hippo through VS Code's MCP server definition provider API and show a panel of the memories an answer used. Not started until a paying or piloting customer asks for it.
+
+#### CD4. Memory curation workflow [planned; built as AT4's review queue, one surface]
+Lessons move from repository to team to company only with approval. A review queue lets tech leads approve, reject (reusing `hippo reject`), merge or edit lessons; agents cite which memory they used and where it came from. Without this, one team's bad lesson reaches every agent in the company.
+
+#### CD5. Memory poisoning defence [critical, next: before any org-wide connector or sharing; builds on AT3 quarantine and A4 secret scrubbing]
+Anyone who can write a PR comment, an issue or a chat message can try to plant instructions that become a "lesson" for every agent. Treat ingested text as untrusted: provenance-weighted admission, instruction-like content detection, quarantine for lessons from outside contributors, and approval (CD4) before org-wide reach. Enterprise security reviews will ask about this first.
+
+#### CD6. Admin dashboard [planned; part of A7 observability]
+One place for the buyer: what is stored per team and repository, who used what, audit log search, dormant and banned memories, and token cost from the TE0 ledger.
+
+#### CD7. Value report for buyers [planned, needs TE5; part of A7]
+A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once a CD11 holdout or EI12 has measured it for that company, cost per session and per merged PR with and without hippo (CD12). No saving figure before it is measured (non-goal 16).
+
+#### CD11. Shadow holdout [planned, next after TE5's pilot run; design in `docs/plans/2026-09-24-buyer-kpis.md`]
+A setting, `holdout.rate`, makes a deterministic share of sessions (or of developers) skip memory injection while capture continues. Each holdout is logged, so a pilot measures hippo against a live control group on the same days, models and people.
+
+#### CD12. Agent telemetry join and pilot report [planned, with CD11]
+`hippo report --pilot` joins hippo's ledger with the agent's own cost data by session id, computed inside the customer's network:
+- **Claude Code:** its OpenTelemetry export or its organisation usage API.
+- **Copilot and Cursor:** per-developer usage.
+
+It reports, per arm with intervals:
+- cost per session and per merged PR;
+- read-token share;
+- repeat-error rate;
+- guardrails;
+- hippo's own cost.
+
+#### CD13. Failure-signature log [planned, with CD11]
+Every failure signature seen is logged with its session, including skipped and duplicate ones, so repeat-error rate can be computed per arm.
+
+#### CD8. Reliability of the central server [merged into EI10]
+Backup and restore, high availability, disaster recovery, upgrade and schema-migration runbooks, and monitoring for the company-hosted server.
+
+#### CD9. Company and commercial basics [next, founder task; see the Company section below, which also takes EI14]
+IP assigned to the company; a contributor licence agreement for outside contributions; an open-core licence decision (local single-developer hippo stays free and MIT); pricing (per seat or per organisation for the company server); a support promise; a security pack (penetration test, software bill of materials, data flow and subprocessor list).
+
+#### CD10. Agent-friendly install [first slice shipped in PR #227]
+The platform lead's first move is to ask an agent to install hippo, so install and verification must work without a human reading docs.
+- **Shipped:** `hippo doctor [--json]` (read-only health check; every warn or fail names its fix; exit 1 on failure); `npx -y hippo-memory mcp` creates the global store on first use instead of failing; `llms-install.md` (install, wire in, verify, written for agents; linked from README and `llms.txt`); `.claude-plugin/marketplace.json` (validated with `claude plugin validate`, installed from a scratch home); `server.json` and `mcpName` for the official MCP registry; the README's MCP tool list matched to the server by a test.
+- **Remaining:** publish to the MCP registry after the next npm release; VS Code and Copilot detection in `hippo init`, writing the user's MCP config (check VS Code's current config format first); a first-run "here is what I learned from your repositories, approve?" report, built as the first surface of AT4/CD4 and respecting the DF4 admission filters.
+- **Downgraded:** `hippo rollout` (an org bundle generator) waits for EI10 and EI11; it has nothing to package before them.
+
+### Sequencing
+Superseded by the 90-day queue below.
+
+### What not to build
+A second Copilot, chat UI or code assistant; anything that needs developers to change how they work; per-developer setup steps a platform team cannot automate.
+
+### Company (founder track, not engineering; review 2026-09-24)
+
+What a VC or an enterprise buyer checks that code does not answer:
+- **Design partners:** a target of three, with letters of intent, and a pilot success metric agreed up front: a TE5-style result on the partner's own history (was EI12).
+- **Activation without telemetry:** hippo promises no telemetry, so measure activation through design partners and voluntary `hippo doctor --json` reports, never a default-on beacon.
+- **Competitive map:** Mem0 (including its AWS Strands memory-provider deal), Zep, Letta, Copilot Memory, Augment's context engine and Tabnine, with what each does that hippo does not and the reverse.
+- **Security and support:** a `SECURITY.md` vulnerability-disclosure policy, a support and incident promise, and documented data export (`hippo export`) and uninstall paths. A solo founder is itself a buyer risk, so write down the continuity plan.
+- **Legal and commercial (was CD9):** IP assigned to the company, a contributor licence agreement, the open-core line (the local single-developer core stays MIT), pricing experiments, and the hosted-SaaS (A10) decision with data residency.
+- **Compliance (was EI14):** SOC 2 Type II needs an observation period and outside audit fees (tens of thousands of dollars; an estimate, not a quote), then ISO 27001 and 42001. Funding-gated.
+
+### Evidence check: does the lifecycle moat hold? (review 2026-09-24)
+
+The 1.45.0 mechanism audit (`docs/evals/2026-09-23-mechanism-audit-result.md`, E1 matrix at 20 seeds plus LongMemEval lanes, pre-registered) is the best evidence to date on the thesis these Parts lean on:
+- **The default 7-day decay loses badly on E1:** current-fact recall 29.2% against plain BM25's 77.6% (-48.4 pp).
+- **A 365-day half-life nearly matches BM25** (-2.9 pp).
+- **The lifecycle's clear win is suppressing known-bad memories:** trap persistence 25.7% against BM25's 73.9%.
+- **Outcome feedback and retrieval strengthening each help.**
+- **Physics hurts:** -22.2 pp hit@5 on LongMemEval.
+- **Sleep's merge and dedup fall below the 3 pp floor.**
+
+What follows for this roadmap:
+- **Pitch the moat as "memory that learns what is wrong and stops repeating it"**: outcome-driven suppression, learned lifecycle (Track LC). Not a fast forgetting curve.
+- **Two defaults are decisions for Keith, backed by the audit:** the default half-life (7 days vs 365 or adaptive), and physics. PR #227 turns physics off by default; that change should be accepted or reverted explicitly at merge.
+- **Dormant memories (PR #227) soften the cost of fast decay,** because faded memories stay restorable. They do not fix ranking, which is the half-life decision.
+- **The audit ran on pre-release code;** re-running it on 1.45.0 is listed in its own NOT-DONE and belongs in the queue.
+- **The paper (E1, hippo-paper) now has its registered result.** See the queue.
+
+### 90-day queue (all of Parts VII-X; review 2026-09-24)
+
+Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 calendar weeks. One queue for a solo founder, in order:
+
+1. **Weeks 0-4:**
+   - Review and merge PR #227.
+   - Decide the half-life and physics defaults on the audit evidence. **Done 2026-09-24:** 365 days, pre-registered and confirmed on fresh seeds (`docs/evals/2026-09-24-decay-default-result.md`); physics off.
+   - Re-run the mechanism audit on release code.
+   - CD1 agent plugin: first check that VS Code's hook accepts `additionalContext`.
+   - CD10 remaining: registry publish with the next release.
+   - Rename the TE5 stale-memory arm.
+   - Run a 10-task TE5 pilot on the founder's machine to price the full run.
+   - Company basics: IP assignment, `SECURITY.md`, licence decision.
+   - Trajectory ingestion for TE10 (VibeMemBench), so hippo can run as soon as the benchmark is released.
+   - Verify automatic capture on the founder's machine (`docs/dogfood/2026-09-24-verify-auto-capture.md`): hooks, a real `/compact`, a real tool failure.
+   - Fix the write path's per-write cost, which grows with store size (measured below).
+2. **Weeks 4-8:**
+   - EI2 permission-aware recall, with derived-memory negative tests.
+   - CD5 poisoning defence with AT3 quarantine.
+   - The TE5 scored run, if the pilot's cost per task fits the budget.
+   - The E1 paper write-up with the audit's results.
+3. **Weeks 8-13:**
+   - The first design partner:
+     - EI10's VPC tier and EI11's OAuth and registry entry (CD2), scoped to what that partner needs;
+     - the AT4/CD4 review queue's first surface (the first-run approve report);
+     - the TE3 LongMemEval run.
+
+**Not in these 90 days:**
+- EI3-EI7, except what a design partner needs;
+- CD3, CD6 and CD7 beyond the token ledger;
+- TE6-TE9, EI9, EI13;
+- `hippo rollout`;
+- compliance certification.
+
+### Capture and scale findings (2026-09-24, measured)
+
+**Automatic capture.** A real Claude Code `/compact` against hippo's hooks in a sandbox showed four things:
+- `hippo pre-compact` fires on compaction and saves the task snapshot.
+- Its rule-based mining stored Claude Code's own `/compact` boilerplate as a memory. Fixed: compact summaries, meta lines and slash-command lines are skipped.
+- It missed a decision phrased "we use pnpm, never npm, because…": clause bounding cuts the sentence and both halves fall under the quality floor. Still open; better bounding or opt-in LLM extraction is the fix, measured with TE5.
+- `hippo init` never added hooks a newer hippo introduced when `CLAUDE.md` already held the hippo block. Fixed.
+
+Failed-tool capture now ships through both install routes as `hippo capture-error`. It skips routine failures, stores repeats once, and marks what it stores `observed`.
+
+**Scale.** One store, 10,000 memories of about 180 characters, measured on the sandbox:
+
+| What | Result |
+|---|---|
+| Database size | about 1.2 KB per memory; about 2.2 KB including markdown mirrors |
+| Recall | 0.58 s |
+| Per-prompt hook | 0.28 s |
+| `hippo sleep --dry-run` | 76 s |
+| One write | about 50 ms at 10,000 memories, 18 ms at 2,000 |
+
+- **Size is not the constraint:** a million memories is about 1.2 GB, well within SQLite.
+- **The cost of one write grows with the store:** every write rebuilds `index.json` from the whole database (`src/store.ts`, `writeIndexMirror(hippoRoot, buildIndexFromDb(db))`).
+- **Many paths load every memory:** consolidation, and duplicate checks in capture and remember.
+- **SQLite allows one writer at a time:** fine per developer; for a company-wide server it is why A6 (Postgres) and EI10 exist.
+- **Fixes, before a design partner's store reaches that size:**
+  - make the index mirror incremental or optional;
+  - move duplicate checks to indexed queries;
+  - bound sleep's candidate set.
+
+  This is where A9 (scale to 1M+) starts.
+
+---
+
+## Part XI - 2026-09-24 update: memory for self-improving agents (Track SI)
+
+**Question.** Agents that improve themselves come in three kinds:
+- they learn lessons at run time (Reflexion, ExpeL, Dynamic Cheatsheet, Agentic Context Engineering);
+- they rewrite their own harness (RRSI, arXiv 2609.24972; Darwin Gödel Machine);
+- they update their weights.
+
+The first two need a store of attempts and lessons that remembers what worked, forgets what did not, and does not believe its own mistakes. That is hippo's design. The third is out of scope. The paper citations above are from memory, except RRSI's (read through its README and write-ups); re-check them before quoting.
+
+**What hippo already has for this.**
+- **Error capture:** `hippo capture-error` and compaction capture.
+- **Outcome feedback:** a memory marked bad stays in the top five 25.7% of the time, against 73.9% for BM25. This is on E1 only, and it is E1's best case.
+- **Trust levels and supersession.**
+- **Rejection tombstones:** `hippo reject`, so a wrong lesson stays out.
+- **Recoverable history:** the dormant store and the audit log.
+- **Budgeted recall and the token ledger.**
+- **Strategy traces:** `hippo trace record --outcome` and `hippo recall --outcome success`, a small skill library.
+
+**Earlier items this track builds on.** Part IV's LC track learns from outcomes:
+- LC1, retrieval traces: shipped;
+- LC2, a learned keep/forget scorer: shipped, opt-in;
+- LC3, an outcome-trained reranker: planned, gated on about 90 days of data;
+- LC4, an RL memory controller: research.
+
+Also related: F3, reward-proportional decay (shipped), and TE8, lessons that prevent exploration. All of them make *hippo* better from outcomes, and all of them need outcome data. SI0 is what would supply that data at volume.
+
+**The gap.** Every outcome is still marked by hand, or by the agent calling `hippo outcome`. A self-improving loop needs outcomes to arrive by themselves, and needs a lesson to prove itself before it is trusted.
+
+#### SI0. Automatic outcome signals [planned, next; behind a flag until TE5 measures it]
+Attribute real results to the memories that were in context when the work was done: the session's recalled ids, from the token ledger and `last_retrieval_ids`. Signals:
+- tests that failed and then passed in the session;
+- a CI run on the commit;
+- a PR merged, or its review rejected;
+- a commit reverted later.
+
+Each signal is an `observed` outcome, logged with its evidence, and reversible. It runs only when the attribution is unambiguous (few memories in context, one task). It stays off by default, so the TE5 hippo arm stays as registered, until a second TE5 registration measures it.
+
+#### SI1. Attempt archive for harness tuning [research; after TE5]
+The RRSI experiment. Replace RRSI's edit history with hippo:
+- each proposed change is a memory holding its hypothesis, score change and verdict;
+- failed changes are marked bad;
+- the proposer recalls similar past attempts before proposing.
+
+At an equal budget, measure how often failed ideas are retried and the held-out score, against RRSI's plain log. This needs RRSI's code to be public. A plain log may be enough when the history is small; hippo has to beat it, just as it has to beat BM25.
+
+#### SI2. Lessons earn trust on held-out work [research; after SI0 and EI12]
+RRSI's rule, applied to lessons:
+- an auto-captured lesson is `observed` until it has helped on tasks other than the one it came from: positive outcomes from at least two tasks, or a replay delta from TE4 or EI12;
+- a lesson that stops helping fades to dormant;
+- this also carries the minimum-effect floor for the next TE5 registration.
+
+This is the evidence AGENTS.md requires before a lesson graduates.
+
+#### SI3. Poisoning limits for self-writing agents [planned, with SI0]
+An agent that writes its own memories can amplify its own mistakes. Limits:
+- a per-session cap on auto-captured memories;
+- auto-captured memories rank below verified ones;
+- a rejected value can never come back (existing tombstones);
+- `hippo doctor` reports the share of the store that is auto-captured and unconfirmed.
+
+**What not to build yet.** Export of outcome-labelled trajectories for fine-tuning (weight updates). It carries privacy weight, and nothing shows a buyer needs it.
+
+**Evidence gate.** No claim that hippo makes agents improve themselves until TE5 passes H1 and H3 and SI0 is measured in a second registration. VibeMemBench found most memory systems at or below memory off (TE10), so the claim has to be earned.
+
+---
+
+## Part XII - 2026-09-24 update: Enterprise v1, the first sellable release
+
+**Why this Part exists.** Parts VIII to XI list the enterprise work item by item, but nothing defines the release a company can buy. A gap check against the commercial playbook (kept privately by the founder) found:
+- five engineering items missing from the roadmap;
+- the pilot measurement (CD11 to CD13) missing from the 90-day queue.
+
+This Part defines Enterprise v1 and lists what is missing.
+
+**Enterprise v1, defined.** A self-hosted edition a company runs inside its own network. Kitfunso never holds customer data, so v1 needs no hosted service and no SOC 2. It is sold through a paid pilot whose result comes from the customer's own telemetry.
+
+### Scope, in build order
+Existing items are named by their IDs; new ones are EV1 to EV5 below.
+
+1. **Evidence first:**
+   - the decay default (`docs/evals/2026-09-24-decay-default-prereg.md`);
+   - the TE5 pilot and scored run.
+
+   Nothing below is sold on a claim these have not measured (non-goal 16).
+2. **Trust core:**
+   - EI2 permission-aware recall;
+   - CD5 poisoning defence;
+   - the AT4/CD4 review queue's first surface.
+3. **Deployment:**
+   - EI10's customer-VPC tier: Postgres, Helm, TLS, backup and upgrade runbooks;
+   - the per-write cost fix already in the 90-day queue.
+4. **Identity:**
+   - EI11's OIDC and SAML sign-in (an identity broker is acceptable);
+   - OAuth 2.1 remote MCP and the registry entry (CD2);
+   - SIEM export of the audit log;
+   - SCIM can follow v1.
+5. **Rollout:**
+   - CD1, the agent plugin an admin turns on for everyone;
+   - CD10, the remaining install work.
+6. **Proof in production:**
+   - CD11 shadow holdout;
+   - CD12 telemetry join and pilot report;
+   - CD13 failure-signature log;
+   - CD6's first admin view.
+7. **Product packaging:** EV1 to EV5.
+
+### New items
+
+#### EV1. Enterprise edition packaging [planned, 1w]
+- **Where the code lives:** the features that stay out of the MIT core go in a separate private repository and package under a commercial licence. That means permission-aware recall's grants, SSO, the admin view, the pilot report and the licence check.
+- **The line:** documented in the README. The core CLI, MCP server and single-developer store stay MIT.
+- **CI:** builds and tests both packages against each release of the core.
+
+#### EV2. Offline licence keys [planned, 1w]
+- **The key:** a licence file signed with Ed25519 (company, seats, expiry, edition), checked offline against a public key in the enterprise package.
+- **No beacon.** This keeps the no-telemetry promise.
+- **Seats:** counted on trust, with an annual true-up.
+- **On expiry:** a warning period, then the enterprise features turn off. Memories are never deleted or locked, so the MIT core keeps working on the same store.
+
+#### EV3. Release artefacts a security team checks [planned, 2-3d]
+- A software bill of materials (`npm sbom`, CycloneDX) attached to every release.
+- npm provenance: done in PR #227, needs the npm setting turned on.
+- A signed container image for the server tier.
+- A written support window: each `stable` minor version is supported for 12 months.
+
+#### EV4. Support bundle [planned, 2-3d]
+- **The command:** `hippo support-bundle` writes a redacted archive for a support ticket: versions, `hippo doctor --json`, config with secrets removed, recent logs, schema version and store counts.
+- **Never included:** memory content, unless the customer adds it explicitly.
+
+#### EV5. Admin documentation and security overview [planned, 1-2w]
+- An install, upgrade and rollback guide for the server tier.
+- A one-page data-flow diagram: what is stored, where, what leaves the network (nothing by default), and which model sees what.
+- A security overview that answers a standard questionnaire: CAIQ Lite or SIG Lite.
+
+### Exit criteria for v1
+- A design partner installs it in their network from the admin guide, with no help beyond the support channel.
+- One real security questionnaire is answered with no "no" on identity, permissions or deployment.
+- An outside penetration test of the server tier is done, with its findings fixed.
+- A pilot report is produced from a partner's own telemetry, with a holdout group, whatever its result.
+
+### Estimate
+- **Engineering:** about 16 to 22 weeks for one developer working with an AI assistant, based on the item estimates above. That is longer than the 90-day queue, so v1 lands after it.
+- **Cutting it to a design partner's needs** (one git host, one identity provider, one deployment shape) is the main lever.
+- **Founder-track work** (IP assignment, contracts, insurance, Cyber Essentials) runs in parallel and is not engineering time.
+
+### What the 90-day queue gains
+- **Weeks 4-8:** CD13's failure-signature log, since it is small and starts collecting the baseline early.
+- **Weeks 8-13:**
+  - CD11 and CD12, scoped to the first design partner's agent;
+  - EV1 and EV2, so the pilot runs the edition that will be sold.
+
+---
+
+## Part XIII - 2026-09-24 update: forgetting by evidence, not by the clock (Track FE)
+
+**Why.** The decay decision (`docs/evals/2026-09-24-decay-default-result.md`) moved the default half-life from 7 days to 365, and 365 tied with decay switched off. So the shipped default effectively removes time-based decay from ranking. 365 was not tuned, and the release notes and site should say that plainly.
+
+Three facts drove the decision:
+- **Public benchmarks cannot reward time decay.** LongMemEval and LoCoMo ingest once and ask once, so any decay can only hurt there.
+- **E1 was built to reward decay, and 7 days still lost** (29% against 75%). Its one win was on facts with a newer version (cleanStaleR5 +12.6 for 7 days), but only 7.1% of the dogfood store is superseded.
+- **The mechanisms that measured helpful are not the clock:** outcome feedback (marked-wrong suppression), supersession and strengthening.
+
+What stays open:
+- No half-life between 7 and 365 was tested.
+- E1's dating caveat, the lookalikes dated inside each fact's window, is untested.
+- Real memories go stale when code changes, which no test models.
+- At 365 days sleep practically stops deleting, which a shared server cannot run without a cap.
+
+#### FE1. Split ranking from retention [planned]
+- **Ranking:** uses outcomes, supersession and strengthening. Time applies only as a tie-break among competing versions of the same fact, not as a penalty on every memory.
+- **Retention:** deletion and dormancy are decided by value (never recalled, never confirmed, low outcomes), not by age alone.
+
+#### FE2. Staleness from code churn [planned]
+A lesson that names a file, symbol or command is marked stale when that file changes or is deleted after the lesson was stored. It builds on `src/invalidation.ts`. Staleness lowers the lesson's rank and flags it for confirmation; it never deletes it.
+
+#### FE3. Registered test of the new forgetting [planned, before FE1 or FE2 ship as defaults]
+**E1 on fresh seeds (61 to 80),** with these arms:
+- full@365, the current default;
+- full@30 and full@90, the untested middle;
+- version-aware recency (FE1);
+- decay off.
+
+It runs with the in-window dating lane as well. It also includes a **replay of real recall queries** from the founder's store: LC1 retrieval traces with their later outcomes, scored for each arm. This is the only test that reflects actual use, and it runs on the founder's machine.
+
+#### FE4. Messaging [now]
+Pitch "learns what is wrong and stops repeating it", not "decay by default". "Good memory is knowing what to forget" stays only where forgetting means wrong, superseded or unused, never age.
+

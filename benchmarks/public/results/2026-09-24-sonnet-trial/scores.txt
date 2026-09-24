@@ -1,0 +1,11 @@
+Authors' F1, all             n=400  hippo  30.8  bm25  33.9  diff -3.1 [-5.8, -0.3]
+Judge accuracy, all          n=400  hippo  62.7  bm25  68.8  diff -6.0 [-10.2, -1.5]
+  F1 single-hop              n=219  hippo  36.4  bm25  41.8  diff -5.4 [-9.7, -1.1]
+  judge single-hop           n=219  hippo  63.0  bm25  72.6  diff -9.6 [-15.5, -4.1]
+  F1 multi-hop               n=73   hippo  20.8  bm25  20.8  diff -0.0 [-4.1, +4.2]
+  judge multi-hop            n=73   hippo  58.9  bm25  58.9  diff +0.0 [-11.0, +11.0]
+  F1 temporal                n=83   hippo  29.6  bm25  28.7  diff +0.9 [-4.3, +6.1]
+  judge temporal             n=83   hippo  67.5  bm25  66.3  diff +1.2 [-8.4, +10.8]
+  F1 open-domain             n=25   hippo  15.4  bm25  20.4  diff -5.1 [-13.4, +0.6]
+  judge open-domain          n=25   hippo  56.0  bm25  72.0  diff -16.0 [-36.0, +0.0]
+judge verdicts available: 800 of 800

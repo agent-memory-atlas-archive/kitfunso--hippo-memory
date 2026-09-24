@@ -7,14 +7,15 @@
  * SAME multi-step transaction + post-commit mirror-purge flow. Extracted
  * here (leaf module) so neither duplicates it.
  *
- * Module direction: this file imports from store.ts, rejection.ts, and
- * raw-archive.ts. Nothing imports FROM this file except cli.ts and api.ts,
- * so it introduces no cycle.
+ * Module direction: this file imports from store.ts, rejection.ts,
+ * raw-archive.ts and dormant.ts. Nothing imports FROM this file except
+ * cli.ts and api.ts, so it introduces no cycle.
  */
 
 import { openHippoDb, closeHippoDb } from './db.js';
 import { appendAuditEvent } from './audit.js';
 import { archiveRawMemory } from './raw-archive.js';
+import { purgeDormantByDigest } from './dormant.js';
 import {
   initStore,
   deleteEntryCore,
@@ -143,6 +144,13 @@ export function rejectValue(opts: RejectFlowOpts): RejectFlowResult {
         }
         removedIds.push(row.id);
       }
+
+      // Dormant copies (src/dormant.ts) go too, in the same transaction: a
+      // rejected value may not linger where `hippo dormant restore` could
+      // bring it back. They have no markdown mirror, so the post-commit
+      // mirror purge below is a no-op for them; they join removedIds for the
+      // audit trail and the caller's report.
+      removedIds.push(...purgeDormantByDigest(db, opts.tenantId, digest));
 
       try {
         appendAuditEvent(db, {

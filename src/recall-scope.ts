@@ -94,3 +94,44 @@ export function passesCliRecallScopeFilter(
   }
   return passesScopeFilterForRecall(scope, undefined);
 }
+
+/**
+ * Thrown when a caller requests a scope its role may not read. The HTTP layer
+ * maps it to 403.
+ */
+export class ScopeForbiddenError extends Error {
+  readonly scope: string;
+
+  constructor(scope: string) {
+    super(`scope ${scope} requires admin role`);
+    this.name = 'ScopeForbiddenError';
+    this.scope = scope;
+  }
+}
+
+/**
+ * True for scopes that default-deny hides: `<source>:private:*` and the
+ * quarantine buckets. Naming one explicitly is what unlocks it, so naming one
+ * is the act that needs authorization.
+ */
+export function isRestrictedScope(scope: string | null | undefined): boolean {
+  if (!isScopeString(scope)) return false;
+  // SAFETY: RECALL_DEFAULT_DENY_SCOPES is a readonly tuple of string
+  // literals; widening the array (not the input) lets .includes() take any scope.
+  return isPrivateScope(scope) || (RECALL_DEFAULT_DENY_SCOPES as readonly string[]).includes(scope);
+}
+
+/**
+ * Authorize an explicitly requested scope before any read honours it.
+ *
+ * An admin (tenant owner, the local CLI, loopback without a key) may unlock
+ * any scope in its tenant. A member key may not unlock a restricted scope by
+ * naming it: before this check, any key in a tenant could read every private
+ * channel or repo by passing its scope string. Per-scope grants for member
+ * keys belong to ROADMAP Part VIII EI2 (permission-aware recall).
+ */
+export function assertScopeRequestAllowed(role: 'admin' | 'member', requested: string | undefined): void {
+  if (requested === undefined || requested === '') return;
+  if (role === 'admin') return;
+  if (isRestrictedScope(requested)) throw new ScopeForbiddenError(requested);
+}

@@ -1,36 +1,14 @@
 ---
-// Brand wordmark: gradient rounded-square + minimal hippo-head glyph + "hippo".
-// `gid` makes the gradient id unique per instance (Nav + Footer render this on one page).
-interface Props {
-  gid?: string;
-}
-const { gid = 'lg' } = Astro.props;
+// Brand wordmark: the Spiral mark (a hippocampus curl drawn with memories) + "hippo".
+// Dots come from scripts/make-logo.mjs; mint = recalled, dim = fading, amber = marked wrong.
+import dots from '../content/logo-mark.json';
 ---
 
-<span class="inline-flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
-  <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true" class="shrink-0">
-    <defs>
-      <linearGradient id={`${gid}-grad`} gradientUnits="userSpaceOnUse" x1="12" y1="16" x2="52" y2="50">
-        <stop offset="0" stop-color="#a78bfa" />
-        <stop offset="1" stop-color="#22d3ee" />
-      </linearGradient>
-    </defs>
-    <rect width="64" height="64" rx="16" fill="#0c0c12" />
-    <rect x="0.5" y="0.5" width="63" height="63" rx="15.5" fill="none" stroke="white" stroke-opacity="0.08" />
-    <!-- minimal hippo head: ears + brow + broad muzzle -->
-    <g fill={`url(#${gid}-grad)`}>
-      <circle cx="23" cy="19" r="4.5" />
-      <circle cx="41" cy="19" r="4.5" />
-      <rect x="14" y="21" width="36" height="27" rx="13" />
-      <rect x="11" y="33" width="42" height="17" rx="11" />
-    </g>
-    <!-- eyes + nostrils, punched in the container colour -->
-    <g fill="#0c0c12">
-      <circle cx="24" cy="29.5" r="2.4" />
-      <circle cx="40" cy="29.5" r="2.4" />
-      <circle cx="27" cy="44" r="2.3" />
-      <circle cx="37" cy="44" r="2.3" />
-    </g>
+<span class="inline-flex items-center gap-2.5 font-display text-base font-medium tracking-tight">
+  <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true" class="shrink-0">
+    <rect width="64" height="64" rx="14" fill="#0b0f0c" />
+    <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#e6ede7" stroke-opacity="0.1" />
+    {dots.map((d) => <circle cx={d.x} cy={d.y} r={d.r} fill={d.fill} fill-opacity={d.opacity} />)}
   </svg>
   <span>hippo</span>
 </span>
