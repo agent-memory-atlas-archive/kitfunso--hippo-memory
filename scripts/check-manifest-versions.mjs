@@ -31,6 +31,7 @@ const LOCKSTEP_MANIFESTS = [
   'openclaw.plugin.json',
   'extensions/openclaw-plugin/package.json',
   'extensions/openclaw-plugin/openclaw.plugin.json',
+  'server.json',
 ];
 
 /**

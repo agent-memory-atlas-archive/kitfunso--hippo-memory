@@ -18,6 +18,8 @@ npm install -g hippo-memory && hippo init --scan ~
 
 One command. Every git repo on your machine gets memory.
 
+Having an AI agent install it? Point it at [llms-install.md](llms-install.md): it installs, wires hippo into the agents it finds, and verifies with `hippo doctor`.
+
 ```
 Works with:    Claude Code, Codex, Cursor, OpenClaw, OpenCode, Pi, any MCP client
 Imports from:  ChatGPT, Claude (CLAUDE.md), Cursor (.cursorrules), Slack, markdown
@@ -623,6 +625,7 @@ hippo watch "npm run build"
 | `hippo dormant [<query>]` | List faded memories sleep kept instead of deleting |
 | `hippo dormant restore <id>` | Bring a dormant memory back to active memory |
 | `hippo dormant forget <id>` | Delete a dormant memory permanently |
+| `hippo doctor [--json]` | Check the install: Node, store, schema, sleep, agent hooks; each problem names its fix |
 | `hippo tokens [--days n]` | Estimated tokens of memory text handed to agents, per surface, and what skipping unchanged hook blocks saved |
 | `hippo embed` | Embed all memories for semantic search |
 | `hippo embed --status` | Show embedding coverage |
@@ -757,7 +760,9 @@ Add to your MCP config (e.g. `.cursor/mcp.json` or `claude_desktop_config.json`)
 }
 ```
 
-Exposes tools: `hippo_recall`, `hippo_remember`, `hippo_outcome`, `hippo_context`, `hippo_status`, `hippo_learn`, `hippo_wm_push`.
+No global install needed: `"command": "npx", "args": ["-y", "hippo-memory", "mcp"]` works too. With no store anywhere, the first tool call creates the global store (`~/.hippo`); `hippo init` in a project adds a project store. Check any install with `hippo doctor`.
+
+Exposes 13 tools: `hippo_recall`, `hippo_assemble`, `hippo_drill`, `hippo_remember`, `hippo_outcome`, `hippo_context`, `hippo_status`, `hippo_learn`, `hippo_conflicts`, `hippo_resolve`, `hippo_share`, `hippo_peers`, `hippo_predict_baserate`.
 
 ### OpenClaw Plugin
 

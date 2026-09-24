@@ -20,7 +20,7 @@ import {
 import { search, hybridSearch, physicsSearch, estimateTokens } from '../search.js';
 import { evalNow } from '../ablation.js';
 import { loadAllEntries, writeEntry, strengthenRetrieved, readEntry, initStore, loadFreshActiveTaskSnapshot, listMemoryConflicts, resolveConflict, RECALL_DEFAULT_DENY_SCOPES, countCreatedSinceLastSleep } from '../store.js';
-import { shareMemory, listPeers, getGlobalRoot } from '../shared.js';
+import { shareMemory, listPeers, getGlobalRoot, initGlobal } from '../shared.js';
 import { consolidate } from '../consolidate.js';
 import { execSync } from 'child_process';
 import { fetchGitLog, extractLessons, partitionLessons, deduplicateLesson, isGitRepo } from '../autolearn.js';
@@ -505,6 +505,19 @@ function resolveClientKey(ctx: { clientKey?: string; tenantId: string } | undefi
   return `stdio-${process.pid}:default`;
 }
 
+/**
+ * Zero-install first run (`npx -y hippo-memory mcp` with no store anywhere):
+ * create the global store instead of failing every tool call, and say so on
+ * stderr (stdout carries the protocol). `hippo init` in a project later adds
+ * a project store, which then takes precedence.
+ */
+function createGlobalStoreOnFirstRun(): string {
+  initGlobal();
+  const root = getGlobalRoot();
+  console.error(`hippo: no memory store found; created the global store at ${root}. Run \`hippo init\` in a project for a project store.`);
+  return root;
+}
+
 // ── Token ledger (ROADMAP TE0) ──
 
 const MCP_TOKEN_SURFACES: Record<string, TokenSurface> = {
@@ -551,8 +564,7 @@ async function executeTool(
   // from the Bearer token (or the loopback fallback). The stdio path
   // continues to walk from cwd / fall back to the global root, and to
   // resolve tenant from HIPPO_TENANT.
-  const hippoRoot = ctx?.hippoRoot ?? findHippoRoot();
-  if (!hippoRoot) return 'No .hippo/ store found. Run: hippo init';
+  const hippoRoot = ctx?.hippoRoot ?? findHippoRoot() ?? createGlobalStoreOnFirstRun();
 
   const config = loadConfig(hippoRoot);
   // A5: every loadAllEntries() in this server returns to the caller and is

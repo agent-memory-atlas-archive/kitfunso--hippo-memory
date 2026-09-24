@@ -21,6 +21,7 @@
  *   hippo unreject <digest-prefix>
  *   hippo dormant [<query>] [--limit <n>] [--json] | restore <id> | forget <id>
  *   hippo tokens [--days <n>] [--json] [--global]
+ *   hippo doctor [--json]
  *   hippo inspect <id>
  *   hippo embed [--status]
  *   hippo watch "<command>"
@@ -139,6 +140,7 @@ import { loadPhysicsState, resetAllPhysicsState } from './physics-state.js';
 import { computeSystemEnergy, vecNorm } from './physics.js';
 import { loadConfig } from './config.js';
 import { openHippoDb, closeHippoDb } from './db.js';
+import { runDoctor, formatDoctor } from './doctor.js';
 import { blockHash, hookPayloadSessionId, lastSentState, recordTokenUse, shouldSkipUnchanged, type TokenSurface } from './token-ledger.js';
 import { getActiveGoalsWithDb, MAX_FINAL_MULTIPLIER, pushGoal, getActiveGoals, completeGoal, suspendGoal, resumeGoal, applyGoalStackBoost } from './goals.js';
 import type { RetrievalPolicy, PolicyType, Goal, GoalRow } from './goals.js';
@@ -9313,6 +9315,8 @@ Commands:
     --global               Operate on the global store
     dormant restore <id>   Bring a dormant memory back to active memory
     dormant forget <id>    Delete a dormant memory permanently
+  doctor                   Check the install: Node, store, schema, sleep, agent hooks
+    --json                 Machine-readable report (exit code 1 on any failure)
   tokens                   Tokens of memory text hippo handed agents, per surface
                            (hook, context, recall, MCP, HTTP), and what skipping
                            unchanged hook blocks saved
@@ -10054,6 +10058,15 @@ async function main(
     case 'tokens':
       cmdTokens(hippoRoot, flags);
       break;
+
+    case 'doctor': {
+      // SAFETY: package.json always carries a string "version" (checked at release by check-manifest-versions).
+      const pkg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8')) as { version: string };
+      const report = runDoctor({ version: pkg.version });
+      console.log(flags['json'] ? JSON.stringify(report, null, 2) : formatDoctor(report));
+      if (!report.ok) process.exit(1);
+      break;
+    }
 
     case 'snapshot':
       cmdSnapshot(hippoRoot, args, flags);
