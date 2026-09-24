@@ -1595,3 +1595,61 @@ Failed-tool capture now ships through both install routes as `hippo capture-erro
 
   This is where A9 (scale to 1M+) starts.
 
+---
+
+## Part XI - 2026-09-24 update: memory for self-improving agents (Track SI)
+
+**Question.** Agents that improve themselves come in three kinds:
+- they learn lessons at run time (Reflexion, ExpeL, Dynamic Cheatsheet, Agentic Context Engineering);
+- they rewrite their own harness (RRSI, arXiv 2609.24972; Darwin Gödel Machine);
+- they update their weights.
+
+The first two need a store of attempts and lessons that remembers what worked, forgets what did not, and does not believe its own mistakes. That is hippo's design. The third is out of scope. The paper citations above are from memory, except RRSI's (read through its README and write-ups); re-check them before quoting.
+
+**What hippo already has for this.**
+- **Error capture:** `hippo capture-error` and compaction capture.
+- **Outcome feedback:** a memory marked bad stays in the top five 25.7% of the time, against 73.9% for BM25. This is on E1 only, and it is E1's best case.
+- **Trust levels and supersession.**
+- **Rejection tombstones:** `hippo reject`, so a wrong lesson stays out.
+- **Recoverable history:** the dormant store and the audit log.
+- **Budgeted recall and the token ledger.**
+- **Strategy traces:** `hippo trace record --outcome` and `hippo recall --outcome success`, a small skill library.
+
+**The gap.** Every outcome is still marked by hand, or by the agent calling `hippo outcome`. A self-improving loop needs outcomes to arrive by themselves, and needs a lesson to prove itself before it is trusted.
+
+#### SI0. Automatic outcome signals [planned, next; behind a flag until TE5 measures it]
+Attribute real results to the memories that were in context when the work was done: the session's recalled ids, from the token ledger and `last_retrieval_ids`. Signals:
+- tests that failed and then passed in the session;
+- a CI run on the commit;
+- a PR merged, or its review rejected;
+- a commit reverted later.
+
+Each signal is an `observed` outcome, logged with its evidence, and reversible. It runs only when the attribution is unambiguous (few memories in context, one task). It stays off by default, so the TE5 hippo arm stays as registered, until a second TE5 registration measures it.
+
+#### SI1. Attempt archive for harness tuning [research; after TE5]
+The RRSI experiment. Replace RRSI's edit history with hippo:
+- each proposed change is a memory holding its hypothesis, score change and verdict;
+- failed changes are marked bad;
+- the proposer recalls similar past attempts before proposing.
+
+At an equal budget, measure how often failed ideas are retried and the held-out score, against RRSI's plain log. This needs RRSI's code to be public. A plain log may be enough when the history is small; hippo has to beat it, just as it has to beat BM25.
+
+#### SI2. Lessons earn trust on held-out work [research; after SI0 and EI12]
+RRSI's rule, applied to lessons:
+- an auto-captured lesson is `observed` until it has helped on tasks other than the one it came from: positive outcomes from at least two tasks, or a replay delta from TE4 or EI12;
+- a lesson that stops helping fades to dormant;
+- this also carries the minimum-effect floor for the next TE5 registration.
+
+This is the evidence AGENTS.md requires before a lesson graduates.
+
+#### SI3. Poisoning limits for self-writing agents [planned, with SI0]
+An agent that writes its own memories can amplify its own mistakes. Limits:
+- a per-session cap on auto-captured memories;
+- auto-captured memories rank below verified ones;
+- a rejected value can never come back (existing tombstones);
+- `hippo doctor` reports the share of the store that is auto-captured and unconfirmed.
+
+**What not to build yet.** Export of outcome-labelled trajectories for fine-tuning (weight updates). It carries privacy weight, and nothing shows a buyer needs it.
+
+**Evidence gate.** No claim that hippo makes agents improve themselves until TE5 passes H1 and H3 and SI0 is measured in a second registration. VibeMemBench found most memory systems at or below memory off (TE10), so the claim has to be earned.
+

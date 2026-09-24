@@ -82,6 +82,15 @@ These choices were made while building the runner (`scripts/token-eval/ab-run.mj
 - **Task selection.** Tasks are drafted from history by `make-tasks.mjs`, kept only if the hidden tests fail at the base and pass at the fix, and have their prompts rewritten by hand as problem statements before use.
 - **Arms deferred to a later registration.** `dump-all` and `naive-topk` are not implemented yet. H1 to H4 only need `no-memory`, `hippo`, `random-text` and `stale-memory`.
 
+## Related work noted after registration (2026-09-24, no threshold change)
+
+RRSI ("Regularized Recursive Self-Improvement of Agent Harnesses", arXiv 2609.24972, Google Cloud AI Research and others, September 2026) tunes an agent's harness in a loop. It found that gains on tuning tasks mostly do not carry over to held-out ones. It accepts a change only when the gain clears a noise floor and when extra tokens are paid for by measured gains. Read through its README and two write-ups; the paper itself was blocked from the sandbox.
+
+Two consequences for this registration, neither of which changes it:
+- H1 to H4 already require the 95% interval to exclude zero, and TE5's headline is cost per resolved task, which is RRSI's token rule. RRSI is cited here as related work.
+- A minimum-effect floor measured from seed-to-seed spread would be a changed threshold, so under this file's own rule it belongs to a new registration (ROADMAP SI2), not this one.
+- Any hippo setting tuned on E1, such as the decay half-life (`2026-09-24-decay-default-prereg.md`), is not proven by E1. TE5's repositories act as the held-out check, so none of them may be used to tune a setting before its scored run.
+
 ## Not in scope for this registration
 
 - Enterprise tenant replays: that is EI12, which uses the same analyzer.
