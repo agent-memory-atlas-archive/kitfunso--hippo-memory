@@ -39,6 +39,11 @@ describe('captureError', () => {
     expect(entry.emotional_valence).toBe('negative');
   });
 
+  it('writes into the tenant it is given, else default', () => {
+    expect(captureError(1, 'err', 'cmd', 'tenant_b').tenantId).toBe('tenant_b');
+    expect(captureError(1, 'err', 'cmd').tenantId).toBe('default');
+  });
+
   it('short stderr passes through unchanged', () => {
     const stderr = 'short error';
     const entry = captureError(1, stderr, 'cmd');
@@ -218,7 +223,7 @@ describe('extractLessons unchanged by DF4', () => {
 // detail-carrying one must.
 // ---------------------------------------------------------------------------
 
-const CLI = path.join(process.cwd(), 'dist', 'src', 'cli.js');
+const CLI = path.join(process.cwd(), 'dist', 'cli.js');
 
 function initGitRepoWithCommits(subjects: string[]): string {
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hippo-df4-repo-'));

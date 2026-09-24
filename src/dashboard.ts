@@ -15,6 +15,7 @@ import { listPeers } from './shared.js';
 import { loadEmbeddingIndex } from './embeddings.js';
 import { resolveTenantId } from './tenant.js';
 import { loadCardDetail } from './card-detail.js';
+import { isCrossSite, LOOPBACK_HOST_HEADER } from './server.js';
 
 interface DashboardData {
   memories: Array<{
@@ -182,9 +183,6 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2',
 } as const;
 
-// Binds 127.0.0.1 only; refusing other Hosts closes the DNS-rebinding route.
-const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
-
 type StaticFileExtension = keyof typeof MIME_TYPES;
 
 function isStaticFileExtension(ext: string): ext is StaticFileExtension {
@@ -222,7 +220,7 @@ export function serveDashboard(hippoRoot: string, port: number = 3333): http.Ser
 
   const handleRequest = (req: http.IncomingMessage, res: http.ServerResponse): void => {
     const host = req.headers.host;
-    if (host !== undefined && !LOOPBACK_HOST.test(host)) {
+    if (host !== undefined && !LOOPBACK_HOST_HEADER.test(host)) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });
       res.end('Forbidden');
       return;
@@ -235,6 +233,11 @@ export function serveDashboard(hippoRoot: string, port: number = 3333): http.Ser
       // POST /api/star/:id - toggle starred on a memory
       const starMatch = pathname.match(/^\/api\/star\/([A-Za-z0-9_\-]+)$/);
       if (starMatch && req.method === 'POST') {
+        if (isCrossSite(req)) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('Forbidden');
+          return;
+        }
         const id = starMatch[1];
         const entry = readEntry(hippoRoot, id, resolveTenantId({}));
         if (!entry) return jsonResponse(res, { error: 'Not found' }, 404);

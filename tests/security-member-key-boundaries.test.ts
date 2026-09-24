@@ -2,7 +2,8 @@
  * Member-key privilege boundaries.
  *
  * Three escalations a member API key used to have inside its own tenant:
- *   1. mint, list and revoke API keys, including minting an ADMIN key;
+ *   1. mint API keys (including an ADMIN key) and revoke other keys (1.45.0
+ *      closed this too; members may still list keys and revoke their own);
  *   2. read any private (`<source>:private:*`) or quarantined scope by naming
  *      it on recall or assemble;
  *   3. act as admin through POST /mcp, whose tools built an admin actor for
@@ -83,7 +84,7 @@ describe('member-key boundaries over HTTP', () => {
     return fetch(`${handle.url}${path}`, { headers: { authorization: `Bearer ${key}` } });
   }
 
-  it('a member key cannot mint an admin key (or any key), list keys, or revoke one', async () => {
+  it('a member key cannot mint a key or revoke another key', async () => {
     const member = mintKey(home, 'member');
     const admin = mintKey(home, 'admin');
     const before = keyCount(home);
@@ -98,7 +99,6 @@ describe('member-key boundaries over HTTP', () => {
     }
     expect(keyCount(home)).toBe(before);
 
-    expect((await get('/v1/auth/keys', member.plaintext)).status).toBe(403);
     const revoke = await fetch(`${handle.url}/v1/auth/keys/${admin.keyId}`, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${member.plaintext}` },
@@ -189,9 +189,8 @@ describe('member-key boundaries in the api layer (every surface goes through it)
   const adminCtx = (): api.Context => ({ hippoRoot: home, tenantId: 'default', actor: { subject: 'cli', role: 'admin' } });
 
   it('key management refuses a member actor', () => {
-    expect(() => api.authCreate(memberCtx(), { role: 'admin' })).toThrow(/requires admin role/);
-    expect(() => api.authList(memberCtx(), { active: true })).toThrow(/requires admin role/);
-    expect(() => api.authRevoke(memberCtx(), 'k_missing')).toThrow(/requires admin role/);
+    expect(() => api.authCreate(memberCtx(), { role: 'admin' })).toThrow(api.ForbiddenError);
+    expect(() => api.authRevoke(memberCtx(), 'k_missing')).toThrow(api.ForbiddenError);
     expect(api.authCreate(adminCtx(), { role: 'member' }).role).toBe('member');
   });
 

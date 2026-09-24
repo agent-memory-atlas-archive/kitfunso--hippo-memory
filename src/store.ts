@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId } from './memory.js';
+import { MemoryEntry, Layer, ConfidenceLevel, MemoryKind, generateId, AUTO_DELETABLE_SQL } from './memory.js';
 import { dumpFrontmatter, parseFrontmatter } from './yaml.js';
 import {
   openHippoDb,
@@ -21,7 +21,8 @@ import {
 } from './db.js';
 import { SessionHandoff, SessionHandoffRow, rowToSessionHandoff, HandoffEvidence, HandoffOutcome, isHandoffOutcome } from './handoff.js';
 import { Card, CardStatus, CardRun, CardComment, CARD_TRANSITIONS, CARD_LEASE_MS } from './card.js';
-import { tokenize } from './search.js';
+import { tokenize, markRetrieved } from './search.js';
+import { isRecallBoostAblated } from './ablation.js';
 import { appendAuditEvent, type AuditOp } from './audit.js';
 import { resolveTenantId } from './tenant.js';
 import { deriveOriginProject, originFromSource, findHippoStoreDir, realpathOrResolve, type ResolveProjectIdentityOpts } from './project-identity.js';
@@ -804,6 +805,7 @@ function loadSearchRows(
   limit: number,
   tenantId: string | undefined,
   scopeFilter?: RecallScopeFilter,
+  includeSuperseded = true,
 ): MemoryRow[] {
   // tenantId undefined = no tenant filter (legacy callers / cross-deployment
   // helpers). tenantId set = strict tenant isolation, leveraging the composite
@@ -899,13 +901,16 @@ function loadSearchRows(
     }
   }
 
+  const currentAlias = includeSuperseded ? '' : ' AND m.superseded_by IS NULL';
+  const currentNoAlias = includeSuperseded ? '' : ' AND superseded_by IS NULL';
+
   const terms = Array.from(new Set(tokenize(query)));
   if (terms.length === 0) {
     // F3 (v1.7.0) self-review: empty-query path is the second uncapped
     // path (codex diff-pass caught the full-store fallback at the bottom;
     // this no-terms path had the same shape). Apply LIMIT so all four
     // candidate paths honour the caller's cap when set.
-    const sql = `SELECT ${MEMORY_SELECT_COLUMNS} FROM memories${tenantOnlyPredicate}${archivedClauseTenantOnly}${scopeClauseTenantOnly} ORDER BY created ASC, id ASC LIMIT ?`;
+    const sql = `SELECT ${MEMORY_SELECT_COLUMNS} FROM memories${tenantOnlyPredicate}${archivedClauseTenantOnly}${scopeClauseTenantOnly}${currentNoAlias} ORDER BY created ASC, id ASC LIMIT ?`;
     // SAFETY: sql selects exactly MEMORY_SELECT_COLUMNS, whose column list
     // matches MemoryRow's field set.
     return db.prepare(sql).all(...tenantParams, ...scopeParams, limit) as MemoryRow[];
@@ -933,7 +938,7 @@ function loadSearchRows(
         SELECT ${MEMORY_SEARCH_COLUMNS}
         FROM memories m
         JOIN memories_fts f ON f.id = m.id
-        WHERE memories_fts MATCH ?${tenantPredicate}${archivedClauseAlias}${scopeClauseAlias}
+        WHERE memories_fts MATCH ?${tenantPredicate}${archivedClauseAlias}${scopeClauseAlias}${currentAlias}
         ORDER BY bm25(memories_fts), m.updated_at DESC, m.content ASC, m.id ASC
         LIMIT ?
       `).all(ftsQuery, ...tenantParams, ...scopeParams, limit) as MemoryRow[];
@@ -956,7 +961,7 @@ function loadSearchRows(
   const rows = db.prepare(`
     SELECT ${MEMORY_SELECT_COLUMNS}
     FROM memories
-    WHERE (${where})${tenantPredicateNoAlias}${archivedClauseNoAlias}${scopeClauseNoAlias}
+    WHERE (${where})${tenantPredicateNoAlias}${archivedClauseNoAlias}${scopeClauseNoAlias}${currentNoAlias}
     ORDER BY updated_at DESC, created DESC, content ASC, id ASC
     LIMIT ?
   `).all(...params, ...tenantParams, ...scopeParams, limit) as MemoryRow[];
@@ -968,7 +973,7 @@ function loadSearchRows(
   // now reported on RecallResult, an unbounded fallback would lie about
   // candidate-pool size. Apply LIMIT here so all four paths honour the
   // caller's cap.
-  const fallback = `SELECT ${MEMORY_SELECT_COLUMNS} FROM memories${tenantOnlyPredicate}${archivedClauseTenantOnly}${scopeClauseTenantOnly} ORDER BY created ASC, id ASC LIMIT ?`;
+  const fallback = `SELECT ${MEMORY_SELECT_COLUMNS} FROM memories${tenantOnlyPredicate}${archivedClauseTenantOnly}${scopeClauseTenantOnly}${currentNoAlias} ORDER BY created ASC, id ASC LIMIT ?`;
   // SAFETY: fallback selects exactly MEMORY_SELECT_COLUMNS, matching
   // MemoryRow's field set.
   return db.prepare(fallback).all(...tenantParams, ...scopeParams, limit) as MemoryRow[];
@@ -1456,11 +1461,20 @@ function buildStatsFromDb(db: ReturnType<typeof openHippoDb>): LegacyStats {
  * `buildIndexFromDb`'s query.
  */
 export function writeIndexMirror(hippoRoot: string, index: HippoIndex): void {
-  fs.writeFileSync(path.join(hippoRoot, 'index.json'), JSON.stringify(index, null, 2), 'utf8');
+  mirrorBestEffort('index.json', () => fs.writeFileSync(path.join(hippoRoot, 'index.json'), JSON.stringify(index, null, 2), 'utf8'));
 }
 
 function writeStatsMirror(hippoRoot: string, stats: LegacyStats): void {
-  fs.writeFileSync(path.join(hippoRoot, 'stats.json'), JSON.stringify(stats, null, 2), 'utf8');
+  mirrorBestEffort('stats.json', () => fs.writeFileSync(path.join(hippoRoot, 'stats.json'), JSON.stringify(stats, null, 2), 'utf8'));
+}
+
+/** Mirrors are derived from SQLite and written after COMMIT, so a failed write warns instead of failing a committed change. */
+function mirrorBestEffort(what: string, write: () => void): void {
+  try {
+    write();
+  } catch (err) {
+    console.error(`hippo: ${what} not refreshed (${err instanceof Error ? err.message : String(err)}); the database write succeeded`);
+  }
 }
 
 function syncMirrorFiles(hippoRoot: string, db: ReturnType<typeof openHippoDb>): void {
@@ -1468,9 +1482,9 @@ function syncMirrorFiles(hippoRoot: string, db: ReturnType<typeof openHippoDb>):
   // MemoryRow's field set.
   const entries = db.prepare(`SELECT ${MEMORY_SELECT_COLUMNS} FROM memories ORDER BY created ASC, id ASC`).all() as MemoryRow[];
 
-  for (const entry of entries.map(rowToEntry)) {
-    writeMarkdownMirror(hippoRoot, entry);
-  }
+  mirrorBestEffort('markdown mirrors', () => {
+    for (const entry of entries.map(rowToEntry)) writeMarkdownMirror(hippoRoot, entry);
+  });
 
   // SAFETY: conflicts' shape matches the eight columns named in the SELECT
   // above.
@@ -1480,22 +1494,18 @@ function syncMirrorFiles(hippoRoot: string, db: ReturnType<typeof openHippoDb>):
     WHERE status = 'open'
     ORDER BY updated_at DESC, id DESC
   `).all() as MemoryConflictRow[];
-  writeConflictMirrors(hippoRoot, conflicts.map(rowToMemoryConflict));
+  mirrorBestEffort('conflict mirrors', () => writeConflictMirrors(hippoRoot, conflicts.map(rowToMemoryConflict)));
 
   writeIndexMirror(hippoRoot, buildIndexFromDb(db));
   writeStatsMirror(hippoRoot, buildStatsFromDb(db));
 }
 
-/**
- * Load the current derived index from SQLite and refresh the mirror file.
- */
+/** Load the derived index from SQLite. Read-only: writers refresh index.json, so readers never race on it. */
 export function loadIndex(hippoRoot: string): HippoIndex {
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
   try {
-    const index = buildIndexFromDb(db);
-    writeIndexMirror(hippoRoot, index);
-    return index;
+    return buildIndexFromDb(db);
   } finally {
     closeHippoDb(db);
   }
@@ -1690,7 +1700,7 @@ export function writeEntryMirrors(
   db: DatabaseSyncLike,
   entry: MemoryEntry,
 ): void {
-  writeMarkdownMirror(hippoRoot, entry);
+  mirrorBestEffort(`${entry.id}.md`, () => writeMarkdownMirror(hippoRoot, entry));
   writeIndexMirror(hippoRoot, buildIndexFromDb(db));
 }
 
@@ -1753,6 +1763,41 @@ export function loadEntriesByIds(
   } finally {
     closeHippoDb(db);
   }
+}
+
+/** Strengthen what a read returned: update only the four retrieval columns on the live row, never a stale copy.
+ *  Best effort: a failure logs and never fails the read. Returns the ids found in this store. */
+export function strengthenRetrieved(hippoRoot: string, ids: readonly string[], tenantId?: string): Set<string> {
+  const found = new Set<string>();
+  if (ids.length === 0 || isRecallBoostAblated()) return found;
+  let db: DatabaseSyncLike | undefined;
+  try {
+    db = openHippoDb(hippoRoot);
+    db.exec('BEGIN IMMEDIATE');
+    const tenantClause = tenantId !== undefined ? ' AND tenant_id = ?' : '';
+    const select = db.prepare(`SELECT ${MEMORY_SELECT_COLUMNS} FROM memories WHERE id = ?${tenantClause}`);
+    const live: MemoryEntry[] = [];
+    for (const id of ids) {
+      // SAFETY: the SELECT names exactly MEMORY_SELECT_COLUMNS, matching MemoryRow's field set.
+      const row = (tenantId !== undefined ? select.get(id, tenantId) : select.get(id)) as MemoryRow | undefined;
+      if (row) live.push(rowToEntry(row));
+    }
+    const update = db.prepare(
+      'UPDATE memories SET retrieval_count = ?, last_retrieved = ?, half_life_days = ?, strength = ? WHERE id = ?',
+    );
+    for (const e of markRetrieved(live)) {
+      update.run(e.retrieval_count, e.last_retrieved, e.half_life_days, e.strength, e.id);
+      found.add(e.id);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db?.exec('ROLLBACK'); } catch { /* already rolled back; keep the original error */ }
+    console.error(`hippo: retrieval stats not saved (${error instanceof Error ? error.message : String(error)})`);
+    found.clear();
+  } finally {
+    if (db) closeHippoDb(db);
+  }
+  return found;
 }
 
 /**
@@ -1953,13 +1998,13 @@ export function loadChildrenOf(
  * removed) and `resolveConflict` (`conflict_resolve` row per resolution).
  * Default keeps `deleteEntry` byte-identical to its pre-split behavior.
  *
- * Returns `{tenantId, dagParentId}` for the removed row, or `null` if no row
- * with `id` existed.
+ * Returns `{tenantId, dagParentId}` for the removed row, or `null` if no row with `id`
+ * existed or `automatic` refused it (pinned or raw at DELETE time, so a late pin wins).
  */
 export function deleteEntryCore(
   db: ReturnType<typeof openHippoDb>,
   id: string,
-  opts?: { actor?: string; suppressForgetAudit?: boolean },
+  opts?: { actor?: string; suppressForgetAudit?: boolean; reason?: string; automatic?: boolean },
 ): { tenantId: string; dagParentId: string | null } | null {
   // SAFETY: row's shape matches the three columns named in the SELECT above.
   const row = db
@@ -1967,10 +2012,11 @@ export function deleteEntryCore(
     .get(id) as { id?: string; tenant_id?: string; dag_parent_id?: string | null } | undefined;
   if (!row?.id) return null;
 
-  db.prepare(`DELETE FROM memories WHERE id = ?`).run(id);
+  const guard = opts?.automatic ? ` AND ${AUTO_DELETABLE_SQL}` : '';
+  if (Number(db.prepare(`DELETE FROM memories WHERE id = ?${guard}`).run(id).changes ?? 0) === 0) return null;
   deleteFtsRow(db, id);
   if (!opts?.suppressForgetAudit) {
-    audit(db, 'forget', id, undefined, opts?.actor ?? 'cli', row.tenant_id);
+    audit(db, 'forget', id, opts?.reason ? { reason: opts.reason } : undefined, opts?.actor ?? 'cli', row.tenant_id);
   }
   // v0.30 / E2 — DAG live-coupling: forget of a child under a level-2
   // summary marks parent dirty. Non-atomic with the DELETE (no SAVEPOINT
@@ -1997,7 +2043,7 @@ export function deleteEntryCore(
 export function deleteEntry(
   hippoRoot: string,
   id: string,
-  opts?: { actor?: string },
+  opts?: { actor?: string; reason?: string; automatic?: boolean },
 ): boolean {
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
@@ -2005,7 +2051,7 @@ export function deleteEntry(
     const result = deleteEntryCore(db, id, opts);
     if (!result) return false;
 
-    removeEntryMirrors(hippoRoot, id);
+    purgeMirrorBestEffort(hippoRoot, id, false, 'deleteEntry');
     writeIndexMirror(hippoRoot, buildIndexFromDb(db));
     return true;
   } finally {
@@ -2013,25 +2059,33 @@ export function deleteEntry(
   }
 }
 
-/**
- * Batch-write and batch-delete entries in a single transaction.
- * Used by consolidation to avoid N open/close cycles.
+// The child fields a level-2/3 summary is built from (loadChildrenOfSummary, generateDagSummary).
+const SUMMARY_INPUTS = ['content', 'created', 'dag_parent_id', 'kind'] as const;
+
+function mergeOwnChanges(base: MemoryEntry, ours: MemoryEntry, live: MemoryEntry): MemoryEntry {
+  const row: MemoryEntry = { ...live };
+  const loaded = new Map(Object.entries(base));
+  for (const [key, value] of Object.entries(ours)) {
+    if (JSON.stringify(value) !== JSON.stringify(loaded.get(key))) Object.assign(row, { [key]: value });
+  }
+  return row;
+}
+
+/** Consolidation's flush, one transaction. With `snapshot` (rows as the caller loaded them), a write keeps only
+ *  the fields the caller changed, takes the rest from the live row, and never resurrects a row that is gone.
  *
- * `toDormant` (dormant memories, src/dormant.ts): each entry's snapshot is
- * inserted into `dormant_memories` and its `memories` row then leaves exactly
- * like a delete (FTS row, DAG parent dirty-mark, markdown mirrors), all in
- * this one transaction, so a memory is never in both places or in neither.
- * Never pass a kind='raw' row: raw rows are append-only and the DELETE would
- * abort the whole batch.
- */
+ *  `dormant` (src/dormant.ts): each move's snapshot is inserted into `dormant_memories` and its `memories` row
+ *  leaves exactly like a delete (FTS row, DAG parent dirty-mark, mirrors), in the same transaction, so a memory
+ *  is never in both places or in neither. Deletes and moves both skip rows that are no longer auto-deletable
+ *  (pinned or raw since the caller decided). Returns the ids that left `memories`, deleted or moved. */
 export function batchWriteAndDelete(
   hippoRoot: string,
   toWrite: MemoryEntry[],
   toDeleteIds: string[],
-  toDormant: DormantMove[] = [],
-): void {
-  if (toWrite.length === 0 && toDeleteIds.length === 0 && toDormant.length === 0) return;
-  const removeIds = [...toDeleteIds, ...toDormant.map((move) => move.entry.id)];
+  opts?: { snapshot?: ReadonlyMap<string, MemoryEntry>; dormant?: DormantMove[] },
+): string[] {
+  const dormantMoves = opts?.dormant ?? [];
+  if (toWrite.length === 0 && toDeleteIds.length === 0 && dormantMoves.length === 0) return [];
 
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
@@ -2052,25 +2106,25 @@ export function batchWriteAndDelete(
     // dirty for the dominant mutation source (decay, merge, garbage-collect).
     const dirtyParents = new Set<string>();
     const tenantById = new Map<string, string>();
-    if (removeIds.length > 0) {
-      const placeholders = removeIds.map(() => '?').join(',');
-      // SAFETY: rows' shape matches the two columns named in the SELECT
-      // above.
+    const deletableIds: string[] = [];
+    if (toDeleteIds.length > 0) {
+      const placeholders = toDeleteIds.map(() => '?').join(',');
+      // A row pinned after the caller decided to delete it survives.
+      // SAFETY: rows' shape matches the three columns named in the SELECT.
       const rows = db.prepare(
-        `SELECT dag_parent_id, tenant_id FROM memories WHERE id IN (${placeholders})`,
-      ).all(...removeIds) as Array<{ dag_parent_id: string | null; tenant_id: string | null }>;
+        `SELECT id, dag_parent_id, tenant_id FROM memories WHERE id IN (${placeholders}) AND ${AUTO_DELETABLE_SQL}`,
+      ).all(...toDeleteIds) as Array<{ id: string; dag_parent_id: string | null; tenant_id: string | null }>;
       for (const row of rows) {
+        deletableIds.push(row.id);
         if (row.dag_parent_id) {
           dirtyParents.add(row.dag_parent_id);
           tenantById.set(row.dag_parent_id, row.tenant_id ?? 'default');
         }
       }
     }
-    // v39: consolidate's new semantic rows (and any other batch writer)
-    // bypass writeEntry, so stamp store-derived origins here too - a NULL
-    // origin would make freshly consolidated memories vanish from ambient
-    // context (codex gating review P1).
-    const stampedWrites = toWrite.map((e) => stampOriginProject(hippoRoot, e));
+    // v39: batch writers bypass writeEntry, so stamp store-derived origins here too (a NULL origin hides new
+    // memories from ambient context). A row queued twice keeps only its last version, the one the merge compares.
+    const stampedWrites = [...new Map(toWrite.map((e) => [e.id, stampOriginProject(hippoRoot, e)])).values()];
     // AT1 P1 fix (codex, batch-transaction rejection race): the producer-side
     // check (e.g. consolidate.ts's merge pass) runs BEFORE this transaction,
     // on a different connection. A `hippo reject X` that commits in that
@@ -2089,9 +2143,15 @@ export function batchWriteAndDelete(
     // demotion/replay re-persist of a rejected-removed row means it stays
     // gone, which is the entire point of the tombstone.
     let batchRejectedSkips = 0;
-    const skippedWriteIds = new Set<string>();
+    const written: MemoryEntry[] = [];
+    const readLiveRow = db.prepare(`SELECT ${MEMORY_SELECT_COLUMNS} FROM memories WHERE id = ?`);
     for (const entry of stampedWrites) {
-      const entryTenantId = entry.tenantId ?? 'default';
+      const base = opts?.snapshot?.get(entry.id);
+      // SAFETY: MEMORY_SELECT_COLUMNS is the MemoryRow shape rowToEntry reads.
+      const liveRow = readLiveRow.get(entry.id) as MemoryRow | undefined;
+      const live = liveRow ? rowToEntry(liveRow) : undefined;
+      const row = base && live ? mergeOwnChanges(base, entry, live) : entry;
+      const entryTenantId = row.tenantId ?? 'default';
       // Codex delta-review P2 fix: reuse checkRejectionGuard rather than a
       // bare tombstone probe — the guard's content-INTRODUCTION
       // classification must apply here too. A tombstone can legitimately
@@ -2102,15 +2162,14 @@ export function batchWriteAndDelete(
       // changes content TO the rejected value; unchanged same-id re-persists
       // pass through, exactly as on the writeEntry path.
       try {
-        checkRejectionGuard(db, entryTenantId, entry.id, entry.content);
+        checkRejectionGuard(db, entryTenantId, row.id, row.content);
       } catch (err) {
         if (err instanceof RejectedValueError) {
           batchRejectedSkips++;
-          skippedWriteIds.add(entry.id);
           audit(
             db,
             'reject_refusal',
-            entry.id,
+            row.id,
             { digest: err.digest, reason: err.reason },
             'sleep-batch',
             entryTenantId,
@@ -2119,6 +2178,8 @@ export function batchWriteAndDelete(
         }
         throw err;
       }
+      if (base && !live) continue;
+      written.push(row);
       // AT1 (plan §3, corrected): bypass the rejection guard here.
       // Consolidation merges are DETERMINISTIC CONCATENATION (mergeContents,
       // consolidate.ts:736-751) of already-guarded leaf facts, not an LLM
@@ -2131,17 +2192,35 @@ export function batchWriteAndDelete(
       // check and this COMMIT. The guard itself still belongs on leaf
       // inserts, which write through writeEntry / writeEntryDbOnly and stay
       // guarded (bypassRejectionGuard defaults false).
-      upsertEntryRow(db, entry, true);
-      // Hook for writes: child upserted under a level-2 summary marks parent dirty.
-      if (entry.dag_parent_id) {
-        dirtyParents.add(entry.dag_parent_id);
-        tenantById.set(entry.dag_parent_id, entry.tenantId);
+      upsertEntryRow(db, row, true);
+      // Hook for writes: a new child, or a change to what its summary reads, marks the parent dirty; decay alone does not.
+      if (row.dag_parent_id && (!live || SUMMARY_INPUTS.some((k) => row[k] !== live[k]))) {
+        dirtyParents.add(row.dag_parent_id);
+        tenantById.set(row.dag_parent_id, row.tenantId);
       }
     }
-    for (const move of toDormant) {
+    // Dormant moves: same eligibility and DAG bookkeeping as deletes.
+    const movable: DormantMove[] = [];
+    if (dormantMoves.length > 0) {
+      const byId = new Map(dormantMoves.map((m) => [m.entry.id, m]));
+      const placeholders = dormantMoves.map(() => '?').join(',');
+      // SAFETY: rows' shape matches the three columns named in the SELECT.
+      const rows = db.prepare(
+        `SELECT id, dag_parent_id, tenant_id FROM memories WHERE id IN (${placeholders}) AND ${AUTO_DELETABLE_SQL}`,
+      ).all(...byId.keys()) as Array<{ id: string; dag_parent_id: string | null; tenant_id: string | null }>;
+      for (const row of rows) {
+        movable.push(byId.get(row.id)!);
+        if (row.dag_parent_id) {
+          dirtyParents.add(row.dag_parent_id);
+          tenantById.set(row.dag_parent_id, row.tenant_id ?? 'default');
+        }
+      }
+    }
+    for (const move of movable) {
       insertDormantRow(db, move);
     }
-    for (const id of removeIds) {
+    const removedIds = [...deletableIds, ...movable.map((m) => m.entry.id)];
+    for (const id of removedIds) {
       db.prepare('DELETE FROM memories WHERE id = ?').run(id);
       deleteFtsRow(db, id);
     }
@@ -2161,14 +2240,12 @@ export function batchWriteAndDelete(
     // Sync mirrors once after all DB writes. Entries skipped above were
     // never inserted — writing their markdown mirror would resurrect the
     // exact content the skip just kept out of the DB.
-    for (const entry of stampedWrites) {
-      if (skippedWriteIds.has(entry.id)) continue;
-      writeMarkdownMirror(hippoRoot, entry);
-    }
-    for (const id of removeIds) {
-      removeEntryMirrors(hippoRoot, id);
-    }
+    mirrorBestEffort('markdown mirrors', () => {
+      for (const entry of written) writeMarkdownMirror(hippoRoot, entry);
+    });
+    for (const id of removedIds) purgeMirrorBestEffort(hippoRoot, id, false, 'batchWriteAndDelete');
     writeIndexMirror(hippoRoot, buildIndexFromDb(db));
+    return removedIds;
   } catch (error) {
     try { db.exec('ROLLBACK'); } catch { /* ignore */ }
     throw error;
@@ -2312,6 +2389,7 @@ export function loadRecallSearchEntries(
   tenantId?: string,
   requestedScope?: string,
   explicitScopeMode: 'exact' | 'additive' = 'exact',
+  includeSuperseded = true,
 ): MemoryEntry[] {
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
@@ -2326,7 +2404,7 @@ export function loadRecallSearchEntries(
           ? { mode: 'default-deny-or-exact', value: requestedScope }
           : { mode: 'exact', value: requestedScope }
         : { mode: 'default-deny' };
-    return loadSearchRows(db, query, limit, tenantId, scopeFilter).map(rowToEntry);
+    return loadSearchRows(db, query, limit, tenantId, scopeFilter, includeSuperseded).map(rowToEntry);
   } finally {
     closeHippoDb(db);
   }
@@ -2418,9 +2496,7 @@ export function loadStats(hippoRoot: string): LegacyStats {
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
   try {
-    const stats = buildStatsFromDb(db);
-    writeStatsMirror(hippoRoot, stats);
-    return stats;
+    return buildStatsFromDb(db);
   } finally {
     closeHippoDb(db);
   }
@@ -2441,6 +2517,22 @@ export function appendConsolidationRun(
     );
     pruneConsolidationRuns(db, 50);
     writeStatsMirror(hippoRoot, buildStatsFromDb(db));
+  } finally {
+    closeHippoDb(db);
+  }
+}
+
+/** Rows a tenant created since the last sleep (runs are host-wide), looking back at most 24 hours. */
+export function countCreatedSinceLastSleep(hippoRoot: string, tenantId: string, now: Date = new Date()): number {
+  initStore(hippoRoot);
+  const db = openHippoDb(hippoRoot);
+  try {
+    const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
+    const row = db.prepare(
+      `SELECT COUNT(*) AS n FROM memories WHERE tenant_id = ?
+         AND created > MAX(?, COALESCE((SELECT MAX(timestamp) FROM consolidation_runs), ''))`,
+    ).get<{ n: number }>(tenantId, dayAgo);
+    return row.n;
   } finally {
     closeHippoDb(db);
   }
@@ -4281,6 +4373,7 @@ export function loadAllL2Summaries(hippoRoot: string): MemoryEntry[] {
        WHERE dag_level = 2
          AND dag_parent_id IS NULL
          AND kind != 'archived'
+         AND superseded_by IS NULL
        ORDER BY created ASC, id ASC
     `).all() as MemoryRow[];
     return rows.map(rowToEntry);
@@ -4341,6 +4434,7 @@ export function loadChildrenOfSummary(
        WHERE dag_parent_id = ?
          AND tenant_id = ?
          AND kind != 'archived'
+         AND superseded_by IS NULL
        ORDER BY created ASC
     `).all(summaryId, tenantId) as MemoryRow[];
     return rows.map(rowToEntry);

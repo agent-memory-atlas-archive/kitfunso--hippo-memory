@@ -8,16 +8,14 @@
 
 ### Security
 
-- **A member API key can no longer manage keys.** Minting, listing and revoking keys (`/v1/auth/keys`, and `authCreate`/`authList`/`authRevoke` in the api layer) now require the admin role and answer 403 otherwise. Before, a member key could mint an admin key for its own tenant, which made the member role meaningless.
-- **A member key can no longer read a private scope by naming it.** Recall and assemble (HTTP, MCP and the api layer) refuse an explicitly requested `<source>:private:*` or quarantined scope (`unknown:legacy`) for a member key with 403. Before, any key in a tenant could read every private Slack channel or GitHub repo by passing its scope string. Admins, the local CLI and loopback without a key keep full access; per-scope grants for member keys are ROADMAP Part VIII EI2.
+- **A member key can no longer read a private scope by naming it.** Recall and assemble (HTTP, MCP and the api layer) refuse an explicitly requested `<source>:private:*` or quarantined scope (`unknown:legacy`) for a member key with 403. Before, any key in a tenant could read every private Slack channel or GitHub repo by passing its scope string. Admins, the local CLI and loopback without a key keep full access; per-scope grants for member keys are ROADMAP Part VIII EI2. (Minting and revoking keys as a member was closed in 1.45.0.)
 - **MCP over HTTP runs a member key as a member.** The MCP tools built an admin actor for every caller; they now use the role the HTTP transport authenticated. Stdio MCP is the local operator and still runs as admin.
 
 ### Changed
 
-- **Physics scoring is off by default.** Its paired ablation (`benchmarks/physics-ablation/`) measured it worse than classic hybrid search on every metric with the confidence interval excluding zero (MRR 0.68 vs 0.84, R@5 74% vs 84%), yet `physics.enabled` defaulted to `'auto'`, which switched it on for every store with embeddings. Recall with embeddings now uses classic hybrid search. Set `{"physics":{"enabled":"auto"}}` to opt back in.
+- **Physics scoring is off by default.** Its paired ablation (`benchmarks/physics-ablation/`) measured it worse than classic hybrid search on every metric with the confidence interval excluding zero (MRR 0.68 vs 0.84, R@5 74% vs 84%), and the 2026-09-23 mechanism audit measured it 22.2 points worse at hit@5 on LongMemEval (CI [-26.6, -17.8]), yet `physics.enabled` defaulted to `'auto'`, which switched it on for every store with embeddings. Recall with embeddings now uses classic hybrid search. Set `{"physics":{"enabled":"auto"}}` to opt back in.
 
 ### Fixed
 
-- **Sleep no longer dies on a raw receipt.** Connector messages (Slack, GitHub) and `hippo import --vault` notes are stored as append-only raw rows that SQLite refuses to delete. Two sleep phases deleted them anyway, so the refusal rolled back the whole sleep, and the same row refused again on every later run, the nightly runner's included. The decay pass hit it once a receipt went about 30 days without a recall; the quality audit hit it on the first sleep after any receipt shorter than 10 characters ("lgtm"), and so did `hippo audit --fix`. The decay pass now keeps a faded raw receipt in place (it ranks low and sits out the rest of the cycle), and the quality audit skips raw receipts.
 - **`hippo learn --git` honours `gitLearnPatterns`.** A custom pattern list in `.hippo/config.json` applied only to the MCP `hippo_learn` tool; the CLI always used the built-in list. Both now read the config (its default is the same built-in list).
 - **MCP tool descriptions state the real budgets.** `hippo_recall` and `hippo_context` advertised a 1500-token default while using `defaultBudget` (4000) and `defaultContextBudget` (3000).

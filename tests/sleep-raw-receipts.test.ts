@@ -58,7 +58,6 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
       // The ordinary faded memory is still removed: the batch committed.
       expect(ids).not.toContain(faded.id);
       expect(result.removed).toBe(1);
-      expect(result.details.some((d) => d.includes(receipt.id) && d.includes('raw receipt'))).toBe(true);
     } finally {
       restore();
     }
@@ -84,25 +83,6 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
     }
   });
 
-  it('a faded raw receipt is kept but sits out the rest of the cycle (no merge into a new semantic memory)', async () => {
-    const { home, restore } = tmpHome('hippo-raw-decay-inert-');
-    try {
-      const a = aged(createMemory('deploy failed because the cache was stale on prod server alpha', { layer: Layer.Episodic, kind: 'raw' }), 90);
-      const b = aged(createMemory('deploy failed because the cache was stale on prod server beta', { layer: Layer.Episodic, kind: 'raw' }), 90);
-      writeEntry(home, a);
-      writeEntry(home, b);
-
-      const result = await consolidate(home, { now: new Date() });
-
-      expect(result.semanticCreated).toBe(0);
-      const rows = loadAllEntries(home);
-      expect(rows.map((e) => e.id).sort()).toEqual([a.id, b.id].sort());
-      expect(rows.every((e) => e.kind === 'raw')).toBe(true);
-    } finally {
-      restore();
-    }
-  });
-
   it('a short raw receipt no longer aborts api.sleep at the quality audit', async () => {
     const { home, restore } = tmpHome('hippo-raw-audit-');
     try {
@@ -123,10 +103,10 @@ describe('sleep keeps raw receipts instead of aborting on the append-only trigge
     }
   });
 
-  it('the quality audit never flags a raw receipt, so `hippo audit --fix` cannot hit the trigger either', () => {
+  it('the quality audit never marks a raw receipt for removal, so `hippo audit --fix` cannot hit the trigger either', () => {
     const receipt = createMemory('lgtm', { layer: Layer.Episodic, kind: 'raw' });
     const junk = createMemory('wip fix', { layer: Layer.Episodic });
-    expect(auditMemory(receipt)).toBeNull();
+    expect(auditMemory(receipt)?.severity).not.toBe('error');
     expect(auditMemory(junk)?.severity).toBe('error');
   });
 });

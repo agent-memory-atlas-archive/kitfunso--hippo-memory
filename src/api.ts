@@ -12,6 +12,7 @@ import { openHippoDb, closeHippoDb, type DatabaseSyncLike } from './db.js';
 import {
   writeEntry,
   writeEntryDbOnly,
+  strengthenRetrieved,
   stampOriginProject,
   writeEntryMirrors,
   readEntry,
@@ -71,7 +72,7 @@ import {
 } from './audit.js';
 import { promoteToGlobal, getGlobalRoot, autoShare, searchBothHybrid } from './shared.js';
 import { writeRecallTrace, writeRecallTraceAtRoot, recordTraceOutcome } from './recall-trace.js';
-import { evalNow, isRecallBoostAblated } from './ablation.js';
+import { evalNow } from './ablation.js';
 import { archiveRawMemory } from './raw-archive.js';
 import {
   createApiKey,
@@ -111,7 +112,7 @@ import { detectAvailabilityBias, type AvailabilityHint } from './availability.js
  * object carrying both the audit-log subject (formerly the string itself) and
  * a role for /v1/sleep admin gating. Audit helpers continue accepting `string`
  * — callers pass `ctx.actor.subject`. Role checks happen at the request
- * boundary (e.g. /v1/sleep), not inside api functions.
+ * boundary (e.g. /v1/sleep), except in authCreate and authRevoke (ForbiddenError).
  */
 export interface Actor {
   /** 'cli' | 'localhost:cli' | 'api_key:<key_id>' | 'mcp' | 'connector:slack' | 'connector:github' */
@@ -166,6 +167,14 @@ export class RecallContractError extends Error {
     super(message);
     this.name = 'RecallContractError';
     this.code = code;
+  }
+}
+
+/** The actor's role or identity does not allow the operation. HTTP maps it to 403. */
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
   }
 }
 
@@ -272,6 +281,7 @@ export function remember(ctx: Context, opts: RememberOpts): RememberResult {
     artifact_ref: opts.artifactRef ?? null,
     tags: opts.tags,
     tenantId: ctx.tenantId,
+    baseHalfLifeDays: loadConfig(ctx.hippoRoot).defaultHalfLifeDays,
   });
   // writeEntry threads ctx.actor.subject into its internal audit hook, so exactly
   // one 'remember' event lands in the log with the supplied actor.
@@ -319,6 +329,7 @@ export interface RecallOpts {
    * (e.g. mean-of-children summary re-rank).
    */
   scorerWindow?: number;
+  /** Candidate order. `recall` always keeps the BM25 order; `retrieve` honours this. */
   mode?: 'bm25' | 'hybrid' | 'physics';
   /**
    * Restrict results to memories whose `scope` equals this value exactly.
@@ -689,9 +700,8 @@ export function buildSuppressionSummary(counts: {
 
 /**
  * Domain-level recall. Loads BM25-ranked candidates from SQLite scoped to
- * `ctx.tenantId`. The `mode` flag is accepted for forward compatibility (the
- * CLI exposes hybrid/physics paths) but Task 2 wires only the BM25 candidate
- * loader; later tasks can extend this to call the physics/hybrid scorer.
+ * `ctx.tenantId` and keeps that order whatever `mode` says; `retrieve` is the
+ * mode-aware, strengthening variant the HTTP route uses.
  *
  * **api.recall does NOT mutate `index.last_retrieval_ids`** (v1.11.5 contract
  * lock). The CLI `cmdRecall` (cli.ts) writes `last_retrieval_ids` because the
@@ -706,7 +716,30 @@ export function buildSuppressionSummary(counts: {
 export function recall(ctx: Context, opts: RecallOpts): RecallResult {
   // A member key may not unlock a private or quarantined scope by naming it.
   assertScopeRequestAllowed(ctx.actor.role, opts.scope);
-  const limit = opts.limit ?? 10;
+  const windowSize = recallWindowSize(opts);
+  return recallFrom(ctx, opts, windowSize, loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope, 'exact', false));
+}
+
+/** Mode-aware recall that strengthens each returned row; never writes last_retrieval_ids (v1.11.5 lock). */
+export async function retrieve(ctx: Context, opts: RecallOpts): Promise<RecallResult> {
+  assertScopeRequestAllowed(ctx.actor.role, opts.scope);
+  const windowSize = recallWindowSize(opts);
+  let candidates = loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope, 'exact', false);
+  if (opts.mode === 'hybrid' || opts.mode === 'physics') {
+    const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot, scope: opts.scope ?? null };
+    const ranked = opts.mode === 'physics'
+      ? await physicsSearch(opts.query, candidates, { ...searchOpts, physicsConfig: loadConfig(ctx.hippoRoot).physics })
+      : await hybridSearch(opts.query, candidates, searchOpts);
+    const rankedIds = new Set(ranked.map((r) => r.entry.id));
+    candidates = [...ranked.map((r) => r.entry), ...candidates.filter((e) => !rankedIds.has(e.id))];
+  }
+  const result = recallFrom(ctx, opts, windowSize, candidates);
+  strengthenRetrieved(ctx.hippoRoot, result.results.map((r) => r.id), ctx.tenantId);
+  return result;
+}
+
+/** Contract preflight: throws before any store-touching work. */
+function recallWindowSize(opts: RecallOpts): number {
   // F5 (v1.6.5) preflight — codex P1: original guard fired AFTER
   // loadSearchEntries (which runs initStore, migrating legacy state on first
   // call). For a true contract preflight we want the throw before any
@@ -746,7 +779,11 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
       );
     }
   }
-  const windowSize = opts.scorerWindow ?? DEFAULT_SEARCH_CANDIDATE_LIMIT;
+  return opts.scorerWindow ?? DEFAULT_SEARCH_CANDIDATE_LIMIT;
+}
+
+function recallFrom(ctx: Context, opts: RecallOpts, windowSize: number, all: MemoryEntry[]): RecallResult {
+  const limit = opts.limit ?? 10;
   // v1.7.1 — root-cause fix for the `unknown:legacy` leak. Scope predicate
   // is now pushed into `loadSearchRows` SQL via `loadRecallSearchEntries`.
   // - opts.scope undefined / '': SQL excludes `unknown:legacy`.
@@ -773,22 +810,16 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
   let summarySubstitutionsCount = 0;
   let freshTailAddedCount = 0;
 
-  const all = loadRecallSearchEntries(
-    ctx.hippoRoot,
-    opts.query,
-    windowSize,
-    ctx.tenantId,
-    opts.scope,
-  );
   // v1.12.13 / C5 — WYSIATI totalCandidates counter (post tenant + SQL scope
   // predicate, pre JS scope filter).
   totalCandidatesCount = all.length;
+  const current = all.filter((e) => !e.superseded_by);
   let entries: typeof all;
   if (opts.scope !== undefined && opts.scope !== '') {
     // SQL already exact-matched in loadRecallSearchEntries; keep the JS
     // filter as defense-in-depth so a future SQL-clause regression cannot
     // silently surface cross-scope rows.
-    entries = all.filter((e) => e.scope === opts.scope);
+    entries = current.filter((e) => e.scope === opts.scope);
   } else {
     // SQL already excluded `unknown:legacy` AND (v1.25.0) pre-filtered
     // ':private:' scopes with a conservative LIKE before the candidate
@@ -797,7 +828,7 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
     // anchored `<source>:private:*` rule (v1.2.1 generalization) and
     // defense-in-depth: connector authors cannot silently surface private
     // rows to no-scope callers even if the SQL clause regresses.
-    entries = all.filter((e) => !isPrivateScope(e.scope ?? null));
+    entries = current.filter((e) => !isPrivateScope(e.scope ?? null));
   }
   // v1.12.13 / C5 — WYSIATI dropped_pre_rank counter (JS scope filter drops
   // for api.recall; cmdRecall pipeline rolls --outcome/--layer/--as-of/etc.
@@ -876,7 +907,7 @@ export function recall(ctx: Context, opts: RecallOpts): RecallResult {
     if (eligibleParentIds.length > 0) {
       const parents = loadEntriesByIds(ctx.hippoRoot, eligibleParentIds, ctx.tenantId);
       const eligibleParents = parents.filter(
-        (p) => (p.dag_level ?? 0) === 2 && passesScopeFilterForRecall(p.scope ?? null, opts.scope),
+        (p) => (p.dag_level ?? 0) === 2 && !p.superseded_by && passesScopeFilterForRecall(p.scope ?? null, opts.scope),
       );
       const maxSub = Math.max(1, Math.ceil(limit * 0.3));
       // Order parents by overflow count descending so the most
@@ -1381,7 +1412,7 @@ export function assemble(
     );
     const parents = eligibleParentIds.length > 0
       ? loadEntriesByIds(ctx.hippoRoot, eligibleParentIds, ctx.tenantId)
-          .filter((p) => (p.dag_level ?? 0) === 2)
+          .filter((p) => (p.dag_level ?? 0) === 2 && !p.superseded_by)
           .filter((p) => passesScopeFilterForRecall(p.scope ?? null, opts.scope))
       : [];
     const claimedRawIds = new Set<string>();
@@ -2142,17 +2173,6 @@ export interface AuthCreateResult {
 }
 
 /**
- * API-key management (mint, list, revoke) is admin-only. Before this gate a
- * member key could mint an admin key for its own tenant, which made the
- * member role meaningless. The HTTP routes check this too and answer 403.
- */
-function requireAdminForKeys(ctx: Context): void {
-  if (ctx.actor.role !== 'admin') {
-    throw new Error('API key management requires admin role');
-  }
-}
-
-/**
  * Mint a new API key. The new key is ALWAYS bound to `ctx.tenantId`. Callers
  * cannot override the tenant via the opts bag — a previous `tenantId` field
  * was removed because the HTTP layer would happily forward `body.tenantId`,
@@ -2160,12 +2180,13 @@ function requireAdminForKeys(ctx: Context): void {
  * `src/server.ts` POST /v1/auth/keys mirrors this: it ignores any body
  * `tenantId` and uses the resolved Bearer's tenant exclusively.
  *
- * Per A5 v2 follow-ups (TODOS.md), `auth_create` is currently unaudited —
- * we intentionally match that behavior here for consistency. When A5 v2
- * lands and adds the audit op, this function should mirror the cli handler.
+ * Only an admin actor can mint (ForbiddenError otherwise), so a member key
+ * can never create a key, least of all an admin one.
  */
 export function authCreate(ctx: Context, opts: AuthCreateOpts): AuthCreateResult {
-  requireAdminForKeys(ctx);
+  if (ctx.actor.role !== 'admin') {
+    throw new ForbiddenError('Only an admin key can create API keys');
+  }
   const db = openHippoDb(ctx.hippoRoot);
   try {
     const role = opts.role ?? 'admin';
@@ -2206,7 +2227,6 @@ export function authList(
   ctx: Context,
   opts: { active: boolean },
 ): ApiKeyListItem[] {
-  requireAdminForKeys(ctx);
   const db = openHippoDb(ctx.hippoRoot);
   try {
     const all = listApiKeys(db, opts);
@@ -2220,8 +2240,8 @@ export function authList(
  * Revoke an API key.
  *
  * Security: the key must belong to `ctx.tenantId`. Cross-tenant revoke is
- * rejected with the same "not found" message used for missing keys, so that a
- * caller cannot probe which key_ids exist on other tenants.
+ * rejected with the "not found" message used for missing keys, and a member may
+ * revoke only its own key (checked first), so no caller can probe other key_ids.
  *
  * Audit: emits 'auth_revoke' with `tenantId` set to the KEY ROW's tenant_id
  * (M1 fix from A5 review, mirrors src/cli.ts:cmdAuthRevoke). Skipped on no-op
@@ -2235,7 +2255,9 @@ export function authRevoke(
   ctx: Context,
   keyId: string,
 ): AuthRevokeResult {
-  requireAdminForKeys(ctx);
+  if (ctx.actor.role !== 'admin' && ctx.actor.subject !== `api_key:${keyId}`) {
+    throw new ForbiddenError('A member key can revoke only itself');
+  }
   const db = openHippoDb(ctx.hippoRoot);
   try {
     // SAFETY: row's shape matches the three columns named in the SELECT
@@ -2815,23 +2837,11 @@ export async function getContext(
     const toUpdate = selectedItems.map((s) => s.entry);
     const updatedEntries = markRetrieved(toUpdate);
     const localIndex = loadIndex(ctx.hippoRoot);
+    const retrievedIds = updatedEntries.map((u) => u.id);
+    const strengthenedHere = strengthenRetrieved(ctx.hippoRoot, retrievedIds);
+    if (hasGlobal) strengthenRetrieved(globalRoot, retrievedIds.filter((id) => !strengthenedHere.has(id)));
 
-    // EVAL-ONLY ablation (see ablation.ts): under the recall flag,
-    // markRetrieved returns unmutated entries (ids preserved for outcome
-    // attribution) and persistence is skipped (identical-row writes still
-    // refresh updated_at / mirrors / DAG dirty flags).
-    if (!isRecallBoostAblated()) {
-      for (const u of updatedEntries) {
-        const targetRoot = localIndex.entries[u.id]
-          ? ctx.hippoRoot
-          : hasGlobal
-            ? globalRoot
-            : ctx.hippoRoot;
-        writeEntry(targetRoot, u);
-      }
-    }
-
-    localIndex.last_retrieval_ids = updatedEntries.map((u) => u.id);
+    localIndex.last_retrieval_ids = retrievedIds;
 
     // LC1 F1 structural fix (docs/plans/2026-08-02-lc1-recall-trace-persistence.md):
     // write the trace FIRST — post-limit, post-annotation `selectedItems`
@@ -3091,14 +3101,13 @@ export interface SleepResult {
   /**
    * Faded memories the decay pass moved to the dormant store instead of
    * deleting (config `dormant.enabled`). Absent when 0. Per-invocation
-   * activity counter, same class as `removed` - NOT redacted on egress
-   * (see src/sleep-redact.ts).
+   * activity counter, same class as `removed`.
    */
   dormant?: number;
   /**
    * Dormant memories deleted for good this sleep because they outlived
    * `dormant.retentionDays`. Absent when 0. Same per-invocation class as
-   * `removed` - NOT redacted on egress.
+   * `removed`.
    */
   dormantExpired?: number;
   mergedEpisodic: number;
@@ -3116,26 +3125,22 @@ export interface SleepResult {
    * v1.25.0: count of memories the auto-share secret veto withheld this sleep
    * — rows that passed every other admission gate (transfer score,
    * not-already-global) and were blocked solely by `detectSecret`. Absent
-   * when 0 or when auto-share did not run. Same redaction class as `shared`
-   * (per-invocation activity counter, NOT redacted on egress — see the
-   * "NOT redacted" list in src/sleep-redact.ts).
+   * when 0 or when auto-share did not run.
    */
   secretSkipped?: number;
   /**
    * AT1: count of auto-share candidates the GLOBAL store's rejection
    * tombstone refused this sleep (docs/plans/2026-08-15-at1-rejected-value-tombstone.md
    * plan §3 — copy paths must not let one rejected candidate abort the
-   * batch). Absent when 0 or when auto-share did not run. Same
-   * per-invocation-activity class as `secretSkipped` (sibling counter,
-   * same autoShare call) — NOT redacted on egress, see sleep-redact.ts.
+   * batch). Absent when 0 or when auto-share did not run.
    */
   rejectedSkipped?: number;
   ambient?: AmbientState | null;
   /**
    * E3 sleep enqueue-hook: graph re-extraction totals across the tenants rebuilt
    * this sleep. Absent when no tenant was dirty, and under dryRun (the graph
-   * phase runs only on a real sleep). Cross-tenant aggregate — zeroed on
-   * non-loopback non-self egress by sleep-redact.ts.
+   * phase runs only on a real sleep). Cross-tenant aggregate, one reason
+   * /v1/sleep stays loopback-only.
    */
   graph?: { tenants: number; entities: number; relations: number };
   details?: string[];
@@ -3153,10 +3158,9 @@ export interface SleepResult {
  * serving lands — at that point the route will need an admin-role gate OR
  * api.sleep itself will need to scope dedup / audit / delete by ctx.tenantId.
  *
- * Audit emission gap: the consolidation phases (dedup, audit-delete) do
- * NOT emit audit_log rows today, matching pre-refactor cmdSleepCore. Same
- * CLI/MCP parity gap that T6 fixed for cmdOutcome, now visible at the api
- * surface. Tracked in TODOS.md "Episode A follow-ups" for a future minor.
+ * Dedup and audit deletes each log a `forget` row with the ctx actor and a
+ * `metadata.reason`. Pinned and raw rows are never auto-deleted (canAutoDelete).
+ * dryRun previews consolidate, dedup and audit, then returns before share/ambient.
  */
 /**
  * v1.12.2: Test-only DI seam shape for `sleep`'s phase dependencies.
@@ -3264,10 +3268,8 @@ export async function sleep(
       result.dormantExpired = consolidateResult.dormantExpired;
     }
 
-    if (dryRun) return result;
-
     // Phase 2: Dedup (post-consolidate near-duplicate cleanup).
-    const dedupResult = phases.deduplicateStore(ctx.hippoRoot);
+    const dedupResult = phases.deduplicateStore(ctx.hippoRoot, { dryRun, actor: ctx.actor.subject });
     dedupCount = dedupResult.removed;
     if (dedupResult.removed > 0) {
       const semDups = dedupResult.pairs.filter(
@@ -3287,25 +3289,28 @@ export async function sleep(
       };
     }
 
-    // Phase 3: Quality audit (remove junk, report warnings).
-    const allEntries = phases.loadAllEntries(ctx.hippoRoot);
+    // Phase 3: Quality audit (remove junk, report warnings; a dry run skips rows earlier phases would remove).
+    const planned = new Set(dryRun ? [...(consolidateResult.removedIds ?? []), ...dedupResult.pairs.map((p) => p.removed)] : []);
+    const allEntries = phases.loadAllEntries(ctx.hippoRoot).filter((e) => !planned.has(e.id));
     const auditOut = phases.auditMemories(allEntries);
     if (auditOut.issues.length > 0) {
       const errors = auditOut.issues.filter((i) => i.severity === 'error');
       const warnings = auditOut.issues.filter((i) => i.severity === 'warning');
-      if (errors.length > 0) {
-        for (const issue of errors) {
-          phases.deleteEntry(ctx.hippoRoot, issue.memoryId);
-        }
+      let removed = 0;
+      for (const issue of errors) {
+        const reason = `sleep-audit: ${issue.reason}`;
+        if (dryRun || phases.deleteEntry(ctx.hippoRoot, issue.memoryId, { actor: ctx.actor.subject, reason, automatic: true })) removed++;
       }
-      auditDeletedCount = errors.length;
-      if (errors.length > 0 || warnings.length > 0) {
+      auditDeletedCount = removed;
+      if (removed > 0 || warnings.length > 0) {
         result.audit = {
-          errorsRemoved: errors.length,
+          errorsRemoved: removed,
           warningCount: warnings.length,
         };
       }
     }
+
+    if (dryRun) return result;
 
     // Phase 4: Auto-share high-transfer-score memories to global.
     if (!opts.noShare) {

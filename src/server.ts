@@ -33,8 +33,9 @@ import { validateApiKey } from './auth.js';
 import { createRateLimiter, type RateLimiter } from './rate-limit.js';
 import {
   remember,
-  recall,
+  retrieve,
   RecallContractError,
+  ForbiddenError,
   drillDown,
   assemble,
   forget,
@@ -364,6 +365,8 @@ export interface ServeOpts {
   hippoRoot: string;
   port?: number;
   host?: string;
+  /** Stop and exit on SIGINT/SIGTERM. Only `hippo serve` owns the process, so only it sets this. */
+  handleSignals?: boolean;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
@@ -433,10 +436,13 @@ async function parseJsonBody(req: IncomingMessage): Promise<Record<string, JsonV
  *   - /unknown/i    → 404 (auth_revoke on unknown key_id)
  *   - /already superseded/i → 409 (chain conflict)
  *   - /not raw/i    → 400 (archive_raw on non-raw row)
- * Everything else maps to 400 (bad input).
+ * ForbiddenError maps to 403; everything else to 400 (bad input).
  */
 function mapApiError<E>(err: E) {
   const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof ForbiddenError) {
+    return { status: 403, message };
+  }
   const lower = message.toLowerCase();
   if (/not found/.test(lower) || /^unknown /.test(lower)) {
     return { status: 404, message };
@@ -502,6 +508,26 @@ export function isLoopback(remoteAddress: string | undefined): boolean {
   if (remoteAddress === '::1') return true;
   if (remoteAddress === '::ffff:127.0.0.1') return true;
   return false;
+}
+
+// Any other Host on a loopback socket is DNS rebinding: a hostile page resolved to 127.0.0.1.
+export const LOOPBACK_HOST_HEADER = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+/** A browser request sent by another site. Non-browser clients send neither header and pass. */
+export function isCrossSite(req: IncomingMessage): boolean {
+  const site = req.headers['sec-fetch-site'];
+  if (site !== undefined && site !== 'same-origin' && site !== 'none') return true;
+  const origin = req.headers.origin;
+  return origin !== undefined && origin !== `http://${req.headers.host}`;
+}
+
+// A browser on this machine is loopback too, so the no-key fallback also needs a local Host and a same-site caller.
+function assertLocalCaller(req: IncomingMessage): void {
+  if (!isLoopback(req.socket.remoteAddress)) throw new HttpError(401, 'auth required');
+  const host = req.headers.host;
+  if ((host !== undefined && !LOOPBACK_HOST_HEADER.test(host)) || isCrossSite(req)) {
+    throw new HttpError(403, 'cross-site or non-local request refused; send an API key');
+  }
 }
 
 /**
@@ -621,9 +647,7 @@ function buildContextWithAuth(req: IncomingMessage, hippoRoot: string): Context 
   if (process.env.HIPPO_REQUIRE_AUTH === '1') {
     throw new HttpError(401, 'auth required');
   }
-  if (!isLoopback(req.socket.remoteAddress)) {
-    throw new HttpError(401, 'auth required');
-  }
+  assertLocalCaller(req);
 
   // v1.12.0: loopback fallback is process-local, treat as admin.
   return {
@@ -659,9 +683,7 @@ function requireAuth(req: IncomingMessage, hippoRoot: string): void {
   if (process.env.HIPPO_REQUIRE_AUTH === '1') {
     throw new HttpError(401, 'auth required');
   }
-  if (!isLoopback(req.socket.remoteAddress)) {
-    throw new HttpError(401, 'auth required');
-  }
+  assertLocalCaller(req);
 }
 
 function getString(obj: Record<string, JsonValue>, key: string): string | undefined {
@@ -811,10 +833,7 @@ async function handleRequest(
       throw new HttpError(400, 'q is required');
     }
     const limitRaw = query.get('limit');
-    const limit = limitRaw === null ? undefined : Number(limitRaw);
-    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
-      throw new HttpError(400, 'limit must be a positive number');
-    }
+    const limit = limitRaw === null ? undefined : parseListLimit(limitRaw);
     const mode = query.get('mode');
     if (mode !== null && mode !== 'bm25' && mode !== 'hybrid' && mode !== 'physics') {
       throw new HttpError(400, "mode must be 'bm25', 'hybrid', or 'physics'");
@@ -850,11 +869,12 @@ async function handleRequest(
     const summarizeOverflow = summarizeOverflowRaw === null
       ? undefined
       : (summarizeOverflowRaw === '1' || summarizeOverflowRaw === 'true');
-    // v1.7.2 T4: forward as Number(...) — NaN, 0, negative all reach
-    // recall() which throws RecallContractError with code='invalid_scorer_window'.
-    // No transport-side validation; recall() owns the contract.
+    // recall() owns the shape rule (NaN, 0 and negatives throw invalid_scorer_window); the transport caps remote cost.
     const scorerWindowRaw = query.get('scorer_window');
     const scorerWindow = scorerWindowRaw === null ? undefined : Number(scorerWindowRaw);
+    if (scorerWindow !== undefined && scorerWindow > 1000) {
+      throw new HttpError(400, 'scorer_window must be <= 1000');
+    }
     // v1.7.4: session_id for the dlPFC goal-stack boost. 256-char cap mirrors
     // fresh_tail_session_id (above). Trim then drop if empty so api.recall
     // sees undefined when the param is omitted or whitespace-only.
@@ -933,7 +953,7 @@ async function handleRequest(
     if (httpRecallHistory !== undefined) recallExtra.recallHistory = httpRecallHistory;
     if (explain) recallExtra.explain = explain;
 
-    const result = recall(ctx, {
+    const result = await retrieve(ctx, {
       query: q,
       limit,
       mode: mode ?? undefined,
@@ -1221,7 +1241,8 @@ async function handleRequest(
   // Tenant scope (Episode A follow-up tracked in TODOS.md): api.sleep operates
   // on the WHOLE hippoRoot (cross-tenant by design, matching CLI cmdSleep).
   // The loopback-only guard is the trust boundary today. Future non-loopback
-  // serving needs an admin-role gate before exposing this route.
+  // serving must also zero the cross-tenant counters for other tenants
+  // (D1 in docs/decisions/2026-05-24-blocked-items.md).
   if (method === 'POST' && path === '/v1/sleep') {
     // Defensive per-request loopback guard. Uses the canonical isLoopback()
     // helper above so any future extension (additional mapped/IPv6 forms,
@@ -1268,8 +1289,7 @@ async function handleRequest(
     }
     // v1.12.3: optional body.role mirrors the --role CLI flag. Validated
     // strictly — anything other than 'admin'|'member' is a 400 (no silent
-    // fallback to admin). Key management is admin-only: a member Bearer
-    // gets 403 below (it used to be able to mint an admin key).
+    // fallback to admin). authCreate refuses a member caller with a 403.
     const roleRaw = body['role'];
     let role: 'admin' | 'member' | undefined;
     if (roleRaw !== undefined) {
@@ -1283,9 +1303,6 @@ async function handleRequest(
     // from the Bearer token). Forwarding body.tenantId here would let
     // tenant A mint a key for tenant B — see authCreate doc comment.
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
-    if (ctx.actor.role !== 'admin') {
-      throw new HttpError(403, 'API key management requires admin role');
-    }
     const result = authCreate(ctx, {
       label: labelRaw,
       role,
@@ -1306,25 +1323,18 @@ async function handleRequest(
       else throw new HttpError(400, "active must be 'true' or 'false'");
     }
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
-    if (ctx.actor.role !== 'admin') {
-      throw new HttpError(403, 'API key management requires admin role');
-    }
     const result = authList(ctx, { active });
     sendJson(res, 200, result);
     return;
   }
 
-  // DELETE /v1/auth/keys/:keyId — revoke. authRevoke throws "Unknown key_id"
-  // for missing OR cross-tenant keys (no info leak), which mapApiError
-  // converts to 404. We return 200 with the result body rather than 204 to
-  // surface revokedAt to the caller.
+  // DELETE /v1/auth/keys/:keyId — revoke. Missing or cross-tenant keys are 404
+  // (no info leak); a member key targeting any key but its own is 403.
+  // 200 with the body rather than 204 so the caller sees revokedAt.
   const keyMatch = matchPath('/v1/auth/keys/:keyId', path);
   if (method === 'DELETE' && keyMatch) {
     validateIdSegment(keyMatch.keyId!, 'key id');
     const ctx = buildContextWithAuth(req, opts.hippoRoot);
-    if (ctx.actor.role !== 'admin') {
-      throw new HttpError(403, 'API key management requires admin role');
-    }
     const result = authRevoke(ctx, keyMatch.keyId!);
     sendJson(res, 200, result);
     return;
@@ -3470,9 +3480,7 @@ export async function serve(opts: ServeOpts): Promise<ServerHandle> {
     });
   };
 
-  // Skip signal handlers under vitest so each test run does not register a
-  // stray SIGTERM/SIGINT listener that survives until the runner exits.
-  if (!process.env.VITEST) {
+  if (opts.handleSignals) {
     let shuttingDown = false;
     const gracefulShutdown = async (signal: string): Promise<void> => {
       if (shuttingDown) return;

@@ -1,4 +1,4 @@
-import type { MemoryEntry } from './memory.js';
+import { canAutoDelete, type MemoryEntry } from './memory.js';
 import type { DatabaseSyncLike } from './db.js';
 import type { JsonObject, JsonValue } from './working-memory.js';
 
@@ -126,12 +126,15 @@ function hasNoSpecificity(text: string): boolean {
 }
 
 export function auditMemory(entry: MemoryEntry): AuditIssue | null {
-  // A raw receipt (Slack / GitHub message, vault note) records what was said,
-  // and is append-only: flagging a short one ("lgtm") as an error made sleep
-  // and `hippo audit --fix` DELETE it, which the append-only trigger aborts.
-  // archiveRawMemory (`hippo forget --archive`) is its only removal path.
-  if (entry.kind === 'raw') return null;
+  const issue = classifyMemory(entry);
+  // Error means "auto-remove"; a pinned or raw row is never auto-removed, so it can only warn.
+  if (issue?.severity === 'error' && !canAutoDelete(entry)) {
+    return { ...issue, severity: 'warning', reason: `${issue.reason} (${entry.pinned ? 'pinned' : 'raw'}, kept)` };
+  }
+  return issue;
+}
 
+function classifyMemory(entry: MemoryEntry): AuditIssue | null {
   const content = entry.content.trim();
 
   if (content.length < 3) {

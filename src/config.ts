@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { type PhysicsConfig, DEFAULT_PHYSICS_CONFIG, mergePhysicsConfig } from './physics-config.js';
+import { DEFAULT_HALF_LIFE_DAYS } from './memory.js';
 
 export type DecayBasis = 'clock' | 'session' | 'adaptive';
 
@@ -124,7 +125,7 @@ export interface HippoConfig {
 }
 
 const DEFAULT_CONFIG: HippoConfig = {
-  defaultHalfLifeDays: 7,
+  defaultHalfLifeDays: DEFAULT_HALF_LIFE_DAYS,
   defaultBudget: 4000,
   defaultContextBudget: 3000,
   decayBasis: 'adaptive',

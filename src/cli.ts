@@ -32,7 +32,7 @@
  *   hippo wm <push|read|clear|flush>
  */
 
-import { evalNow, isRecallBoostAblated } from './ablation.js';
+import { evalNow } from './ablation.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -77,6 +77,7 @@ import {
   isInitialized,
   initStore,
   writeEntry,
+  strengthenRetrieved,
   readEntry,
   deleteEntry,
   loadAllEntries,
@@ -119,7 +120,7 @@ import { isHandoffOutcome, formatHandoffEvidenceLine, type SessionHandoff, type 
 import { type Card, isCardStatus } from './card.js';
 import { loadCardDetail, type CardDetail } from './card-detail.js';
 import { passesScopeFilterForRecall } from './recall-scope.js';
-import { search, markRetrieved, estimateTokens, hybridSearch, physicsSearch, explainMatch, textOverlap, tokenize as tokenizeQuery, type RerankStep } from './search.js';
+import { search, estimateTokens, hybridSearch, physicsSearch, explainMatch, textOverlap, tokenize as tokenizeQuery, type RerankStep } from './search.js';
 import { compareEntryIdentity } from './compare.js';
 import { renderTraceContent, parseSteps } from './trace.js';
 import { writeRecallTraceAtRoot } from './recall-trace.js';
@@ -341,8 +342,8 @@ function requireInit(hippoRoot: string): void {
  * H2: when HIPPO_REQUIRE_SERVER is set, the CLI must not silently fall back to
  * direct DB mode — a missing server then masks a real misconfiguration (the
  * configured HIPPO_API_KEY is also silently discarded on fallback). Throws a
- * clear, actionable error in that case; a no-op when the knob is unset, so
- * default behaviour is unchanged.
+ * clear error then. It guards only the routed writes (remember, forget, archive,
+ * promote); every other command opens the store directly, knob or not.
  */
 function failIfServerRequired(reason: string): void {
   if (process.env['HIPPO_REQUIRE_SERVER']) {
@@ -417,6 +418,45 @@ export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set([
   'reset-physics', 'save-baseline', 'show-cases', 'stats', 'stdin',
   'strict', 'suite', 'value-aware', 'verified', 'version', 'why',
 ]);
+
+// Every flag some command reads. Anything else is a typo that no command would act on.
+export const KNOWN_FLAGS: ReadonlySet<string> = new Set([
+  ...BOOLEAN_FLAGS,
+  'actual', 'artifact', 'artifact-ref', 'as-of', 'author', 'baseline', 'body', 'budget', 'card-id',
+  'change', 'channel', 'chatgpt', 'class', 'claude', 'codex-home', 'compare', 'constraint', 'content',
+  'context', 'contract', 'cursor', 'customer', 'days', 'depends-on', 'depth', 'description',
+  'embedding-weight', 'entity', 'estimate', 'file', 'format', 'framing', 'fresh-tail', 'from', 'goal',
+  'graph-hops', 'graph-seeds', 'history-path', 'hops', 'host', 'id', 'importance', 'include-recent',
+  'instructions', 'keep', 'kind', 'label', 'layer', 'level', 'limit', 'link', 'local-bump', 'log-file',
+  'markdown', 'max', 'max-cases', 'max-neighbors', 'min-mrr', 'min-results', 'min-score', 'mmr-lambda',
+  'model', 'name', 'next', 'next-step', 'note', 'older-than', 'op', 'out', 'outcome', 'owner', 'parent',
+  'path', 'policy', 'port', 'reason', 'repo', 'repos', 'reranker', 'reranker-top-k', 'resolution',
+  'role', 'run', 'runtime', 'salience-threshold', 'scan', 'scope', 'session', 'session-id', 'since',
+  'source', 'start-offset', 'started-at', 'state', 'status', 'step', 'steps', 'success', 'summary',
+  'supersedes', 'tag', 'target', 'target-runtime', 'task', 'team', 'tenant', 'tenant-id', 'tests',
+  'text', 'threshold', 'title', 'to', 'transcript', 'trigger', 'type', 'unit', 'value', 'vault',
+]);
+
+// Commands that delete or hide memories: an unknown flag here stops the run instead of being ignored.
+const DESTRUCTIVE_COMMANDS: ReadonlySet<string> = new Set([
+  'audit', 'dedup', 'forget', 'invalidate', 'reject', 'resolve', 'sleep', 'supersede',
+]);
+
+// Commands that honour --dry-run. Any other command would ignore it and run for real.
+const DRY_RUN_COMMANDS: ReadonlySet<string> = new Set([
+  'audit', 'capture', 'dedup', 'forget', 'import', 'invalidate', 'refine', 'setup', 'sleep',
+]);
+
+// share and brief honour --dry-run in one form only; their other forms write for real.
+function dryRunRefusal(command: string, args: string[], flags: Record<string, string | boolean | string[]>): string | null {
+  const isBrief = command === 'brief' || command === 'project-brief';
+  const onlyForm = command === 'share' ? 'share --auto' : isBrief ? `${command} refresh` : null;
+  const honoured = command === 'share' ? args[0] === '--auto' || Boolean(flags['auto'])
+    : isBrief ? args[0] === 'refresh' : DRY_RUN_COMMANDS.has(command);
+  if (honoured) return null;
+  const where = onlyForm ? ` outside \`hippo ${onlyForm}\`` : '';
+  return `hippo ${command} has no --dry-run${where}, so it would run for real. Nothing was changed.`;
+}
 
 // Shared by both the separated and glued (`=`) forms so the list can't drift.
 function isRepeatableFlag(key: string): boolean {
@@ -837,7 +877,7 @@ async function cmdRemember(
   if (flags['verified']) confidence = 'verified';
 
   // Compute schema fit against existing memories
-  const existing = loadAllEntries(targetRoot);
+  const existing = loadAllEntries(targetRoot, resolveTenantId({}));
   const schemaFit = computeSchemaFit(text, rawTags, existing);
 
   // A3 envelope flags
@@ -868,6 +908,7 @@ async function cmdRemember(
   // A5 stub auth: stamp tenant_id from env (HIPPO_TENANT) so recall isolation
   // can filter on this row. Default tenant 'default' for unauthenticated CLI.
   const tenantId = resolveTenantId({});
+  const rememberConfig = loadConfig(targetRoot);
 
   const entry = createMemory(text, {
     layer: Layer.Episodic,
@@ -881,6 +922,7 @@ async function cmdRemember(
     owner: ownerFlag,
     artifact_ref: artifactRefFlag,
     tenantId,
+    baseHalfLifeDays: rememberConfig.defaultHalfLifeDays,
   });
 
   // Auto-tag with path context
@@ -898,7 +940,6 @@ async function cmdRemember(
   }
 
   // Salience gate: decide if this memory is worth storing
-  const rememberConfig = loadConfig(targetRoot);
   if (rememberConfig.salience.enabled && !Boolean(flags['pin']) && !Boolean(flags['force'])) {
     const salienceResult = computeSalience(text, entry.tags, existing, {
       recentWindow: rememberConfig.salience.recentWindow,
@@ -943,13 +984,15 @@ async function cmdRemember(
       const facts = await extractFacts(entry.content, {
         apiKey,
         model: config.extraction.model,
+        onError: (msg) => console.error(`  (extraction failed: ${msg})`),
       });
       if (facts.length > 0) {
         storeExtractedFacts(targetRoot, entry, facts);
         console.error(`  extracted ${facts.length} fact(s)`);
       }
-    } catch {
-      // Extraction is best-effort — never block remember
+    } catch (err) {
+      // Extraction is best-effort: report it, never block remember.
+      console.error(`  (extraction failed: ${err instanceof Error ? err.message : String(err)})`);
     }
   } else if (shouldExtract && !apiKey) {
     console.error('  (extraction skipped: ANTHROPIC_API_KEY not set)');
@@ -989,6 +1032,7 @@ function cmdSupersede(
     pinned,
     source: old.source,
     confidence: 'verified',
+    tenantId: old.tenantId,
   });
 
   // AT1: write the SUCCESSOR first. The rejection guard fires on the new
@@ -1056,8 +1100,9 @@ async function cmdRecall(
   const recallExplicitScope = flags['scope'] !== undefined ? String(flags['scope']).trim() : null;
   const requestedScopeForFilter = recallExplicitScope || undefined;
 
-  let localEntries = loadRecallSearchEntries(hippoRoot, query, undefined, tenantId, requestedScopeForFilter, 'additive');
-  let globalEntries = isInitialized(globalRoot) ? loadRecallSearchEntries(globalRoot, query, undefined, tenantId, requestedScopeForFilter, 'additive') : [];
+  const loadSuperseded = includeSuperseded || Boolean(asOf);
+  let localEntries = loadRecallSearchEntries(hippoRoot, query, undefined, tenantId, requestedScopeForFilter, 'additive', loadSuperseded);
+  let globalEntries = isInitialized(globalRoot) ? loadRecallSearchEntries(globalRoot, query, undefined, tenantId, requestedScopeForFilter, 'additive', loadSuperseded) : [];
 
   // v1.12.13 / C5 — WYSIATI counters. Track filter activity per the plan v3
   // Task 3 mapping table. dropped_pre_rank is the SUM of all non-budget
@@ -1970,22 +2015,13 @@ async function cmdRecall(
     return;
   }
 
-  // Update retrieval metadata and persist
-  const updated = markRetrieved(results.map((r) => r.entry));
+  const retrievedIds = results.map((r) => r.entry.id);
   const localIndex = loadIndex(hippoRoot);
-  // EVAL-ONLY ablation (see ablation.ts): under the recall flag, markRetrieved
-  // returns unmutated entries (ids preserved for outcome attribution below)
-  // and persistence is skipped - writeEntry on identical rows still refreshes
-  // updated_at, rewrites mirrors, and marks DAG parents dirty.
-  if (!isRecallBoostAblated()) {
-    for (const u of updated) {
-      const targetRoot = localIndex.entries[u.id] ? hippoRoot : (isInitialized(globalRoot) ? globalRoot : hippoRoot);
-      writeEntry(targetRoot, u);
-    }
-  }
+  const strengthenedHere = strengthenRetrieved(hippoRoot, retrievedIds);
+  if (isInitialized(globalRoot)) strengthenRetrieved(globalRoot, retrievedIds.filter((id) => !strengthenedHere.has(id)));
 
   // Track last retrieval IDs for outcome command
-  localIndex.last_retrieval_ids = updated.map((u) => u.id);
+  localIndex.last_retrieval_ids = retrievedIds;
 
   // LC1 F1 structural fix (docs/plans/2026-08-02-lc1-recall-trace-persistence.md):
   // ONE trace at hippoRoot (where last_retrieval_ids and outcome
@@ -2226,8 +2262,9 @@ async function cmdExplain(
   // command honest for an operator debugging a hidden row.
   const explainExplicitScope = flags['scope'] !== undefined ? String(flags['scope']).trim() : null;
   const explainRequestedScope = explainExplicitScope || undefined;
-  let explainLocalEntries = loadRecallSearchEntries(hippoRoot, query, undefined, tenantId, explainRequestedScope, 'additive');
-  let explainGlobalEntries = isInitialized(globalRoot) ? loadRecallSearchEntries(globalRoot, query, undefined, tenantId, explainRequestedScope, 'additive') : [];
+  const explainLoadSuperseded = explainIncludeSuperseded || Boolean(explainAsOf);
+  let explainLocalEntries = loadRecallSearchEntries(hippoRoot, query, undefined, tenantId, explainRequestedScope, 'additive', explainLoadSuperseded);
+  let explainGlobalEntries = isInitialized(globalRoot) ? loadRecallSearchEntries(globalRoot, query, undefined, tenantId, explainRequestedScope, 'additive', explainLoadSuperseded) : [];
   const passesExplainScope = (e: MemoryEntry) =>
     api.passesCliRecallScopeFilter(e.scope ?? null, explainRequestedScope);
   explainLocalEntries = explainLocalEntries.filter(passesExplainScope);
@@ -2655,6 +2692,7 @@ function cmdTraceRecord(
     source: String(flags['source'] ?? 'cli'),
     trace_outcome: outcome as 'success' | 'failure' | 'partial',
     source_session_id: sessionId,
+    tenantId: resolveTenantId({}),
   });
 
   writeEntry(hippoRoot, entry);
@@ -2844,7 +2882,7 @@ export function learnFromMemoryMd(hippoRoot: string, homeDir: string = os.homedi
 
   if (memoryDirs.length === 0) return 0;
 
-  const existing = loadAllEntries(hippoRoot);
+  const existing = loadAllEntries(hippoRoot, resolveTenantId({}));
   let imported = 0;
   let skippedSecret = 0;
   // AT1 (plan §3 containment): a rejection guard refusal is per-VALUE — one
@@ -2891,6 +2929,7 @@ export function learnFromMemoryMd(hippoRoot: string, homeDir: string = os.homedi
           tags: ['claude-code-memory'],
           source: `claude-memory:${file}`,
           confidence: 'observed',
+          tenantId: resolveTenantId({}),
         });
 
         try {
@@ -3058,12 +3097,12 @@ export function renderSleepResult(result: api.SleepResult): void {
     if (semDups > 0) parts.push(`${semDups} redundant semantic patterns`);
     if (epiDups > 0) parts.push(`${epiDups} duplicate episodic lessons`);
     if (crossDups > 0) parts.push(`${crossDups} cross-layer duplicates`);
-    console.log(`\nDeduped ${removed} duplicates (${parts.join(', ')}). Kept stronger copies.`);
+    console.log(`\n${result.dryRun ? 'Would dedupe' : 'Deduped'} ${removed} duplicates (${parts.join(', ')}). ${result.dryRun ? 'Would keep' : 'Kept'} stronger copies.`);
   }
 
   if (result.audit) {
     if (result.audit.errorsRemoved > 0) {
-      console.log(`\nAudit: removed ${result.audit.errorsRemoved} junk memories (too short/empty).`);
+      console.log(`\nAudit: ${result.dryRun ? 'would remove' : 'removed'} ${result.audit.errorsRemoved} junk memories (too short/empty).`);
     }
     if (result.audit.warningCount > 0) {
       console.log(`Audit: ${result.audit.warningCount} low-quality memories detected (run \`hippo audit\` for details).`);
@@ -3099,7 +3138,9 @@ async function cmdSleepCore(
 
   // Phase 1: Auto-learn from git + MEMORY.md (CLI-only, uses process.cwd() / os.homedir()).
   // Stays in cli.ts; api.sleep covers Phase 2-6 only.
-  if (!flags['no-learn']) {
+  if (!flags['no-learn'] && flags['dry-run']) {
+    console.log('Dry run: skipped learning from git commits and MEMORY.md files.');
+  } else if (!flags['no-learn']) {
     const config = loadConfig(hippoRoot);
     if (config.autoLearnOnSleep && isGitRepo(process.cwd())) {
       const { added } = learnFromRepo(hippoRoot, process.cwd(), 1);
@@ -3597,12 +3638,12 @@ async function cmdCodexSessionEndWorker(
   }
 }
 
-function shouldAutoRepairCodexWrapper(currentCommand: string, currentArgs: string[]): boolean {
+export function shouldAutoRepairCodexWrapper(currentCommand: string, flags: Record<string, string | boolean | string[]>): boolean {
   if (process.env.HIPPO_SKIP_AUTO_INTEGRATIONS === '1') return false;
   if (!['context', 'remember', 'recall', 'sleep', 'capture', 'outcome', 'status', 'init'].includes(currentCommand)) {
     return false;
   }
-  if (currentCommand === 'init' && currentArgs.includes('--no-hooks')) return false;
+  if (currentCommand === 'init' && flags['no-hooks'] === true) return false;
   return true;
 }
 
@@ -3611,8 +3652,8 @@ function shouldAutoRepairCodexWrapper(currentCommand: string, currentArgs: strin
 // shim). Never first-installs — silently swapping the codex binary on routine
 // commands is a consent violation and reads as binary hijacking to
 // supply-chain scanners (issue #133).
-function maybeRepairCodexWrapper(currentCommand: string, currentArgs: string[]): void {
-  if (!shouldAutoRepairCodexWrapper(currentCommand, currentArgs)) return;
+function maybeRepairCodexWrapper(currentCommand: string, flags: Record<string, string | boolean | string[]>): void {
+  if (!shouldAutoRepairCodexWrapper(currentCommand, flags)) return;
   try {
     repairCodexWrapperIfInstalled();
   } catch {
@@ -3846,13 +3887,10 @@ function cmdForget(
     if (/append-only/i.test(msg)) {
       // The delete was refused by the append-only trigger — this is a raw
       // memory, not a missing one. Point the user at the archive path.
-      console.error(
-        `Cannot forget ${id}: it is a raw, append-only memory. ` +
-        `Archive it instead: hippo forget ${id} --archive --reason "<why>"`,
-      );
+      console.error(rawForgetRefusal(id));
     } else if (api.isDormant(ctx, id)) {
-      // Sleep moved it to the dormant store (dormant.enabled): it is not in
-      // active memory, so point at the command that owns it.
+      // Sleep moved it to the dormant store: it is not in active memory, so
+      // point at the command that owns it.
       console.error(
         `${id} is dormant, not in active memory. Delete it for good: hippo dormant forget ${id} ` +
         `(or bring it back: hippo dormant restore ${id})`,
@@ -3862,6 +3900,30 @@ function cmdForget(
     }
     process.exit(1);
   }
+}
+
+function rawForgetRefusal(id: string): string {
+  return `Cannot forget ${id}: it is a raw, append-only memory. Archive it instead: hippo forget ${id} --archive --reason "<why>"`;
+}
+
+// Refuses exactly where the real run would, so "Would forget" is a promise, not a guess.
+function previewForget(hippoRoot: string, id: string, archive: boolean): void {
+  requireInit(hippoRoot);
+  const entry = readEntry(hippoRoot, id, resolveTenantId({}));
+  if (!entry) {
+    console.error(`Memory not found: ${id}`);
+    process.exit(1);
+  }
+  if (!archive && entry.kind === 'raw') {
+    console.error(rawForgetRefusal(id));
+    process.exit(1);
+  }
+  if (archive && entry.kind !== 'raw') {
+    console.error(`Could not archive ${id}: memory ${id} is not raw (kind=${entry.kind})`);
+    process.exit(1);
+  }
+  const snippet = entry.content.length > 80 ? `${entry.content.slice(0, 80)}...` : entry.content;
+  console.log(`Would ${archive ? 'archive' : 'forget'} ${id} (dry run, nothing changed): "${snippet}"`);
 }
 
 function cmdInspect(hippoRoot: string, id: string): void {
@@ -7076,9 +7138,9 @@ async function cmdWatch(command: string, hippoRoot: string): Promise<void> {
     process.exit(exitCode);
   }
 
-  const entry = captureError(exitCode, stderr, command);
+  const entry = captureError(exitCode, stderr, command, resolveTenantId({}));
   // Compute schema fit against existing memories
-  const existingWatch = loadAllEntries(hippoRoot);
+  const existingWatch = loadAllEntries(hippoRoot, entry.tenantId);
   const watchFit = computeSchemaFit(entry.content, entry.tags, existingWatch);
   entry.schema_fit = watchFit;
   entry.half_life_days = deriveHalfLife(7, entry);
@@ -7179,15 +7241,10 @@ function learnFromRepo(
   // the existing summary line.
   let rejected = 0;
   const gitLearnTags = ['error', 'git-learned'];
-  const existingForSchema = loadAllEntries(hippoRoot);
+  const existingForSchema = loadAllEntries(hippoRoot, resolveTenantId({}));
 
   for (const lesson of lessons) {
-    // L9: learnFromRepo's existingForSchema load just above (the
-    // `loadAllEntries(hippoRoot)` call a few lines up) is host-wide and
-    // intentionally out-of-L9-scope per plan §11 (cli.ts is
-    // single-tenant-per-process). The tenantId arg here is a defensive no-op:
-    // deduplicateLesson's array overload ignores it; the parameter exists
-    // only to mirror the canonical caller pattern used elsewhere in cli.ts.
+    // The array overload ignores the tenant arg; existingForSchema is already scoped.
     if (deduplicateLesson(existingForSchema, lesson, 0.7, resolveTenantId({}))) {
       skipped++;
       continue;
@@ -7209,6 +7266,7 @@ function learnFromRepo(
       source: 'git-learn',
       confidence: 'observed',
       schema_fit: schemaFitVal,
+      tenantId: resolveTenantId({}),
     });
 
     // Auto-tag with path context from the repo being learned
@@ -9600,25 +9658,21 @@ Examples:
 // Entry point
 // ---------------------------------------------------------------------------
 
-const { command, args, flags } = parseArgs(process.argv);
-const hippoRoot = getHippoRoot(process.cwd());
-
-async function main(): Promise<void> {
+async function main(
+  command: string,
+  args: string[],
+  flags: Record<string, string | boolean | string[]>,
+  hippoRoot: string,
+): Promise<void> {
   if (command === '--version' || command === '-v' || flags['version']) {
     const __filename_local = fileURLToPath(import.meta.url);
     const __dirname_local = path.dirname(__filename_local);
-    const pkgPath = path.join(__dirname_local, '..', 'package.json');
-    let pkgJson: string;
-    try {
-      pkgJson = fs.readFileSync(pkgPath, 'utf-8');
-    } catch {
-      pkgJson = fs.readFileSync(path.join(__dirname_local, '..', '..', 'package.json'), 'utf-8');
-    }
+    const pkgJson = fs.readFileSync(path.join(__dirname_local, '..', 'package.json'), 'utf-8');
     const { version } = JSON.parse(pkgJson) as { version: string };
     console.log(version);
     process.exit(0);
   }
-  maybeRepairCodexWrapper(command, args);
+  maybeRepairCodexWrapper(command, flags);
   /** Global --scope well-formedness guard (v1.26.2). parseArgs stores a value-less
    *  flag as boolean true; downstream the 14 consumer sites either coerced that to
    *  the literal scope string 'true' (recall filter/unlock input, wm session scope,
@@ -9651,6 +9705,21 @@ async function main(): Promise<void> {
       console.error(`--${key} takes no value`);
       process.exit(1);
     }
+  }
+  // card checks its flags per subcommand, with a stricter message.
+  const unknownFlags = command === 'card' ? [] : Object.keys(flags).filter((key) => !KNOWN_FLAGS.has(key));
+  if (unknownFlags.length > 0) {
+    const names = unknownFlags.map((key) => `--${key}`).join(', ');
+    if (DESTRUCTIVE_COMMANDS.has(command)) {
+      console.error(`Unknown flag ${names} for hippo ${command}. Nothing was changed.`);
+      process.exit(2);
+    }
+    console.error(`hippo: ignoring unknown flag ${names}. A later release will reject it.`);
+  }
+  const refusal = Object.hasOwn(flags, 'dry-run') ? dryRunRefusal(command, args, flags) : null;
+  if (refusal) {
+    console.error(refusal);
+    process.exit(2);
   }
   switch (command) {
     case 'init':
@@ -9867,7 +9936,7 @@ async function main(): Promise<void> {
         break;
       }
       requireInit(hippoRoot);
-      const entries = loadAllEntries(hippoRoot);
+      const entries = loadAllEntries(hippoRoot, resolveTenantId({}));
       const result = auditMemories(entries);
       const shouldFix = Boolean(flags['fix']);
 
@@ -9881,13 +9950,15 @@ async function main(): Promise<void> {
           console.log(`         "${issue.content.slice(0, 80)}${issue.content.length > 80 ? '...' : ''}"`);
         }
         if (shouldFix) {
-          const errorIds = result.issues.filter(i => i.severity === 'error').map(i => i.memoryId);
-          if (errorIds.length > 0) {
-            for (const id of errorIds) {
-              deleteEntry(hippoRoot, id);
-            }
-            console.log(`\nRemoved ${errorIds.length} error-severity memories.`);
-            console.log(`${result.issues.length - errorIds.length} warnings remain (review manually).`);
+          const errors = result.issues.filter(i => i.severity === 'error');
+          if (errors.length > 0 && flags['dry-run'] === true) {
+            console.log(`\nWould remove ${errors.length} error-severity memories (dry run, nothing deleted).`);
+            console.log(`${result.issues.length - errors.length} warnings would remain (review manually).`);
+          } else if (errors.length > 0) {
+            const removedCount = errors.filter((issue) =>
+              deleteEntry(hippoRoot, issue.memoryId, { reason: `audit --fix: ${issue.reason}`, automatic: true })).length;
+            console.log(`\nRemoved ${removedCount} error-severity memories.`);
+            console.log(`${result.issues.length - errors.length} warnings remain (review manually).`);
           } else {
             console.log(`\nNo error-severity issues. Warnings require manual review.`);
           }
@@ -10021,6 +10092,10 @@ async function main(): Promise<void> {
       if (archive && !reason) {
         console.error(ARCHIVE_REASON_REQUIRED);
         process.exit(1);
+      }
+      if (flags['dry-run'] === true) {
+        previewForget(hippoRoot, id, archive);
+        break;
       }
       const routed = await runViaServerIfAvailable(hippoRoot, async (info, apiKey) => {
         try {
@@ -10188,7 +10263,7 @@ async function main(): Promise<void> {
       requireInit(hippoRoot);
       const format = (flags['format'] as string) || 'json';
       const outputPath = args[0] || null;
-      const entries = loadAllEntries(hippoRoot);
+      const entries = loadAllEntries(hippoRoot, resolveTenantId({}));
 
       let output: string;
       if (format === 'markdown' || format === 'md') {
@@ -10290,11 +10365,11 @@ async function main(): Promise<void> {
       }
       const host = typeof flags['host'] === 'string' ? (flags['host'] as string) : '127.0.0.1';
       const { serve } = await import('./server.js');
-      const handle = await serve({ hippoRoot, port, host });
+      const handle = await serve({ hippoRoot, port, host, handleSignals: true });
       console.log(`hippo serve listening on ${handle.url} (pid ${process.pid})`);
       console.log(`pidfile: ${path.join(hippoRoot, 'server.pid')}`);
       console.log('press Ctrl+C to stop');
-      // SIGINT/SIGTERM handlers wired in server.ts (skipped under VITEST). Hang.
+      // The SIGINT/SIGTERM handlers stop the server and exit. Hang until then.
       await new Promise(() => {});
       break;
     }
@@ -10397,7 +10472,18 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error('Error:', err.message ?? err);
-  process.exit(1);
-});
+export async function runCli(argv: string[] = process.argv): Promise<void> {
+  const { command, args, flags } = parseArgs(argv);
+  try {
+    await main(command, args, flags, getHippoRoot(process.cwd()));
+  } catch (err) {
+    console.error('Error:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+}
+
+// bin/hippo.js calls runCli(); this keeps `node dist/cli.js` working while an import runs nothing.
+const entryPath = process.argv[1];
+if (entryPath && fs.existsSync(entryPath) && fs.realpathSync(entryPath) === fileURLToPath(import.meta.url)) {
+  void runCli();
+}
