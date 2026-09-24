@@ -623,6 +623,31 @@ function errorMessage(cause: unknown): string {
  *
  * Exported for tests.
  */
+
+/** Leading markers of the command lines Claude Code writes with type 'user'. */
+const CLAUDE_CODE_COMMAND_PREFIXES = ['<local-command-', '<command-name>', '<command-message>', '<command-args>'];
+
+/**
+ * Claude Code writes several lines with `type: 'user'` that the human never
+ * typed: meta caveats (`isMeta`), sub-agent turns (`isSidechain`), the
+ * summary it writes after compacting (`isCompactSummary`), and slash-command
+ * wrappers and their output (`<command-name>`, `<local-command-stdout>`).
+ * Mining them stored Claude Code's own boilerplate as a memory.
+ */
+/** The transcript-line flags isNonHumanUserLine reads; any may be absent. */
+interface TranscriptLineFlags {
+  type?: unknown;
+  isMeta?: unknown;
+  isSidechain?: unknown;
+  isCompactSummary?: unknown;
+}
+
+function isNonHumanUserLine(entry: TranscriptLineFlags, content: string): boolean {
+  if (entry.isMeta === true || entry.isSidechain === true || entry.isCompactSummary === true) return true;
+  const head = content.trimStart();
+  return CLAUDE_CODE_COMMAND_PREFIXES.some((p) => head.startsWith(p));
+}
+
 export function summariseTranscript(jsonl: string): string {
   const lines = jsonl.split('\n').filter((l) => l.trim());
   const userMessages: string[] = [];
@@ -643,8 +668,9 @@ export function summariseTranscript(jsonl: string): string {
       const content = 'content' in message ? message.content : undefined;
 
       if (entry.type === 'user') {
-        // Plain text user messages only (skip tool_result arrays)
-        if (isStringValue(content) && content.trim()) {
+        // Plain text user messages only (skip tool_result arrays), and only
+        // ones the human wrote (see isNonHumanUserLine).
+        if (isStringValue(content) && content.trim() && !isNonHumanUserLine(entry, content)) {
           userMessages.push(content.trim());
         }
       } else if (Array.isArray(content)) {
@@ -1125,7 +1151,7 @@ function lastPlainUserMessage(jsonl: string): string {
     const message = 'message' in entry && isObjectLike(entry.message) ? entry.message : undefined;
     if (!message) continue;
     const content = 'content' in message ? message.content : undefined;
-    if (isStringValue(content) && content.trim()) return content.trim();
+    if (isStringValue(content) && content.trim() && !isNonHumanUserLine(entry, content)) return content.trim();
   }
   return '';
 }

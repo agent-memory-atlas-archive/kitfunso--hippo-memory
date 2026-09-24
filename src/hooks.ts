@@ -112,6 +112,8 @@ export interface InstallResult {
   installedUserPromptSubmit: boolean;
   installedPreCompact: boolean;
   installedCompactResume: boolean;
+  /** PostToolUseFailure -> `hippo capture-error` (failed tool calls become error memories). */
+  installedCaptureError: boolean;
   migratedPinnedInjectRecent: boolean;
   migratedFromStop: boolean;
   migratedLegacySessionEnd: boolean;
@@ -135,6 +137,7 @@ const HIPPO_PINNED_INJECT_COMMAND = 'hippo context --pinned-only --include-recen
 const HIPPO_CODEX_WRAPPER_MARKER = 'hippo codex wrapper';
 const HIPPO_PRE_COMPACT_MARKER = 'hippo pre-compact';
 const HIPPO_COMPACT_RESUME_MARKER = 'hippo compact-resume';
+const HIPPO_CAPTURE_ERROR_MARKER = 'hippo capture-error';
 
 const HIPPO_OPENCODE_PLUGIN_MARKER = 'HIPPO_OPENCODE_PLUGIN_V1';
 
@@ -706,6 +709,7 @@ export function installJsonHooks(target: JsonHookTarget): InstallResult {
         installedUserPromptSubmit: false,
         installedPreCompact: false,
         installedCompactResume: false,
+        installedCaptureError: false,
         migratedPinnedInjectRecent: false,
         migratedFromStop: false,
         migratedLegacySessionEnd: false,
@@ -839,12 +843,32 @@ export function installJsonHooks(target: JsonHookTarget): InstallResult {
     installedCompactResume = true;
   }
 
+  // PostToolUseFailure: a failed tool call becomes an error memory, after
+  // `hippo capture-error` drops routine failures (interrupts, declined
+  // permissions, empty searches) and repeats. Same hook the plugin ships.
+  let installedCaptureError = false;
+  if (!hookArrayContains(hooks.PostToolUseFailure, HIPPO_CAPTURE_ERROR_MARKER)) {
+    if (!Array.isArray(hooks.PostToolUseFailure)) hooks.PostToolUseFailure = [];
+    hooks.PostToolUseFailure.push({
+      matcher: '.*',
+      hooks: [
+        {
+          type: 'command',
+          command: 'hippo capture-error',
+          timeout: 10,
+        },
+      ],
+    });
+    installedCaptureError = true;
+  }
+
   if (
     installedSessionEnd ||
     installedSessionStart ||
     installedUserPromptSubmit ||
     installedPreCompact ||
     installedCompactResume ||
+    installedCaptureError ||
     migratedPinnedInjectRecent ||
     migratedFromStop ||
     migratedLegacySessionEnd ||
@@ -861,6 +885,7 @@ export function installJsonHooks(target: JsonHookTarget): InstallResult {
     installedUserPromptSubmit,
     installedPreCompact,
     installedCompactResume,
+    installedCaptureError,
     migratedPinnedInjectRecent,
     migratedFromStop,
     migratedLegacySessionEnd,
@@ -893,6 +918,7 @@ export function uninstallJsonHooks(target: JsonHookTarget): boolean {
     SessionStart: [HIPPO_LAST_SLEEP_MARKER, HIPPO_COMPACT_RESUME_MARKER],
     UserPromptSubmit: [HIPPO_PINNED_INJECT_MARKER],
     PreCompact: [HIPPO_PRE_COMPACT_MARKER],
+    PostToolUseFailure: [HIPPO_CAPTURE_ERROR_MARKER],
     Stop: [HIPPO_SLEEP_MARKER],
   } satisfies Record<string, string[]>;
   for (const [key, markers] of Object.entries(markersByKey)) {

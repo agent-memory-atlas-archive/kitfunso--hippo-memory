@@ -50,7 +50,7 @@ The `UserPromptSubmit` hook runs `hippo context --pinned-only --include-recent 5
 
 ### Auto-capture errors
 
-The `PostToolUseFailure` hook reads the failure Claude Code sends on stdin and saves the tool name and error (first 200 characters) as a hippo error memory (2x half-life). Interrupts are skipped. Next time someone hits the same error, the memory surfaces automatically.
+The `PostToolUseFailure` hook runs `hippo capture-error`, which reads the failure Claude Code sends on stdin and saves the tool name and error (first 200 characters) as an error memory (2x half-life), marked `observed` because nobody verified it. Routine failures are skipped: interrupts, permissions you declined, searches that found nothing, and `grep`/`find`/`diff`-style commands exiting 1. A failure already captured is not stored twice. `hippo hook install claude-code` installs the same hook, so both install routes behave alike.
 
 ### Working state across compaction
 
@@ -75,8 +75,6 @@ claude-code-plugin/
       SKILL.md           # Memory skill (auto-invoked)
   hooks/
     hooks.json           # SessionStart, UserPromptSubmit, PreCompact, PostToolUseFailure, SessionEnd
-  scripts/
-    capture-error.sh     # Error capture script
   README.md
 ```
 

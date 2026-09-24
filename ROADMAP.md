@@ -1544,6 +1544,8 @@ Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 ca
    - Run a 10-task TE5 pilot on the founder's machine to price the full run.
    - Company basics: IP assignment, `SECURITY.md`, licence decision.
    - Trajectory ingestion for TE10 (VibeMemBench), so hippo can run as soon as the benchmark is released.
+   - Verify automatic capture on the founder's machine (`docs/dogfood/2026-09-24-verify-auto-capture.md`): hooks, a real `/compact`, a real tool failure.
+   - Fix the write path's per-write cost, which grows with store size (measured below).
 2. **Weeks 4-8:**
    - EI2 permission-aware recall, with derived-memory negative tests.
    - CD5 poisoning defence with AT3 quarantine.
@@ -1561,4 +1563,35 @@ Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 ca
 - TE6-TE9, EI9, EI13;
 - `hippo rollout`;
 - compliance certification.
+
+### Capture and scale findings (2026-09-24, measured)
+
+**Automatic capture.** A real Claude Code `/compact` against hippo's hooks in a sandbox showed four things:
+- `hippo pre-compact` fires on compaction and saves the task snapshot.
+- Its rule-based mining stored Claude Code's own `/compact` boilerplate as a memory. Fixed: compact summaries, meta lines and slash-command lines are skipped.
+- It missed a decision phrased "we use pnpm, never npm, because…": clause bounding cuts the sentence and both halves fall under the quality floor. Still open; better bounding or opt-in LLM extraction is the fix, measured with TE5.
+- `hippo init` never added hooks a newer hippo introduced when `CLAUDE.md` already held the hippo block. Fixed.
+
+Failed-tool capture now ships through both install routes as `hippo capture-error`. It skips routine failures, stores repeats once, and marks what it stores `observed`.
+
+**Scale.** One store, 10,000 memories of about 180 characters, measured on the sandbox:
+
+| What | Result |
+|---|---|
+| Database size | about 1.2 KB per memory; about 2.2 KB including markdown mirrors |
+| Recall | 0.58 s |
+| Per-prompt hook | 0.28 s |
+| `hippo sleep --dry-run` | 76 s |
+| One write | about 50 ms at 10,000 memories, 18 ms at 2,000 |
+
+- **Size is not the constraint:** a million memories is about 1.2 GB, well within SQLite.
+- **The cost of one write grows with the store:** every write rebuilds `index.json` from the whole database (`src/store.ts`, `writeIndexMirror(hippoRoot, buildIndexFromDb(db))`).
+- **Many paths load every memory:** consolidation, and duplicate checks in capture and remember.
+- **SQLite allows one writer at a time:** fine per developer; for a company-wide server it is why A6 (Postgres) and EI10 exist.
+- **Fixes, before a design partner's store reaches that size:**
+  - make the index mirror incremental or optional;
+  - move duplicate checks to indexed queries;
+  - bound sleep's candidate set.
+
+  This is where A9 (scale to 1M+) starts.
 

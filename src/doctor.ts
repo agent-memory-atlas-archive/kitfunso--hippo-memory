@@ -161,14 +161,23 @@ export function runDoctor(opts: DoctorOpts): DoctorReport {
     const settings = readJson(path.join(claudeDir, 'settings.json'));
     const text = settings === null ? '' : JSON.stringify(settings);
     const viaPlugin = /hippo-memory@/.test(text);
-    const perPrompt = text.includes('hippo context --pinned-only');
-    const sessionEnd = text.includes('hippo session-end');
+    // Each hook and what it does, so a partial install says what is missing.
+    const hooks: Array<[string, string]> = [
+      ['hippo context --pinned-only', 'per-prompt memory'],
+      ['hippo session-end', 'session-end capture and sleep'],
+      ['hippo pre-compact', 'compaction snapshot and capture'],
+      ['hippo compact-resume', 'resume after compaction'],
+      ['hippo capture-error', 'failed-tool capture'],
+    ];
+    const missing = hooks.filter(([marker]) => !text.includes(marker)).map(([, what]) => what);
     if (viaPlugin) {
-      checks.push({ id: 'claude-code', status: 'pass', detail: 'Claude Code: hippo plugin enabled' });
-    } else if (perPrompt && sessionEnd) {
-      checks.push({ id: 'claude-code', status: 'pass', detail: 'Claude Code: hippo hooks installed' });
+      checks.push({ id: 'claude-code', status: 'pass', detail: 'Claude Code: hippo plugin enabled (all hooks, including compaction and failed-tool capture)' });
+    } else if (missing.length === 0) {
+      checks.push({ id: 'claude-code', status: 'pass', detail: 'Claude Code: all hippo hooks installed, including compaction and failed-tool capture' });
+    } else if (missing.length === hooks.length) {
+      checks.push({ id: 'claude-code', status: 'warn', detail: 'Claude Code found, but no hippo hooks are installed', fix: 'hippo hook install claude-code' });
     } else {
-      checks.push({ id: 'claude-code', status: 'warn', detail: 'Claude Code found, but hippo hooks are missing or incomplete', fix: 'hippo hook install claude-code' });
+      checks.push({ id: 'claude-code', status: 'warn', detail: `Claude Code: hippo hooks missing for ${missing.join(', ')}`, fix: 'hippo hook install claude-code   (adds only what is missing)' });
     }
   } else {
     checks.push({ id: 'claude-code', status: 'info', detail: 'Claude Code not found; other agents can use hippo over MCP (hippo mcp)' });

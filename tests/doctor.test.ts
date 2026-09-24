@@ -47,6 +47,9 @@ describe('hippo doctor', () => {
     writeFileSync(join(cwd, '.claude', 'settings.json'), JSON.stringify({ hooks: {
       UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'hippo context --pinned-only --include-recent 5 --format additional-context' }] }],
       SessionEnd: [{ hooks: [{ type: 'command', command: 'hippo session-end --log-file x' }] }],
+      PreCompact: [{ hooks: [{ type: 'command', command: 'hippo pre-compact --log-file x' }] }],
+      SessionStart: [{ matcher: 'compact', hooks: [{ type: 'command', command: 'hippo compact-resume' }] }],
+      PostToolUseFailure: [{ matcher: '.*', hooks: [{ type: 'command', command: 'hippo capture-error' }] }],
     } }));
     const r = runDoctor({ cwd, home: cwd, version: 'test' });
     expect(r.ok).toBe(true);

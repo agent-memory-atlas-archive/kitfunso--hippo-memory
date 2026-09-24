@@ -141,6 +141,8 @@ import { computeSystemEnergy, vecNorm } from './physics.js';
 import { loadConfig } from './config.js';
 import { openHippoDb, closeHippoDb } from './db.js';
 import { runDoctor, formatDoctor } from './doctor.js';
+import { captureToolFailure } from './capture-error.js';
+import type { JsonValue } from './working-memory.js';
 import { blockHash, hookPayloadSessionId, lastSentState, recordTokenUse, shouldSkipUnchanged, type TokenSurface } from './token-ledger.js';
 import { getActiveGoalsWithDb, MAX_FINAL_MULTIPLIER, pushGoal, getActiveGoals, completeGoal, suspendGoal, resumeGoal, applyGoalStackBoost } from './goals.js';
 import type { RetrievalPolicy, PolicyType, Goal, GoalRow } from './goals.js';
@@ -720,17 +722,18 @@ function autoInstallHooks(quiet: boolean): void {
     // Skip if we already installed a hook into this file
     if (installed.has(targetPath)) continue;
 
-    // Skip if hook already present
-    if (fs.existsSync(targetPath)) {
-      const content = fs.readFileSync(targetPath, 'utf8');
-      if (content.includes(HOOK_MARKERS.start)) continue;
-    }
+    // An instruction block already present is not rewritten, but the JSON
+    // hooks and plugins below still run: they are idempotent, and skipping
+    // them meant a store set up by an older hippo never got hooks added in
+    // later releases (PreCompact, PostToolUseFailure) on a re-run of init.
+    const blockPresent = fs.existsSync(targetPath)
+      && fs.readFileSync(targetPath, 'utf8').includes(HOOK_MARKERS.start);
 
     // Only patch the agent-instructions file if it already exists.
     // Never create a new CLAUDE.md / AGENTS.md / etc. just because a sibling
     // marker file (.claude/settings.json, .codex, etc.) was detected — that
     // pollutes dirs the user didn't intend to configure.
-    if (fs.existsSync(targetPath)) {
+    if (!blockPresent && fs.existsSync(targetPath)) {
       const block = `${HOOK_MARKERS.start}\n${hookDef.content}\n${HOOK_MARKERS.end}`;
       const existing = fs.readFileSync(targetPath, 'utf8');
       const sep = existing.endsWith('\n') ? '\n' : '\n\n';
@@ -742,7 +745,7 @@ function autoInstallHooks(quiet: boolean): void {
     // The Codex session-capture wrapper swaps the codex launcher binary, so
     // init never installs it silently — it points at the explicit opt-in
     // command instead (issue #133).
-    if (hook === 'codex' && !isCodexWrapperInstalled()) {
+    if (hook === 'codex' && !blockPresent && !isCodexWrapperInstalled()) {
       console.log('   Codex detected. To capture Codex sessions: hippo hook install codex');
     }
 
@@ -765,6 +768,9 @@ function autoInstallHooks(quiet: boolean): void {
       }
       if (result.installedCompactResume) {
         console.log(`   Auto-installed hippo compact-resume SessionStart(compact) hook in ${hook} settings`);
+      }
+      if (result.installedCaptureError) {
+        console.log(`   Auto-installed hippo capture-error PostToolUseFailure hook in ${hook} settings`);
       }
       if (result.migratedFromStop) {
         console.log(`   Migrated legacy Stop hook → SessionEnd (no longer runs every turn)`);
@@ -7812,6 +7818,9 @@ function cmdHook(
       if (result.installedCompactResume) {
         console.log(`Installed hippo compact-resume SessionStart(compact) hook in ${result.target} settings`);
       }
+      if (result.installedCaptureError) {
+        console.log(`Installed hippo capture-error PostToolUseFailure hook in ${result.target} settings`);
+      }
       if (result.migratedFromStop) {
         console.log(`Migrated legacy Stop hook → SessionEnd (was running every turn; now fires once on session exit)`);
       }
@@ -7936,6 +7945,7 @@ function cmdSetup(flags: Record<string, string | boolean | string[]>): void {
     if (result.installedUserPromptSubmit) bits.push('UserPromptSubmit (pinned-inject)');
     if (result.installedPreCompact) bits.push('PreCompact (pre-compact)');
     if (result.installedCompactResume) bits.push('SessionStart(compact) (compact-resume)');
+    if (result.installedCaptureError) bits.push('PostToolUseFailure (capture-error)');
     if (result.migratedFromStop) bits.push('migrated legacy Stop');
     if (result.migratedSplitSessionEnd) bits.push('migrated split SessionEnd → session-end');
     else if (result.migratedLegacySessionEnd) bits.push('migrated legacy SessionEnd');
@@ -9315,6 +9325,8 @@ Commands:
     --global               Operate on the global store
     dormant restore <id>   Bring a dormant memory back to active memory
     dormant forget <id>    Delete a dormant memory permanently
+  capture-error            Store a failed tool call as an error memory (reads the Claude Code
+                           PostToolUseFailure hook payload on stdin; skips routine failures)
   doctor                   Check the install: Node, store, schema, sleep, agent hooks
     --json                 Machine-readable report (exit code 1 on any failure)
   tokens                   Tokens of memory text hippo handed agents, per surface
@@ -9889,6 +9901,23 @@ async function main(
         stdinTimedOut,
         logFile: typeof flags['log-file'] === 'string' ? (flags['log-file'] as string) : undefined,
       });
+      break;
+    }
+
+    case 'capture-error': {
+      // PostToolUseFailure hook: every path exits 0, and nothing is created
+      // when no store exists (the hook fires in every directory).
+      const { text } = await readStdinBounded();
+      try {
+        const root = isInitialized(hippoRoot) ? hippoRoot : (isInitialized(getGlobalRoot()) ? getGlobalRoot() : null);
+        const payload = (text ?? '').trim();
+        if (root !== null && payload) {
+          // SAFETY: JSON.parse returns a JSON value by definition.
+          captureToolFailure(root, resolveTenantId({}), JSON.parse(payload) as JsonValue);
+        }
+      } catch {
+        // A malformed payload or store error must never fail the agent's tool call.
+      }
       break;
     }
 
