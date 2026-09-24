@@ -37,6 +37,7 @@ import { resolveTenantId } from './tenant.js';
 import { rescueSet, rankNonPinnedByTenant, validateWeights, type MvRankInfo } from './memory-value.js';
 import { MEMORY_VALUE_WEIGHTS, SOURCE_ARTIFACT_SHA256 } from './memory-value-weights.js';
 import { appendAuditEvent } from './audit.js';
+import { migrateDefaultHalfLife } from './half-life-migration.js';
 
 const DECAY_THRESHOLD = 0.05;
 const MERGE_OVERLAP_THRESHOLD = 0.35;  // Jaccard similarity for "related"
@@ -154,6 +155,13 @@ export async function consolidate(
     details: [],
     physicsSimulated: 0,
   };
+
+  // A changed default half-life moves memories still on the old base first,
+  // so this pass decays them at the new one (src/half-life-migration.ts).
+  const halfLife = migrateDefaultHalfLife(hippoRoot, loadConfig(hippoRoot).defaultHalfLifeDays, { dryRun });
+  if (halfLife.rescaled > 0) {
+    result.details.push(`  ⏳ ${dryRun ? 'would move' : 'moved'} ${halfLife.rescaled} memories from the ${halfLife.from}-day to the ${halfLife.to}-day half-life`);
+  }
 
   // L9: host-wide by design. Consolidation runs across all tenants in one
   // pass — per-tenant filtering would create N consolidation runs per host

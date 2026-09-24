@@ -7167,7 +7167,7 @@ async function cmdWatch(command: string, hippoRoot: string): Promise<void> {
   const existingWatch = loadAllEntries(hippoRoot, entry.tenantId);
   const watchFit = computeSchemaFit(entry.content, entry.tags, existingWatch);
   entry.schema_fit = watchFit;
-  entry.half_life_days = deriveHalfLife(7, entry);
+  entry.half_life_days = deriveHalfLife(loadConfig(hippoRoot).defaultHalfLifeDays, entry);
   entry.strength = calculateStrength(entry);
   // AT1 (plan §3 containment): mechanical content from a failed command — a
   // rejection-guard refusal here must not crash the watcher. Skip silently
@@ -8551,6 +8551,7 @@ const VALID_AUDIT_OPS: ReadonlySet<AuditOp> = new Set<AuditOp>([
   'reject_refusal',        // AT1 — emitted when the rejection guard refuses a write; lockstep
   'unreject_value',        // AT1 — emitted by `hippo unreject`; lockstep
   'conflict_resolve',      // AT1 — emitted by resolveConflict on every resolution path; lockstep
+  'half_life_migrate',     // Decay default change — emitted by migrateDefaultHalfLife; lockstep with AuditOp union
   'dormant_restore',       // Dormant memories — emitted by api.restoreDormant; lockstep with AuditOp union + server.ts VALID_AUDIT_OPS
 ]);
 

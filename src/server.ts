@@ -216,6 +216,7 @@ const VALID_AUDIT_OPS: ReadonlySet<AuditOp> = new Set<AuditOp>([
   'reject_refusal',        // AT1 — emitted when the rejection guard refuses a write; lockstep
   'unreject_value',        // AT1 — emitted by `hippo unreject`; lockstep
   'conflict_resolve',      // AT1 — emitted by resolveConflict on every resolution path; lockstep
+  'half_life_migrate',     // Decay default change — emitted by migrateDefaultHalfLife; lockstep with AuditOp union
   'dormant_restore',       // Dormant memories — emitted by api.restoreDormant; lockstep with AuditOp union + cli.ts VALID_AUDIT_OPS
 ]);
 
