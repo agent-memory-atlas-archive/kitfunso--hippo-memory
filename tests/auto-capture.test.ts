@@ -113,6 +113,40 @@ describe('transcript mining', () => {
     }
   });
 
+  it('a project without its own store compacts into the global store, and resumes from it', () => {
+    const { dir, env } = scratch();
+    try {
+      const proj = path.join(dir, 'proj');
+      fs.mkdirSync(proj);
+      expect(run(['init', '--global', '--no-hooks', '--no-schedule', '--no-learn'], proj, env).status).toBe(0);
+      const transcript = path.join(proj, 't.jsonl');
+      fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { role: 'user', content: 'Fix the flaky login test in the billing service.' } }) + '\n');
+      const pre = run(['pre-compact', '--log-file', path.join(dir, 'logs', 'pc.log')], proj, env,
+        JSON.stringify({ session_id: 's1', transcript_path: transcript, cwd: proj, hook_event_name: 'PreCompact', trigger: 'manual' }));
+      expect(pre.status).toBe(0);
+      expect(fs.existsSync(path.join(proj, '.hippo'))).toBe(false);
+      const resume = run(['compact-resume'], proj, env, JSON.stringify({ session_id: 's1', source: 'compact', cwd: proj }));
+      expect(resume.stdout).toContain('Fix the flaky login test');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('with no store anywhere, the compaction hooks create nothing', () => {
+    const { dir, env } = scratch();
+    try {
+      const transcript = path.join(dir, 't.jsonl');
+      fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { role: 'user', content: 'Fix the flaky login test.' } }) + '\n');
+      expect(run(['pre-compact', '--log-file', path.join(dir, 'logs', 'pc.log')], dir, env,
+        JSON.stringify({ session_id: 's1', transcript_path: transcript, cwd: dir })).status).toBe(0);
+      expect(run(['compact-resume'], dir, env, JSON.stringify({ session_id: 's1', source: 'compact' })).status).toBe(0);
+      expect(fs.existsSync(path.join(dir, '.hippo'))).toBe(false);
+      expect(fs.existsSync(path.join(dir, 'global'))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a stale pre-compact report is not shown', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hippo-post-compact-'));
     try {

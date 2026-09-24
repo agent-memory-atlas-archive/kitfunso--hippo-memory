@@ -6917,6 +6917,19 @@ function captureConsole(fn: () => void): string {
 }
 
 /**
+ * The store a Claude Code hook writes to: the project store when there is
+ * one, else an existing global store, else the project path (which the hook
+ * then skips, since hooks fire in every directory and must not create one).
+ * Pre-compact and compact-resume must agree, or a snapshot saved to one store
+ * is looked for in the other.
+ */
+function hookStoreRoot(hippoRoot: string): string {
+  if (isInitialized(hippoRoot)) return hippoRoot;
+  const globalRoot = getGlobalRoot();
+  return isInitialized(globalRoot) ? globalRoot : hippoRoot;
+}
+
+/**
  * Run `fn` against the token ledger's store: the local store when it is
  * initialized, else the global one (the per-prompt hook runs in directories
  * without a local store). Best-effort: returns undefined and never throws,
@@ -9905,7 +9918,7 @@ async function main(
       // Bounded wait, not a TTY guard: an idle non-TTY pipe must not hang.
       const { text: stdinText, timedOut: stdinTimedOut } = await readStdinBounded();
       resetHookInjection(hippoRoot, stdinText, null);
-      await cmdPreCompact(hippoRoot, {
+      await cmdPreCompact(hookStoreRoot(hippoRoot), {
         stdinText,
         stdinTimedOut,
         logFile: typeof flags['log-file'] === 'string' ? (flags['log-file'] as string) : undefined,
@@ -9928,9 +9941,9 @@ async function main(
       // when no store exists (the hook fires in every directory).
       const { text } = await readStdinBounded();
       try {
-        const root = isInitialized(hippoRoot) ? hippoRoot : (isInitialized(getGlobalRoot()) ? getGlobalRoot() : null);
+        const root = hookStoreRoot(hippoRoot);
         const payload = (text ?? '').trim();
-        if (root !== null && payload) {
+        if (isInitialized(root) && payload) {
           // SAFETY: JSON.parse returns a JSON value by definition.
           captureToolFailure(root, resolveTenantId({}), JSON.parse(payload) as JsonValue);
         }
@@ -9943,7 +9956,7 @@ async function main(
     case 'compact-resume': {
       const { text: stdinText, timedOut: stdinTimedOut } = await readStdinBounded();
       resetHookInjection(hippoRoot, stdinText, 'compact');
-      cmdCompactResume(hippoRoot, stdinText, stdinTimedOut);
+      cmdCompactResume(hookStoreRoot(hippoRoot), stdinText, stdinTimedOut);
       break;
     }
 
