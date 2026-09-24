@@ -15,8 +15,8 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const CYAN = '34,211,238';
-    const VIOLET = '167,139,250';
+    const CYAN = '124,227,139'; // mint: recalled
+    const VIOLET = '230,237,231'; // bone: at rest
     const LINK = 120; // px: pairs closer than this get a connecting line
     const MAX_PULSES = 10;
 
@@ -85,7 +85,7 @@
           const d2 = dx * dx + dy * dy;
           if (d2 < LINK * LINK) {
             const alpha = (1 - Math.sqrt(d2) / LINK) * 0.09;
-            ctx.strokeStyle = `rgba(120,160,210,${alpha.toFixed(3)})`;
+            ctx.strokeStyle = `rgba(124,227,139,${alpha.toFixed(3)})`;
             ctx.beginPath();
             ctx.moveTo(pts[i][0], pts[i][1]);
             ctx.lineTo(pts[j][0], pts[j][1]);
@@ -142,8 +142,8 @@
         const y = ay + (by - ay) * pulse.progress;
         const fade = Math.sin(pulse.progress * Math.PI);
         const glow = ctx.createRadialGradient(x, y, 0, x, y, 7);
-        glow.addColorStop(0, `rgba(103,232,249,${(0.5 * fade).toFixed(3)})`);
-        glow.addColorStop(1, 'rgba(103,232,249,0)');
+        glow.addColorStop(0, `rgba(124,227,139,${(0.5 * fade).toFixed(3)})`);
+        glow.addColorStop(1, 'rgba(124,227,139,0)');
         ctx.fillStyle = glow;
         ctx.beginPath();
         ctx.arc(x, y, 7, 0, 6.2832);

@@ -13,11 +13,10 @@ export const site = {
   name: 'hippo',
   pkg: 'hippo-memory',
   version: pkg.version, // npm-published hippo-memory version, imported at build time from the repo-root package.json
-  // README headline tagline, split for gradient emphasis on the verb.
-  tagline: { lead: 'Know what to', accent: 'forget.' },
-  // README line 12 (verbatim intent).
+  // Hero headline (2026-09-24 Terminal Native direction), split for accent emphasis.
+  tagline: { lead: 'Stop re‑teaching', accent: 'your agent.' }, // non-breaking hyphen keeps the word whole
   description:
-    'A memory layer for AI agents, modeled on the hippocampus. Decay by default, strength through use, provenance on every memory.',
+    "The mistake your agent made on Monday is a memory by Tuesday. Hippo plugs into Claude Code, Codex, Cursor and any MCP client, keeps what worked, lets the rest fade, and drops what turned out to be wrong.",
   installCmd: 'npm install -g hippo-memory',
   initCmd: 'hippo init --scan ~',
   // A floor stays true as the suite grows; check-readme-sync.mjs holds README and llms.txt to it.
@@ -32,6 +31,9 @@ export const site = {
     license: `${REPO}/blob/master/LICENSE`,
     jevEval: `${REPO}/blob/master/docs/evals/2026-09-19-jev-reranker.md`,
     atlas: 'https://neoneye.github.io/agent-memory-atlas/systems/hippo-memory/',
+    // Pilot requests open a GitHub issue until a booking link exists.
+    pilot: `${REPO}/issues/new?title=Pilot%20request&body=Company%2C%20team%20size%2C%20agents%20in%20use%3A`,
+    security: `${REPO}/blob/master/SECURITY.md`,
   },
 } as const;
 
@@ -49,23 +51,30 @@ export const proofs = [
 
 export const nav = [
   { label: 'How it works', href: '/#how' },
+  { label: 'Teams', href: '/teams/' },
   { label: 'Benchmarks', href: '/benchmarks/' },
   { label: 'Quickstart', href: '/quickstart/' },
   { label: 'Compare', href: '/#compare' },
   { label: 'Docs', href: site.links.docs },
 ] as const;
 
-/** Honest re-enactment of real `hippo` command output (README-grounded:
- *  --scan, --error -> 14d half-life + [verified], recall ranked w/ confidence + score). */
-export const terminal: Array<{ kind: 'cmd' | 'ok' | 'out'; text: string; chip?: 'verified' | 'observed' }> = [
-  { kind: 'cmd', text: 'npm install -g hippo-memory' },
-  { kind: 'cmd', text: 'hippo init --scan ~' },
-  { kind: 'ok', text: 'memory across every git repo under ~' },
-  { kind: 'cmd', text: 'hippo remember "deploy failed: forgot migrations" --error' },
-  { kind: 'out', text: 'stored · half-life 14d', chip: 'verified' },
-  { kind: 'cmd', text: 'hippo recall "why did the deploy break"' },
-  { kind: 'out', text: 'deploy failed: forgot migrations    0.91', chip: 'verified' },
-  { kind: 'out', text: 'run migrations before release       0.74', chip: 'observed' },
+/** A two-day Claude Code session with hippo's hooks installed. The hippo lines are the
+ *  messages hippo really prints (capture-error, the per-prompt hook, post-compact); the
+ *  project and commands are an illustration. `note` = a day label, `cmd` = a prompt,
+ *  `err` = a failed tool call, `ok` = hippo, `out` = agent output. */
+export const terminal: Array<{ kind: 'note' | 'cmd' | 'err' | 'ok' | 'out'; text: string; chip?: 'verified' | 'observed' }> = [
+  { kind: 'note', text: 'Monday · billing-service' },
+  { kind: 'cmd', text: 'add the refunds endpoint' },
+  { kind: 'out', text: 'Bash(npm install stripe)' },
+  { kind: 'err', text: 'lockfile is pnpm-lock.yaml; npm install would rewrite it' },
+  { kind: 'ok', text: 'hippo · stored error memory', chip: 'observed' },
+  { kind: 'note', text: 'Tuesday · new session' },
+  { kind: 'cmd', text: 'add a webhook for failed payments' },
+  { kind: 'ok', text: 'hippo · 2 memories in context' },
+  { kind: 'out', text: 'billing uses pnpm; never run npm install here' },
+  { kind: 'out', text: 'Bash(pnpm add stripe)  ✓' },
+  { kind: 'cmd', text: '/compact' },
+  { kind: 'ok', text: 'Hippo saved your task snapshot and 2 new memories before compacting.' },
 ];
 
 export const problem = {
@@ -81,8 +90,8 @@ export const problem = {
 export const mechanics = [
   {
     title: 'Decay by default',
-    metric: '7d half-life',
-    body: 'Every memory fades on a 7-day half-life. Persistence is earned through use.',
+    metric: '365d half-life',
+    body: 'Every memory fades on a one-year half-life unless it is used. Unused memories move to a dormant store you can restore.',
   },
   {
     title: 'Retrieval strengthens',
@@ -109,10 +118,11 @@ export const receipts = [
     href: site.links.longmemeval,
   },
   {
-    stat: '0.62',
-    label: 'R@1 with --reranker jev',
-    note: 'Up from 0.41 with the free local cross-encoder, on a private 300-query developer store. Ranking only: no answer-rate win was shown. Opt-in, off by default.',
-    href: site.links.jevEval,
+    stat: '−6.0',
+    tone: 'loss',
+    label: 'points behind BM25, published',
+    note: 'LoCoMo answer accuracy with the old 7-day default, in a Sonnet trial we registered first. The cause was the default; at 365 days the retrieval gap fell from 6.9 points to 1.0.',
+    href: `${REPO}/blob/master/docs/evals/2026-09-24-public-benchmarks-sonnet-trial.md`,
   },
   {
     stat: site.tests,

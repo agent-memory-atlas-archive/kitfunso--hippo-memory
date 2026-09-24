@@ -17,12 +17,12 @@ const stats = await getStats(); // build-time social proof (cached + fallback)
         class="reveal inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs text-zinc-400"
         style="animation-delay: 0ms"
       >
-        <span class="h-1.5 w-1.5 rounded-full bg-acc-cyan"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-acc-violet"></span>
         v{site.version} · MIT
       </span>
 
       <h1
-        class="reveal mt-6 font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl lg:text-7xl"
+        class="reveal mt-6 font-display text-4xl font-medium leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl"
         style="animation-delay: 70ms"
       >
         {site.tagline.lead}<br /><span class="text-gradient">{site.tagline.accent}</span>
@@ -61,7 +61,7 @@ const stats = await getStats(); // build-time social proof (cached + fallback)
       <div class="reveal mt-5 flex flex-wrap items-center gap-3" style="animation-delay: 280ms">
         <a
           href="/quickstart/"
-          class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-acc-violet to-acc-cyan px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:opacity-90"
+          class="inline-flex items-center gap-2 rounded-xl bg-acc-violet px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:opacity-90"
         >
           Get started
         </a>
@@ -115,7 +115,7 @@ const stats = await getStats(); // build-time social proof (cached + fallback)
 
     <div class="reveal min-w-0 lg:pl-4" style="animation-delay: 220ms">
       <Terminal />
-      <p class="mt-3 text-center font-mono text-xs text-zinc-400">an example session</p>
+      <p class="mt-3 text-center font-mono text-xs text-zinc-400">an illustrated session · the hippo lines are real hippo output</p>
     </div>
   </div>
 </section>

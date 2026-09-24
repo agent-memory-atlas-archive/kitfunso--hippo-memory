@@ -1,36 +1,52 @@
-/* hippo-memory landing page - design system
-   Dark-premium. Single violet->cyan accent used surgically (headline words, the
-   decay curve, CTA edges, the hero glow) - never as a background fill, to stay off
-   the gradient-soup AI-slop path. Secondary emerald/rose chips echo hippo's
-   confidence tiers / error-memory mechanic. */
+/* hippo-memory landing page - design system (2026-09-24 "Terminal Native" direction)
+   Ink ground, one mint accent for what is recalled, amber for what was marked
+   wrong. Martian Mono carries the display and code, Onest the body. The old
+   acc-violet / acc-cyan token names are kept so every component re-themes
+   without edits; both now resolve to the mint family. */
 
-@import '@fontsource-variable/bricolage-grotesque';
-@import '@fontsource-variable/hanken-grotesk';
-@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/martian-mono/400.css';
+@import '@fontsource/martian-mono/500.css';
+@import '@fontsource/martian-mono/700.css';
+@import '@fontsource-variable/onest';
 @import 'tailwindcss';
 
 @theme {
-  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-sans: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', monospace;
+  --font-display: 'Martian Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-sans: 'Onest Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* brand accent stops (distinct names so they don't clobber Tailwind's violet/cyan scales) */
-  --color-acc-violet: #a78bfa;
-  --color-acc-cyan: #22d3ee;
+  /* brand accents: mint = recalled, amber = marked wrong */
+  --color-acc-violet: #7ce38b;
+  --color-acc-cyan: #a7f0b1;
+  --color-acc-amber: #f2b84b;
+
+  /* neutrals tinted toward the ink ground (overrides Tailwind's zinc scale sitewide) */
+  --color-zinc-50: #f2f5f2;
+  --color-zinc-100: #e6ede7;
+  --color-zinc-200: #d3dcd5;
+  --color-zinc-300: #b5c1b8;
+  --color-zinc-400: #9aa79e;
+  --color-zinc-500: #75827a;
+  --color-zinc-600: #56625a;
+  --color-zinc-700: #3a443d;
+  --color-zinc-800: #1f2a22;
+  --color-zinc-900: #141b16;
+  --color-zinc-950: #0b0f0c;
 
   /* terminal palette */
-  --color-term-bg: #0c0c12;
-  --color-term-prompt: #22d3ee;
-  --color-term-ok: #4ade80;
-  --color-term-dim: #9a9aa6;
-  --color-term-fg: #e4e4ea;
+  --color-term-bg: #0f1411;
+  --color-term-prompt: #7ce38b;
+  --color-term-ok: #7ce38b;
+  --color-term-dim: #9aa79e;
+  --color-term-fg: #e6ede7;
+  --color-term-err: #f2837b;
 }
 
 /* ---- base ---- */
 @layer base {
   :root {
     color-scheme: dark;
-    --bg: #08080b;
+    --bg: #0b0f0c;
   }
 
   html {
@@ -50,8 +66,8 @@
 
   h1, h2, h3 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
-    font-weight: 600;
+    letter-spacing: -0.035em;
+    font-weight: 500;
   }
 
   ::selection {
@@ -68,7 +84,7 @@
 
 /* ---- gradient text (pinned @supports fallback so it never renders transparent) ---- */
 .text-gradient {
-  color: #c4b5fd; /* bright violet, passes AA on near-black for large display text */
+  color: #7ce38b; /* mint, passes AA on the ink ground */
 }
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
   .text-gradient {
@@ -92,24 +108,24 @@
 /* Sticky header only: dark fallback so page text never reads through where
    backdrop-filter is unsupported. The ~40 .glass content cards keep the light fill. */
 header.glass {
-  background: rgba(10, 10, 15, 0.85);
+  background: rgba(11, 15, 12, 0.88);
 }
 .glass-hover {
   transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
 }
 .glass-hover:hover {
-  border-color: rgba(167, 139, 250, 0.35);
+  border-color: rgba(124, 227, 139, 0.35);
   background: rgba(255, 255, 255, 0.05);
 }
 
 /* ---- prose links (DESIGN.md links token) ----
-   One treatment sitewide: cyan with a 45% underline at rest, full on hover/focus.
+   One treatment sitewide: mint with a 45% underline at rest, full on hover/focus.
    Applied per-link via this class - deliberately NOT a blanket `a` rule, so nav
    pills, CTAs, and card links keep their own treatments. */
 .link {
   color: var(--color-acc-cyan);
   text-decoration-line: underline;
-  text-decoration-color: rgba(34, 211, 238, 0.45);
+  text-decoration-color: rgba(167, 240, 177, 0.45);
   text-underline-offset: 4px;
 }
 .link:hover,
@@ -121,10 +137,10 @@ header.glass {
 header a[aria-current='page'] {
   color: var(--color-acc-cyan);
 }
-/* the mobile chip rail additionally gets a cyan border + faint fill */
+/* the mobile chip rail additionally gets a mint border + faint fill */
 nav[aria-label='Pages'] a[aria-current='page'] {
-  border-color: rgba(34, 211, 238, 0.55);
-  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(124, 227, 139, 0.55);
+  background: rgba(124, 227, 139, 0.08);
 }
 
 /* ---- decorative backgrounds ---- */
@@ -147,14 +163,14 @@ nav[aria-label='Pages'] a[aria-current='page'] {
 }
 .hero-glow {
   background:
-    radial-gradient(50% 45% at 70% 12%, rgba(34, 211, 238, 0.16), transparent 70%),
-    radial-gradient(55% 50% at 25% 20%, rgba(139, 92, 246, 0.20), transparent 70%);
+    radial-gradient(50% 45% at 70% 12%, rgba(124, 227, 139, 0.12), transparent 70%),
+    radial-gradient(55% 50% at 25% 20%, rgba(124, 227, 139, 0.06), transparent 70%);
 }
 
 /* hairline gradient divider */
 .rule-gradient {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.5), rgba(34, 211, 238, 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(124, 227, 139, 0.5), rgba(167, 240, 177, 0.5), transparent);
 }
 
 /* gradient ring/border via padding box trick for CTA + cards */
