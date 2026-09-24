@@ -721,6 +721,8 @@ For Claude Code, it also adds:
 - a `UserPromptSubmit` hook that runs `hippo context --pinned-only --include-recent 5 --format additional-context` every turn. It re-injects pinned memories (`hippo remember <text> --pin`) plus the last 5 writes, so fresh same-session lessons appear on the next prompt before you pin them. The block is rendered without live strength percentages, so it stays byte-identical while its memories do not change, and it is sent only when it changed since the session's last prompt: an unchanged block is skipped, resent every 10 skips (`pinnedInject.refreshTurns`, `0` never resends) and resent after compaction. `{"pinnedInject":{"skipUnchanged":false}}` sends it every turn as before. Opt out entirely with `{"pinnedInject":{"enabled":false}}` in `.hippo/config.json`.
 - a `PreCompact` hook that runs `hippo pre-compact` before the transcript gets summarized. It saves a working-state snapshot (task/summary/next step) and extracts durable memories from the tail, so mid-session compaction can't drop them.
 - a second `SessionStart` hook (matcher `compact`) that runs `hippo compact-resume`, printing that snapshot plus the recent session trail back into context right after compaction.
+- a `PostCompact` hook that runs `hippo post-compact`, which tells you what was saved ("Hippo saved your task snapshot and 2 new memories before compacting"). It prints nothing when nothing was saved.
+- a `PostToolUseFailure` hook that runs `hippo capture-error`, which stores a failed tool call as an error memory. It skips interrupts, declined permissions and searches that found nothing, and stores a repeated failure once.
 
 To remove: `hippo hook uninstall claude-code`
 

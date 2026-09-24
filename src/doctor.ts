@@ -167,6 +167,7 @@ export function runDoctor(opts: DoctorOpts): DoctorReport {
       ['hippo session-end', 'session-end capture and sleep'],
       ['hippo pre-compact', 'compaction snapshot and capture'],
       ['hippo compact-resume', 'resume after compaction'],
+      ['hippo post-compact', 'the message after compaction'],
       ['hippo capture-error', 'failed-tool capture'],
     ];
     const missing = hooks.filter(([marker]) => !text.includes(marker)).map(([, what]) => what);

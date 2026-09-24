@@ -187,7 +187,7 @@ import {
   importVault,
   ImportOptions,
 } from './importers.js';
-import { cmdCapture, CaptureOptions, cmdPreCompact, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage } from './capture.js';
+import { cmdCapture, CaptureOptions, cmdPreCompact, postCompactMessage, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage } from './capture.js';
 import { readStdinBounded } from './stdin.js';
 import {
   auditMemories,
@@ -768,6 +768,9 @@ function autoInstallHooks(quiet: boolean): void {
       }
       if (result.installedCompactResume) {
         console.log(`   Auto-installed hippo compact-resume SessionStart(compact) hook in ${hook} settings`);
+      }
+      if (result.installedPostCompact) {
+        console.log(`   Auto-installed hippo post-compact PostCompact hook in ${hook} settings`);
       }
       if (result.installedCaptureError) {
         console.log(`   Auto-installed hippo capture-error PostToolUseFailure hook in ${hook} settings`);
@@ -7818,6 +7821,9 @@ function cmdHook(
       if (result.installedCompactResume) {
         console.log(`Installed hippo compact-resume SessionStart(compact) hook in ${result.target} settings`);
       }
+      if (result.installedPostCompact) {
+        console.log(`Installed hippo post-compact PostCompact hook in ${result.target} settings`);
+      }
       if (result.installedCaptureError) {
         console.log(`Installed hippo capture-error PostToolUseFailure hook in ${result.target} settings`);
       }
@@ -7945,6 +7951,7 @@ function cmdSetup(flags: Record<string, string | boolean | string[]>): void {
     if (result.installedUserPromptSubmit) bits.push('UserPromptSubmit (pinned-inject)');
     if (result.installedPreCompact) bits.push('PreCompact (pre-compact)');
     if (result.installedCompactResume) bits.push('SessionStart(compact) (compact-resume)');
+    if (result.installedPostCompact) bits.push('PostCompact (post-compact)');
     if (result.installedCaptureError) bits.push('PostToolUseFailure (capture-error)');
     if (result.migratedFromStop) bits.push('migrated legacy Stop');
     if (result.migratedSplitSessionEnd) bits.push('migrated split SessionEnd → session-end');
@@ -9462,6 +9469,8 @@ Commands:
   pre-compact              PreCompact hook: snapshot + capture the tail before compaction
     --log-file <p>         Diagnostic log path (default: ~/.hippo/logs/pre-compact.log)
   compact-resume           SessionStart(compact) hook: re-print the snapshot + session trail
+  post-compact             PostCompact hook: tell the user what pre-compact saved
+    --log-file <p>         Same log path as pre-compact (default: ~/.hippo/logs/pre-compact.log)
   codex-run [-- ...args]   Launch real Codex behind Hippo's session-end wrapper
   hook <sub> [target]      Manage framework integrations
     hook list              Show available hooks
@@ -9901,6 +9910,16 @@ async function main(
         stdinTimedOut,
         logFile: typeof flags['log-file'] === 'string' ? (flags['log-file'] as string) : undefined,
       });
+      break;
+    }
+
+    case 'post-compact': {
+      // PostCompact hook: tells the user what pre-compact saved. Plain text,
+      // because Claude Code shows this hook's stdout as-is. Always exits 0.
+      const { text } = await readStdinBounded();
+      const logFlag = flags['log-file'];
+      const message = postCompactMessage(text, logFlag === true || logFlag === false || Array.isArray(logFlag) ? undefined : logFlag);
+      if (message !== null) console.log(message);
       break;
     }
 

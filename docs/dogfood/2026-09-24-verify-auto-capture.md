@@ -33,6 +33,7 @@ hippo recall "pnpm npm install" --budget 500
 ```
 
 **Expect:**
+- right after `/compact`, Claude Code shows "Hippo saved your task snapshot … before compacting". If it does not appear, run `hippo hook install claude-code` (it adds the `PostCompact` hook) and check your Claude Code is recent enough to have that hook;
 - the log says `snapshot saved` and `capture: N items captured`;
 - `snapshot show` prints the task;
 - recall finds the rule.

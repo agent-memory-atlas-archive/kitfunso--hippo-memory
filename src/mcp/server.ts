@@ -520,17 +520,17 @@ function createGlobalStoreOnFirstRun(): string {
 
 // ── Token ledger (ROADMAP TE0) ──
 
-const MCP_TOKEN_SURFACES: Record<string, TokenSurface> = {
-  hippo_recall: 'mcp_recall',
-  hippo_context: 'mcp_context',
-};
+const MCP_TOKEN_SURFACES = new Map<string, TokenSurface>([
+  ['hippo_recall', 'mcp_recall'],
+  ['hippo_context', 'mcp_context'],
+]);
 
 /**
  * Record the memory text a recall or context tool returned. Best-effort: a
  * ledger failure never fails the tool call. Other tools are not recorded.
  */
 function recordMcpTokens(toolName: string, output: string, ctx?: McpContext): void {
-  const surface = MCP_TOKEN_SURFACES[toolName];
+  const surface = MCP_TOKEN_SURFACES.get(toolName);
   if (!surface || !output) return;
   try {
     const hippoRoot = ctx?.hippoRoot ?? findHippoRoot();

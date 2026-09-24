@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { extractFromText } from '../src/capture.js';
+import { extractFromText, preCompactMessage, postCompactMessage, preCompactReportPath } from '../src/capture.js';
 import { lessonFromFailure, captureToolFailure, failureSignature } from '../src/capture-error.js';
 import { initStore, loadAllEntries, getHippoRoot } from '../src/store.js';
 import { installJsonHooks } from '../src/hooks.js';
@@ -65,6 +65,63 @@ describe('transcript mining', () => {
       const contents = loadAllEntries(getHippoRoot(dir), 'default').map((e) => e.content).join(' | ');
       expect(contents).toMatch(/npm install/);
       expect(contents).not.toMatch(/restart the server|local commands|Never mind this output/i);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('after compaction the user is told what hippo saved, once, and pre-compact prints nothing', () => {
+    // Claude Code passes PreCompact stdout to the summarising model as
+    // instructions, so the message comes from the PostCompact hook instead.
+    expect(preCompactMessage({ snapshotSaved: false, captured: 0 })).toBeNull();
+    expect(preCompactMessage({ snapshotSaved: false, captured: 1 })).toBe('Hippo saved 1 new memory before compacting.');
+    expect(preCompactMessage({ snapshotSaved: true, captured: 3 })).toBe(
+      'Hippo saved your task snapshot and 3 new memories before compacting. The snapshot is restored into the new context.',
+    );
+
+    const { dir, env } = scratch();
+    try {
+      expect(run(['init', '--no-hooks', '--no-schedule', '--no-learn'], dir, env).status).toBe(0);
+      const logFile = path.join(dir, 'logs', 'pre-compact.log');
+      const transcript = path.join(dir, 't.jsonl');
+      const lines = [
+        { type: 'user', message: { role: 'user', content: 'Fix the flaky login test. Never run npm install in the billing service; the lockfile is pnpm-lock.yaml.' } },
+        { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Looking at the login test now.' }] } },
+      ];
+      fs.writeFileSync(transcript, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+      const compact = (session: string) => run(['pre-compact', '--log-file', logFile], dir, env,
+        JSON.stringify({ session_id: session, transcript_path: transcript, cwd: dir, hook_event_name: 'PreCompact', trigger: 'auto' }));
+      const post = (session: string) => run(['post-compact', '--log-file', logFile], dir, env,
+        JSON.stringify({ session_id: session, cwd: dir, hook_event_name: 'PostCompact', trigger: 'auto' }));
+
+      const pre = compact('s1');
+      expect(pre.status).toBe(0);
+      expect(pre.stdout).toBe('');
+      const shown = post('s1');
+      expect(shown.status).toBe(0);
+      expect(shown.stdout.trim()).toMatch(/^Hippo saved your task snapshot( and \d+ new memor(y|ies))? before compacting\. The snapshot is restored/);
+      expect(post('s1').stdout).toBe('');
+
+      // Another session's report is not shown.
+      expect(compact('s1').status).toBe(0);
+      expect(post('s2').stdout).toBe('');
+      // Nothing saved, nothing said.
+      expect(run(['post-compact', '--log-file', path.join(dir, 'none', 'x.log')], dir, env, '').stdout).toBe('');
+      expect(postCompactMessage(undefined, path.join(dir, 'none', 'x.log'))).toBeNull();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a stale pre-compact report is not shown', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hippo-post-compact-'));
+    try {
+      const logFile = path.join(dir, 'pre-compact.log');
+      const write = (at: string) => fs.writeFileSync(preCompactReportPath(logFile), JSON.stringify({ snapshotSaved: true, captured: 0, sessionId: null, at }));
+      write('2026-09-24T10:00:00.000Z');
+      expect(postCompactMessage('{}', logFile, new Date('2026-09-24T11:00:00.000Z'))).toBeNull();
+      write('2026-09-24T10:00:00.000Z');
+      expect(postCompactMessage('{}', logFile, new Date('2026-09-24T10:01:00.000Z'))).toMatch(/^Hippo saved your task snapshot/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -135,10 +192,12 @@ describe('both install routes wire compaction and failed-tool capture', () => {
     const first = installJsonHooks('claude-code');
     expect(first.installedPreCompact).toBe(true);
     expect(first.installedCaptureError).toBe(true);
+    expect(first.installedPostCompact).toBe(true);
     expect(installJsonHooks('claude-code').installedCaptureError).toBe(false);
     const settings = fs.readFileSync(path.join(dir, '.claude', 'settings.json'), 'utf8');
     expect(settings).toContain('hippo pre-compact');
     expect(settings).toContain('hippo capture-error');
+    expect(settings).toContain('hippo post-compact');
   });
 
   it('re-running hippo init adds hooks a newer hippo introduced even when CLAUDE.md already has the block', () => {
@@ -152,6 +211,7 @@ describe('both install routes wire compaction and failed-tool capture', () => {
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     delete settings.hooks.PreCompact;
     delete settings.hooks.PostToolUseFailure;
+    delete settings.hooks.PostCompact;
     fs.writeFileSync(settingsPath, JSON.stringify(settings));
     expect(fs.readFileSync(path.join(proj, 'CLAUDE.md'), 'utf8')).toContain('hippo');
 
@@ -160,6 +220,7 @@ describe('both install routes wire compaction and failed-tool capture', () => {
     const after = fs.readFileSync(settingsPath, 'utf8');
     expect(after).toContain('hippo pre-compact');
     expect(after).toContain('hippo capture-error');
+    expect(after).toContain('hippo post-compact');
   });
 
   it('hippo doctor names the missing hooks', () => {

@@ -54,7 +54,7 @@ The `PostToolUseFailure` hook runs `hippo capture-error`, which reads the failur
 
 ### Working state across compaction
 
-The `PreCompact` hook runs `hippo pre-compact` to snapshot the working state before the transcript is summarised. After compaction, `hippo compact-resume` puts that snapshot back into context.
+The `PreCompact` hook runs `hippo pre-compact` to snapshot the working state before the transcript is summarised. After compaction, `hippo compact-resume` puts that snapshot back into context, and `hippo post-compact` (the `PostCompact` hook) tells you what was saved.
 
 ### Sleep at session end
 
@@ -74,7 +74,7 @@ claude-code-plugin/
     memory/
       SKILL.md           # Memory skill (auto-invoked)
   hooks/
-    hooks.json           # SessionStart, UserPromptSubmit, PreCompact, PostToolUseFailure, SessionEnd
+    hooks.json           # SessionStart, UserPromptSubmit, PreCompact, PostCompact, PostToolUseFailure, SessionEnd
   README.md
 ```
 

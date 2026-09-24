@@ -49,6 +49,7 @@ describe('hippo doctor', () => {
       SessionEnd: [{ hooks: [{ type: 'command', command: 'hippo session-end --log-file x' }] }],
       PreCompact: [{ hooks: [{ type: 'command', command: 'hippo pre-compact --log-file x' }] }],
       SessionStart: [{ matcher: 'compact', hooks: [{ type: 'command', command: 'hippo compact-resume' }] }],
+      PostCompact: [{ hooks: [{ type: 'command', command: 'hippo post-compact' }] }],
       PostToolUseFailure: [{ matcher: '.*', hooks: [{ type: 'command', command: 'hippo capture-error' }] }],
     } }));
     const r = runDoctor({ cwd, home: cwd, version: 'test' });
