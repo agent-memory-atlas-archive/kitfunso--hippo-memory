@@ -31,6 +31,7 @@ Four tiers, in the order a buyer cares about them. Every KPI is reported for hip
 **Tier 1: money.** Source: the agent's telemetry, never hippo's estimate.
 - **Cost per merged PR, and per session.** Cost-weighted tokens (uncached input, cache write, cache read, output) at list price, with hippo's own tokens included.
 - **Tokens per session, by type.** Cache reads are about a tenth of the input price, so a raw token total misleads. Always cost-weight.
+- **Read-token share per session.** Tokens spent on file reads and searches. Reads are most of a coding agent's input, so this is where memory should show first.
 - **Turns and active time per session.** A secondary signal for "less wandering".
 
 **Tier 2: what hippo is for.** Attributable to memory by construction.
@@ -88,6 +89,42 @@ At 200 developers and three sessions a day, that is about 12 working days for th
   - Copilot and Cursor expose less per-session data. Their reports fall back to tiers 2 to 4 plus organisation-level usage.
 - **CD13. Failure-signature log.** Record every failure signature seen, with session and time, including skipped and duplicate ones, so repeat-error rate can be computed per arm.
 - **CD7, upgraded.** The monthly value report becomes the pilot report: each KPI per arm, the difference with its interval, and hippo's own cost. It gives no saving figure until the interval excludes zero (non-goal 16).
+
+## What the agents already report (checked 2026-09-24)
+
+**Claude Code** (read on code.claude.com and platform.claude.com):
+- **OpenTelemetry export.** Set `CLAUDE_CODE_ENABLE_TELEMETRY=1` with an OTLP or Prometheus exporter.
+  - `claude_code.token.usage` is split by `type` (input, output, cacheRead, cacheCreation) and by `query_source` (main, subagent or auxiliary).
+  - Also exported: `claude_code.cost.usage` (USD), `claude_code.session.count`, `claude_code.pull_request.count`, `claude_code.commit.count` and `claude_code.active_time.total`.
+  - Every metric carries `session.id` and `user.id`.
+  - `tool_result` events give success and `error_type` per tool call.
+  - Prompt text is off by default.
+- **Organisation usage API.** `GET /v1/organizations/usage_report/claude_code` returns, per user per day: sessions, commits and PRs by Claude Code, tokens by type, and estimated cost. Bedrock and Vertex usage is not included.
+- **Anthropic's published baseline:** about $13 per developer per active day, $150 to $250 a month.
+
+This is enough for a per-session join. Hippo's ledger already stores the same session id.
+
+**GitHub Copilot** (read in GitHub's docs source):
+- **What it reports:** per-user daily usage, `ai_credits_used`, and a per-repository `pull_requests` object (created, merged, `median_minutes_to_merge`, created by Copilot).
+- **No per-session token cost.** So a Copilot pilot randomises by developer rather than by session, and reports credits per developer, PR throughput and time to merge.
+- **GitHub's own caution:** its "adoption multiplier" compares two different populations, not the same users over time, so it is not causal.
+
+**Cursor** (search snippets only): per-user daily requests and lines, with no per-session cost.
+
+**Evidence that shapes the design** (mostly search snippets; the sites were blocked):
+- **Developers' sense of speed is unreliable.** In METR's 2025 randomised study, experienced developers were 19% slower with AI yet believed they were 20% faster. METR's 2026 update switched to randomising by developer. Every framework reviewed (DX, DORA 2025, SPACE) warns against acceptance rate and lines of code.
+- **Randomised field trials are the accepted form.** Microsoft, Accenture and a Fortune 100 company randomised Copilot access across 4,867 developers (+26% completed tasks). Google ran a randomised trial with 96 engineers.
+- **Vendors mostly compare AI users with non-users.** Jellyfish, LinearB and Swarmia work this way per one review, which is observational. A randomised holdout is a real differentiator in a pilot report.
+- **Where the tokens go.** On SWE-bench Verified, Claude Sonnet 4.5 spent 76% of its tokens on read operations (SWE-Pruner, arXiv 2601.16746). This makes **read tokens per session** the most direct token KPI for memory: a memory that says where things live should cut reads. It comes from `token.usage` plus `tool_result` events.
+- **No published data on repeated mistakes across sessions was found.** Hippo's repeat-error rate would be new, and it has to be defined carefully (CD13).
+
+**Design changes from this research:**
+- **The randomisation unit is a setting.**
+  - Per session (more statistical power) is the default for Claude Code.
+  - Per developer (cleaner, no crossover) is used where the agent has no per-session cost, or where a buyer asks for it.
+  - The analysis is clustered by developer either way.
+- **Read-token share per session joins Tier 1** as the token KPI hippo is most likely to move.
+- **The report is computed inside the customer's network,** from their own telemetry export. Hippo sends nothing home, which fits the no-telemetry promise in the roadmap's Company section.
 
 ## What to promise a buyer
 

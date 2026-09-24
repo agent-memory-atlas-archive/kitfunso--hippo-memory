@@ -1483,7 +1483,25 @@ Anyone who can write a PR comment, an issue or a chat message can try to plant i
 One place for the buyer: what is stored per team and repository, who used what, audit log search, dormant and banned memories, and token cost from the TE0 ledger.
 
 #### CD7. Value report for buyers [planned, needs TE5; part of A7]
-A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once TE5 or EI12 has measured it for that company, cost per resolved task with and without hippo. No saving figure before it is measured (non-goal 16).
+A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once a CD11 holdout or EI12 has measured it for that company, cost per session and per merged PR with and without hippo (CD12). No saving figure before it is measured (non-goal 16).
+
+#### CD11. Shadow holdout [planned, next after TE5's pilot run; design in `docs/plans/2026-09-24-buyer-kpis.md`]
+A setting, `holdout.rate`, makes a deterministic share of sessions (or of developers) skip memory injection while capture continues. Each holdout is logged, so a pilot measures hippo against a live control group on the same days, models and people.
+
+#### CD12. Agent telemetry join and pilot report [planned, with CD11]
+`hippo report --pilot` joins hippo's ledger with the agent's own cost data by session id, computed inside the customer's network:
+- **Claude Code:** its OpenTelemetry export or its organisation usage API.
+- **Copilot and Cursor:** per-developer usage.
+
+It reports, per arm with intervals:
+- cost per session and per merged PR;
+- read-token share;
+- repeat-error rate;
+- guardrails;
+- hippo's own cost.
+
+#### CD13. Failure-signature log [planned, with CD11]
+Every failure signature seen is logged with its session, including skipped and duplicate ones, so repeat-error rate can be computed per arm.
 
 #### CD8. Reliability of the central server [merged into EI10]
 Backup and restore, high availability, disaster recovery, upgrade and schema-migration runbooks, and monitoring for the company-hosted server.
