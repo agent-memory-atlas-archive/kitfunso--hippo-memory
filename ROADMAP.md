@@ -1679,3 +1679,90 @@ An agent that writes its own memories can amplify its own mistakes. Limits:
 
 **Evidence gate.** No claim that hippo makes agents improve themselves until TE5 passes H1 and H3 and SI0 is measured in a second registration. VibeMemBench found most memory systems at or below memory off (TE10), so the claim has to be earned.
 
+---
+
+## Part XII - 2026-09-24 update: Enterprise v1, the first sellable release
+
+**Why this Part exists.** Parts VIII to XI list the enterprise work item by item, but nothing defines the release a company can buy. A gap check against the commercial playbook (kept privately by the founder) found:
+- five engineering items missing from the roadmap;
+- the pilot measurement (CD11 to CD13) missing from the 90-day queue.
+
+This Part defines Enterprise v1 and lists what is missing.
+
+**Enterprise v1, defined.** A self-hosted edition a company runs inside its own network. Kitfunso never holds customer data, so v1 needs no hosted service and no SOC 2. It is sold through a paid pilot whose result comes from the customer's own telemetry.
+
+### Scope, in build order
+Existing items are named by their IDs; new ones are EV1 to EV5 below.
+
+1. **Evidence first:**
+   - the decay default (`docs/evals/2026-09-24-decay-default-prereg.md`);
+   - the TE5 pilot and scored run.
+
+   Nothing below is sold on a claim these have not measured (non-goal 16).
+2. **Trust core:**
+   - EI2 permission-aware recall;
+   - CD5 poisoning defence;
+   - the AT4/CD4 review queue's first surface.
+3. **Deployment:**
+   - EI10's customer-VPC tier: Postgres, Helm, TLS, backup and upgrade runbooks;
+   - the per-write cost fix already in the 90-day queue.
+4. **Identity:**
+   - EI11's OIDC and SAML sign-in (an identity broker is acceptable);
+   - OAuth 2.1 remote MCP and the registry entry (CD2);
+   - SIEM export of the audit log;
+   - SCIM can follow v1.
+5. **Rollout:**
+   - CD1, the agent plugin an admin turns on for everyone;
+   - CD10, the remaining install work.
+6. **Proof in production:**
+   - CD11 shadow holdout;
+   - CD12 telemetry join and pilot report;
+   - CD13 failure-signature log;
+   - CD6's first admin view.
+7. **Product packaging:** EV1 to EV5.
+
+### New items
+
+#### EV1. Enterprise edition packaging [planned, 1w]
+- **Where the code lives:** the features that stay out of the MIT core go in a separate private repository and package under a commercial licence. That means permission-aware recall's grants, SSO, the admin view, the pilot report and the licence check.
+- **The line:** documented in the README. The core CLI, MCP server and single-developer store stay MIT.
+- **CI:** builds and tests both packages against each release of the core.
+
+#### EV2. Offline licence keys [planned, 1w]
+- **The key:** a licence file signed with Ed25519 (company, seats, expiry, edition), checked offline against a public key in the enterprise package.
+- **No beacon.** This keeps the no-telemetry promise.
+- **Seats:** counted on trust, with an annual true-up.
+- **On expiry:** a warning period, then the enterprise features turn off. Memories are never deleted or locked, so the MIT core keeps working on the same store.
+
+#### EV3. Release artefacts a security team checks [planned, 2-3d]
+- A software bill of materials (`npm sbom`, CycloneDX) attached to every release.
+- npm provenance: done in PR #227, needs the npm setting turned on.
+- A signed container image for the server tier.
+- A written support window: each `stable` minor version is supported for 12 months.
+
+#### EV4. Support bundle [planned, 2-3d]
+- **The command:** `hippo support-bundle` writes a redacted archive for a support ticket: versions, `hippo doctor --json`, config with secrets removed, recent logs, schema version and store counts.
+- **Never included:** memory content, unless the customer adds it explicitly.
+
+#### EV5. Admin documentation and security overview [planned, 1-2w]
+- An install, upgrade and rollback guide for the server tier.
+- A one-page data-flow diagram: what is stored, where, what leaves the network (nothing by default), and which model sees what.
+- A security overview that answers a standard questionnaire: CAIQ Lite or SIG Lite.
+
+### Exit criteria for v1
+- A design partner installs it in their network from the admin guide, with no help beyond the support channel.
+- One real security questionnaire is answered with no "no" on identity, permissions or deployment.
+- An outside penetration test of the server tier is done, with its findings fixed.
+- A pilot report is produced from a partner's own telemetry, with a holdout group, whatever its result.
+
+### Estimate
+- **Engineering:** about 16 to 22 weeks for one developer working with an AI assistant, based on the item estimates above. That is longer than the 90-day queue, so v1 lands after it.
+- **Cutting it to a design partner's needs** (one git host, one identity provider, one deployment shape) is the main lever.
+- **Founder-track work** (IP assignment, contracts, insurance, Cyber Essentials) runs in parallel and is not engineering time.
+
+### What the 90-day queue gains
+- **Weeks 4-8:** CD13's failure-signature log, since it is small and starts collecting the baseline early.
+- **Weeks 8-13:**
+  - CD11 and CD12, scoped to the first design partner's agent;
+  - EV1 and EV2, so the pilot runs the edition that will be sold.
+
