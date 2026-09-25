@@ -4,7 +4,7 @@
  */
 
 import { estimateTokens } from './token-ledger.js';
-import { MemoryEntry, calculateStrength } from './memory.js';
+import { MemoryEntry, calculateStrength, netWrong } from './memory.js';
 import { isOutcomeFastAblated, isRecallBoostAblated, isRecencyAblated, evalRecencyScaleDays, evalNow } from './ablation.js';
 import { extractPathTags, pathBoostMultiplier } from './path-context.js';
 import { detectScope, scopeMatch } from './scope.js';
@@ -1258,12 +1258,13 @@ export function markRetrieved(entries: MemoryEntry[], now: Date = evalNow()): Me
   if (isRecallBoostAblated()) return entries;
   return entries.map((e) => {
     if (e.superseded_by) return e;
+    const wrong = netWrong(e) > 0;
     const updated: MemoryEntry = {
       ...e,
       retrieval_count: e.retrieval_count + 1,
-      last_retrieved: now.toISOString(),
-      // Extend half-life by +2 days per retrieval (PLAN.md)
-      half_life_days: e.half_life_days + 2,
+      last_retrieved: wrong ? e.last_retrieved : now.toISOString(),
+      // +2 days half-life per retrieval (PLAN.md); a wrong memory keeps both, since last_retrieved is the decay anchor
+      half_life_days: wrong ? e.half_life_days : e.half_life_days + 2,
     };
     updated.strength = calculateStrength(updated, now);
     return updated;
