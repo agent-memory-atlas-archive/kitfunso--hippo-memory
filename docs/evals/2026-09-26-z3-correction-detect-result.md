@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-26. **Status:** COMPLETED. **Verdict: FAIL.** Held-out precision is 0.82, under the locked 0.90 bar. Nothing ships; this doc is the deliverable.
 
-Prereg: `docs/evals/2026-09-26-z3-correction-detect-prereg.md`, locked at `3e115b0`. Detector frozen at `716fdd4` (branch `feat/z3-correction-detect`) before the one held-out score. The module, its tests and its export are removed in the commit after this doc, as the prereg requires on a fail. The frozen rule table is in the appendix so the next attempt starts from it.
+Prereg: `docs/evals/2026-09-26-z3-correction-detect-prereg.md`, locked at `3e115b0`. Detector frozen at `716fdd4` (branch `feat/z3-correction-detect`) before the one held-out score. The module, its tests and its export are removed in the same commit as this doc, as the prereg requires on a fail. The frozen rule table is in the appendix so the next attempt starts from it.
 
 ## Held-out (the verdict)
 
@@ -23,7 +23,7 @@ The hit floor (20) is met and label agreement (below) clears 80%, so this is a v
 
 ## Label check
 
-Opus labelled all 1,820 messages; 261 (14.3%) are corrections. The author hand-labelled 60 tune-split messages blind to the Opus label (40 random, 20 Opus positives). Agreement 58 of 60 (96.7%), Cohen's kappa 0.925. Both disagreements were Opus calling a message a correction that the author did not; neither went the other way.
+Opus labelled all 1,820 messages; 261 (14.3%) are corrections. The author hand-labelled 60 tune-split messages blind to the Opus label (40 random, 20 Opus positives). Agreement 58 of 60 (96.7%), Cohen's kappa 0.925. Counts: both say correction 19, both say not 39, Opus correction and author not 2, the reverse 0. Both disagreements were Opus calling a message a correction that the author did not; neither went the other way.
 
 ## Precision by rule, held-out
 
