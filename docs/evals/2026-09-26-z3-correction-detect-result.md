@@ -53,7 +53,7 @@ Rules that did not fire on held-out: wrong-claim, you-failed, revert, use-x-not-
 1. On this corpus, rules looked precise only on explicit phrasings (i-said, why-did-you, a leading no or don't): about 0.93, post-hoc. The whole table found under a third of the corrections.
 2. Tone words are not evidence. Any rule keyed on swearing or nicknames will write false lessons.
 3. The next arm is the explicit-phrasing subset, re-registered and scored on sessions after 2026-09-26, and, per SI4, a Jev judgement arm for the implicit corrections rules cannot read.
-4. Whatever ships must keep the interface this slice settled: `(userMessage, previousAssistantText)` in, `{ isCorrection, rule, correctedClaim?, instruction?, confidence }` out, abstaining when there is no previous turn.
+4. Whatever ships must keep the interface this slice settled: `(userMessage, previousAssistantText)` in, `{ isCorrection, rule?, correctedClaim?, instruction?, confidence }` out, abstaining when there is no previous turn.
 
 ## Disclosures
 
