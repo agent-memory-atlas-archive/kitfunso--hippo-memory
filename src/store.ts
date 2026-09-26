@@ -23,6 +23,7 @@ import { SessionHandoff, SessionHandoffRow, rowToSessionHandoff, HandoffEvidence
 import { Card, CardStatus, CardRun, CardComment, CARD_TRANSITIONS, CARD_LEASE_MS } from './card.js';
 import { tokenize, markRetrieved } from './search.js';
 import { isRecallBoostAblated } from './ablation.js';
+import { rarestPromptTerms, RAREST_TERM_COUNT } from './prompt-recall.js';
 import { appendAuditEvent, type AuditOp } from './audit.js';
 import { resolveTenantId } from './tenant.js';
 import { deriveOriginProject, originFromSource, findHippoStoreDir, realpathOrResolve, type ResolveProjectIdentityOpts } from './project-identity.js';
@@ -2390,20 +2391,53 @@ export function loadRecallSearchEntries(
   initStore(hippoRoot);
   const db = openHippoDb(hippoRoot);
   try {
-    // explicitScopeMode only matters when requestedScope is set:
-    //   'exact'    — api.recall semantics: narrow to m.scope = requested.
-    //   'additive' — CLI --scope semantics (v1.25.0): default-admitted set
-    //                PLUS the requested scope; see RecallScopeFilter docs.
-    const scopeFilter: RecallScopeFilter =
-      requestedScope && requestedScope !== ''
-        ? explicitScopeMode === 'additive'
-          ? { mode: 'default-deny-or-exact', value: requestedScope }
-          : { mode: 'exact', value: requestedScope }
-        : { mode: 'default-deny' };
-    return loadSearchRows(db, query, limit, tenantId, scopeFilter, includeSuperseded).map(rowToEntry);
+    return loadRecallSearchEntriesFromDb(db, query, limit, tenantId, requestedScope, explicitScopeMode, includeSuperseded);
   } finally {
     closeHippoDb(db);
   }
+}
+
+// Split out so callers with an already-open db (Z1 prompt-recall path) skip
+// the initStore+open/close cycle per store per call.
+export function loadRecallSearchEntriesFromDb(
+  db: DatabaseSyncLike,
+  query: string,
+  limit: number = DEFAULT_SEARCH_CANDIDATE_LIMIT,
+  tenantId?: string,
+  requestedScope?: string,
+  explicitScopeMode: 'exact' | 'additive' = 'exact',
+  includeSuperseded = true,
+): MemoryEntry[] {
+  // 'exact' narrows to requestedScope; 'additive' adds it to the default-admitted set.
+  const scopeFilter: RecallScopeFilter =
+    requestedScope && requestedScope !== ''
+      ? explicitScopeMode === 'additive'
+        ? { mode: 'default-deny-or-exact', value: requestedScope }
+        : { mode: 'exact', value: requestedScope }
+      : { mode: 'default-deny' };
+  return loadSearchRows(db, query, limit, tenantId, scopeFilter, includeSuperseded).map(rowToEntry);
+}
+
+/** Rarest-K prompt terms for this connection's FTS index, as a space-joined query string.
+ *  Without FTS, returns the first 32 terms, as before rarest-term selection. */
+export function pickRarestFtsQuery(db: DatabaseSyncLike, terms: readonly string[], maxTerms = RAREST_TERM_COUNT): string {
+  // The LIKE path has no bm25 ranking to bound, so it keeps the pre-rarest 32-term query.
+  if (!isFtsAvailable(db)) return terms.slice(0, 32).join(' ');
+  db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS temp.z1_rarest_vocab USING fts5vocab(main, 'memories_fts', 'row')`);
+  // unicode61 splits `journal_mode` into two vocab terms; a term's count is its rarest part's (an upper bound).
+  const partsOf = (t: string): string[] => t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const vocab = Array.from(new Set(terms.flatMap(partsOf)));
+  if (vocab.length === 0) return '';
+  // SAFETY: rows' shape matches the two columns named in the SELECT.
+  const rows = db
+    .prepare(`SELECT term, doc FROM temp.z1_rarest_vocab WHERE term IN (${vocab.map(() => '?').join(', ')})`)
+    .all(...vocab) as Array<{ term: string; doc: number }>;
+  const counts = new Map(rows.map((r) => [r.term, r.doc]));
+  const docCount = (t: string): number => {
+    const parts = partsOf(t);
+    return parts.length === 0 ? 0 : Math.min(...parts.map((x) => counts.get(x) ?? 0));
+  };
+  return rarestPromptTerms(terms, docCount, maxTerms).join(' ');
 }
 
 /**
