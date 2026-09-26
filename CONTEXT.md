@@ -127,6 +127,11 @@ _Avoid_: kanban, tracker
 The JSON a host writes to a hook command's stdin at spawn. Optional, and absent only counts as a manual run when the read finished on its own; a read that timed out proves nothing either way.
 _Avoid_: stdin text, hook input, hook data
 
+**User correction**:
+A human message that tells the agent something it just did, said, proposed or assumed is wrong
+or unwanted, or turns it against that. A detected one is a candidate lesson, not a stored memory.
+_Avoid_: feedback (outcomes are feedback too), complaint, redirect
+
 ### Support
 
 **Support bundle**:
