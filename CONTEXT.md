@@ -129,8 +129,7 @@ _Avoid_: stdin text, hook input, hook data
 
 **User correction**:
 A human message that tells the agent something it just did, said, proposed or assumed is wrong
-or unwanted, or turns it against that. `detectCorrection` finds one; a hit is a candidate lesson,
-not a stored memory.
+or unwanted, or turns it against that. A detected one is a candidate lesson, not a stored memory.
 _Avoid_: feedback (outcomes are feedback too), complaint, redirect
 
 ### Support

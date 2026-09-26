@@ -141,5 +141,3 @@ export {
   formatAmbientVector,
   AmbientState,
 } from './ambient.js';
-
-export { detectCorrection, PREVIOUS_TURN_WINDOW, type CorrectionDetection } from './correction-detect.js';
