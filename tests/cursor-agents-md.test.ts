@@ -10,6 +10,8 @@ const HIPPO_JS = path.resolve(__dirname, '..', 'bin', 'hippo.js');
 const START = '<!-- hippo:start -->';
 // What hippo wrote to .cursorrules before this change, trimmed.
 const OLD_BLOCK = `${START}\n# Project Memory (Hippo)\n#   hippo context --auto --budget 1500\n<!-- hippo:end -->\n`;
+// The block every release up to 1.52.6 wrote to .cursorrules, verbatim.
+const RELEASED_BLOCK = '# Project Memory (Hippo)\n# Before each task, load context:\n#   hippo context --auto --budget 1500\n# After errors:\n#   hippo remember "<error description>" --error\n# After completing:\n#   hippo outcome --good';
 
 let dir: string;
 let proj: string;
@@ -23,9 +25,10 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-function hippo(...args: string[]): void {
+function hippo(...args: string[]): string {
   const r = spawnSync(process.execPath, [HIPPO_JS, ...args], { cwd: proj, env, encoding: 'utf8' });
   expect(r.status, r.stderr).toBe(0);
+  return r.stdout;
 }
 const write = (f: string, text: string) => fs.writeFileSync(path.join(proj, f), text);
 const read = (f: string) => fs.readFileSync(path.join(proj, f), 'utf8');
@@ -70,6 +73,34 @@ describe('Cursor integration writes AGENTS.md', () => {
     hippo('hook', 'uninstall', 'cursor');
     expect(read('AGENTS.md')).toBe('# Agents\n');
     expect(read('.cursorrules')).toBe('Use tabs.\n');
+  });
+
+  it('hook uninstall and install cursor leave the block init wrote for Codex', () => {
+    write('AGENTS.md', '# Agents\n');
+    hippo('init', '--no-schedule', '--no-learn');
+    const agentsMd = read('AGENTS.md');
+    expect(agentsMd).toContain("Hippo's Codex wrapper");
+    write('.cursorrules', `Use tabs.\n\n${OLD_BLOCK}`);
+    expect(hippo('hook', 'uninstall', 'cursor')).toContain('hippo wrote it for codex');
+    expect(read('AGENTS.md')).toBe(agentsMd);
+    expect(read('.cursorrules')).toBe('Use tabs.\n');
+    hippo('hook', 'install', 'cursor');
+    expect(read('AGENTS.md')).toBe(agentsMd);
+  });
+
+  it('hook uninstall cursor leaves an edited block and says hippo cannot tell whose it is', () => {
+    write('AGENTS.md', '# Agents\n');
+    hippo('hook', 'install', 'cursor');
+    const edited = read('AGENTS.md').replace('<!-- hippo:end -->', 'Run the linter before every commit.\n<!-- hippo:end -->');
+    write('AGENTS.md', edited);
+    expect(hippo('hook', 'uninstall', 'cursor')).toContain('it has been edited, so hippo cannot tell whose it is');
+    expect(read('AGENTS.md')).toBe(edited);
+  });
+
+  it("hook uninstall cursor removes a released Cursor block a user moved into AGENTS.md", () => {
+    write('AGENTS.md', `# Agents\n\n${START}\n${RELEASED_BLOCK}\n<!-- hippo:end -->\n`);
+    expect(hippo('hook', 'uninstall', 'cursor')).not.toContain('edited');
+    expect(read('AGENTS.md')).toBe('# Agents\n');
   });
 
   it('hook uninstall cursor deletes a .cursorrules that held only the old hippo block', () => {
