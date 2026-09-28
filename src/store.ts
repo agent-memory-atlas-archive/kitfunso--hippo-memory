@@ -26,6 +26,7 @@ import { isRecallBoostAblated } from './ablation.js';
 import { rarestPromptTerms, RAREST_TERM_COUNT } from './prompt-recall.js';
 import { appendAuditEvent, type AuditOp } from './audit.js';
 import { resolveTenantId } from './tenant.js';
+import { redactSecretsStrict } from './secret-detect.js';
 import { deriveOriginProject, originFromSource, findHippoStoreDir, realpathOrResolve, type ResolveProjectIdentityOpts } from './project-identity.js';
 import {
   checkRejectionGuard,
@@ -2705,9 +2706,9 @@ export function saveActiveTaskSnapshot(
       INSERT INTO task_snapshots(task, summary, next_step, status, source, session_id, scope, tenant_id, created_at, updated_at)
       VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
     `).run(
-      snapshot.task,
-      snapshot.summary,
-      snapshot.next_step,
+      redactSecretsStrict(snapshot.task),
+      redactSecretsStrict(snapshot.summary),
+      redactSecretsStrict(snapshot.next_step),
       snapshot.source ?? 'cli',
       snapshot.session_id ?? null,
       snapshot.scope ?? null,
@@ -3631,24 +3632,31 @@ export function stampHandoffOutcome(hippoRoot: string, tenantId: string, session
   }
 }
 
-/**
- * Auto-write a handoff at session-end from the session's active snapshot (DF1 T3).
+/** Auto-write a handoff at session-end (DF1 T3) from the session's active snapshot, else from `derived`, its transcript state.
  * @param evidence best-effort git state; outcome comes from the newest session_complete event.
- * @returns null unless the snapshot belongs to sessionId and no newer handoff already covers it.
- */
+ * @returns null when neither source is the session's, a newer handoff covers the snapshot, or the session's latest handoff was not read off its transcript. */
 export function writeSessionEndHandoff(
   hippoRoot: string,
   tenantId: string,
   sessionId: string,
   evidence: HandoffEvidence | null,
+  derived: Pick<TaskSnapshot, 'task' | 'summary' | 'next_step'> | null = null,
 ): SessionHandoff | null {
   assertTenantId('writeSessionEndHandoff', tenantId);
-  const snapshot = loadActiveTaskSnapshot(hippoRoot, tenantId);
-  if (!snapshot || snapshot.session_id !== sessionId) return null;
-
+  const active = loadActiveTaskSnapshot(hippoRoot, tenantId);
   const existing = loadLatestHandoff(hippoRoot, tenantId, sessionId);
-  // Strict '>': a same-millisecond tie must not swallow the session's only write (test 6e).
-  if (existing && existing.updatedAt > snapshot.updated_at) return null;
+  let snapshot: Pick<TaskSnapshot, 'task' | 'summary' | 'next_step' | 'scope'>;
+  let handoffEvidence = evidence;
+  if (active && active.session_id === sessionId) {
+    // Strict '>': a same-millisecond tie must not swallow the session's only write (test 6e).
+    if (existing && existing.updatedAt > active.updated_at) return null;
+    snapshot = active;
+  } else {
+    // Only an earlier transcript read gives way; `hippo handoff create` and unmarked older handoffs keep winning.
+    if (!derived || (existing && existing.evidence?.derivedFrom !== 'transcript')) return null;
+    snapshot = { ...derived, scope: null };
+    handoffEvidence = { ...evidence, derivedFrom: 'transcript' };
+  }
 
   const db = openHippoDb(hippoRoot);
   let outcome: HandoffOutcome | null = null;
@@ -3679,7 +3687,7 @@ export function writeSessionEndHandoff(
     nextAction: snapshot.next_step,
     artifacts: carryForward ? existing.artifacts : [],
     scope: snapshot.scope,
-    evidence,
+    evidence: handoffEvidence,
     outcome,
     constraints: carryForward ? existing.constraints : undefined,
     targetRuntime: carryForward ? existing.targetRuntime : undefined,
