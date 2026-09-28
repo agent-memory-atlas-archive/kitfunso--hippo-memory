@@ -95,8 +95,8 @@ describe("projectAnchorOrder", () => {
       const order = {
         indexByTag: new Map([
           ["path:hippo", 0],
-          ["path:quantamental", 1],
-          ["path:phzse", 2],
+          ["path:project-e", 1],
+          ["path:project-d", 2],
         ]),
         nextIndex: 3,
       };
@@ -104,8 +104,8 @@ describe("projectAnchorOrder", () => {
       const loaded = loadProjectAnchorOrder();
       expect(loaded.nextIndex).toBe(3);
       expect(loaded.indexByTag.get("path:hippo")).toBe(0);
-      expect(loaded.indexByTag.get("path:quantamental")).toBe(1);
-      expect(loaded.indexByTag.get("path:phzse")).toBe(2);
+      expect(loaded.indexByTag.get("path:project-e")).toBe(1);
+      expect(loaded.indexByTag.get("path:project-d")).toBe(2);
     });
 
     it("silent-skips save when localStorage throws (QuotaExceededError)", () => {
@@ -129,9 +129,9 @@ describe("projectAnchorOrder", () => {
         indexByTag: new Map([["path:hippo", 0]]),
         nextIndex: 1,
       };
-      const result = reconcileProjectOrder(["path:hippo", "path:resona"], start);
+      const result = reconcileProjectOrder(["path:hippo", "path:project-h"], start);
       expect(result.indexByTag.get("path:hippo")).toBe(0);
-      expect(result.indexByTag.get("path:resona")).toBe(1);
+      expect(result.indexByTag.get("path:project-h")).toBe(1);
       expect(result.nextIndex).toBe(2);
     });
 
@@ -139,18 +139,18 @@ describe("projectAnchorOrder", () => {
       const start = {
         indexByTag: new Map([
           ["path:hippo", 0],
-          ["path:quantamental", 1],
-          ["path:phzse", 2],
+          ["path:project-e", 1],
+          ["path:project-d", 2],
         ]),
         nextIndex: 3,
       };
       const result = reconcileProjectOrder(
-        ["path:hippo", "path:quantamental", "path:phzse", "path:newcomer"],
+        ["path:hippo", "path:project-e", "path:project-d", "path:newcomer"],
         start,
       );
       expect(result.indexByTag.get("path:hippo")).toBe(0);
-      expect(result.indexByTag.get("path:quantamental")).toBe(1);
-      expect(result.indexByTag.get("path:phzse")).toBe(2);
+      expect(result.indexByTag.get("path:project-e")).toBe(1);
+      expect(result.indexByTag.get("path:project-d")).toBe(2);
       expect(result.indexByTag.get("path:newcomer")).toBe(3);
       expect(result.nextIndex).toBe(4);
     });
