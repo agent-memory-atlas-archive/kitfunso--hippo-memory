@@ -126,11 +126,11 @@ function isJsonString(value: JsonValue): value is string {
   return typeof value === 'string';
 }
 
-/** Tables whose rows keep a first-class object's backing memory in `memory_id` (ON DELETE SET NULL). */
-const MEMORY_BACKED_TABLES = ['predictions', 'decisions', 'processes', 'policies', 'skills', 'project_briefs', 'customer_notes'] as const;
+/** Tables whose rows keep a first-class object's backing memory in `memory_id` (ON DELETE SET NULL); tests/dormant-memories.test.ts pins it to the schema. */
+export const MEMORY_BACKED_TABLES = ['predictions', 'decisions', 'incidents', 'processes', 'policies', 'skills', 'project_briefs', 'customer_notes'] as const;
 
 /**
- * Ids of memories that back a first-class object (a decision, prediction,
+ * Ids of memories that back a first-class object (a decision, incident, prediction,
  * process, policy, skill, project brief or customer note). Sleep never
  * retires these: deleting or moving one to dormant storage fires the
  * object's ON DELETE SET NULL and a restore cannot repair the link. Their
@@ -146,8 +146,9 @@ function memoriesBackingObjects(hippoRoot: string): Set<string> {
         // SAFETY: SELECT of one nullable TEXT column, filtered to non-null.
         const rows = db.prepare(`SELECT memory_id FROM ${table} WHERE memory_id IS NOT NULL`).all() as { memory_id: string }[];
         for (const r of rows) ids.add(r.memory_id);
-      } catch {
-        // Table not present in this schema version.
+      } catch (err) {
+        // A missing table is an older schema; any other error could hide a backing memory, so sleep stops.
+        if (!(err instanceof Error && err.message.includes('no such table'))) throw err;
       }
     }
   } finally {
@@ -493,6 +494,7 @@ export async function consolidate(
           // consolidationTenant — for any non-default tenant that check never
           // hit, and the trace regenerated every sleep.
           tenantId: consolidationTenant,
+          baseHalfLifeDays: config.defaultHalfLifeDays,
         },
       );
 
@@ -843,6 +845,7 @@ export async function consolidate(
           confidence: 'inferred',
           tenantId: mergeTenant,
           scope: mergeScope,
+          baseHalfLifeDays: config.defaultHalfLifeDays,
         });
       }
 
