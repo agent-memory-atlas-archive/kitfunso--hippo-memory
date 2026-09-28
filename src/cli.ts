@@ -38,7 +38,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { fileURLToPath } from 'node:url';
-import { execFileSync, execSync, spawn } from 'child_process';
+import { execFileSync, execSync, spawn, spawnSync } from 'child_process';
 import {
   installJsonHooks,
   uninstallJsonHooks,
@@ -161,7 +161,7 @@ import {
   isGitRepo,
 } from './autolearn.js';
 import { extractInvalidationTarget, invalidateMatching, InvalidationTarget, detectChurnStale, type ChurnStaleResult } from './invalidation.js';
-import { resolveProjectIdentity } from './project-identity.js';
+import { realpathOrResolve, resolveProjectIdentity } from './project-identity.js';
 import { extractPathTags } from './path-context.js';
 import { detectScope, scopeMatch } from './scope.js';
 import {
@@ -716,10 +716,9 @@ function cmdInit(hippoRoot: string, flags: Record<string, string | boolean | str
       }
     }
 
-    // Also import from Claude Code / agent MEMORY.md files
     const memImported = learnFromMemoryMd(hippoRoot);
     if (memImported > 0) {
-      console.log(`   Imported ${memImported} memories from agent MEMORY.md files.`);
+      console.log(`   Imported ${memImported} memories from this project's Claude Code auto memory.`);
     }
   }
 }
@@ -2938,24 +2937,42 @@ async function cmdRefine(
   }
 }
 
-/**
- * Scan for Claude Code MEMORY.md files and import new entries into hippo.
- * Looks in ~/.claude/projects/<project>/memory/ for .md files with YAML frontmatter.
- */
-export function learnFromMemoryMd(hippoRoot: string, homeDir: string = os.homedir()): number {
-  const home = homeDir;
-  const memoryDirs: string[] = [];
-
-  // Claude Code project memories
-  const claudeProjectsDir = path.join(home, '.claude', 'projects');
-  if (fs.existsSync(claudeProjectsDir)) {
-    try {
-      for (const project of fs.readdirSync(claudeProjectsDir)) {
-        const memDir = path.join(claudeProjectsDir, project, 'memory');
-        if (fs.existsSync(memDir)) memoryDirs.push(memDir);
-      }
-    } catch { /* permission denied */ }
+/** Claude Code's auto memory folder names for a project: its checkout, which subfolders share, or the folder itself outside a repository. */
+function claudeMemoryFolderNames(projectRoot: string): Set<string> {
+  const roots = [projectRoot, realpathOrResolve(projectRoot)];
+  const git = spawnSync('git', ['rev-parse', '--path-format=absolute', '--show-toplevel', '--absolute-git-dir', '--git-common-dir'], { cwd: projectRoot, encoding: 'utf8', timeout: 10000 });
+  if (git.status === 0) {
+    const [top, gitDir, common] = git.stdout.trim().split(/\r?\n/);
+    roots.push(claudeCheckoutRoot(top, gitDir, common));
   }
+  return new Set(roots.map((root) => (process.platform === 'win32' ? claudeFolderName(root).toLowerCase() : claudeFolderName(root))));
+}
+
+/** Claude Code's rule: a linked worktree shares its main checkout's folder, or the git folder's when that sits outside a checkout (a bare repository, or --separate-git-dir); any other checkout, a submodule included, keeps its own. */
+function claudeCheckoutRoot(top: string, gitDir: string, common: string): string {
+  if (gitDir === common) return top;
+  if (path.basename(common) === '.git') return path.dirname(common);
+  return fs.existsSync(path.join(common, '.git')) ? top : common;
+}
+
+/** Claude Code's folder name for a path: non-alphanumerics made '-', and a name over 200 characters cut to 200 plus a base-36 hash of the whole path. */
+function claudeFolderName(root: string): string {
+  const full = path.resolve(root);
+  const name = full.replace(/[^a-zA-Z0-9]/g, '-');
+  if (name.length <= 200) return name;
+  let hash = 0;
+  for (let i = 0; i < full.length; i++) hash = ((hash << 5) - hash + full.charCodeAt(i)) | 0;
+  return `${name.slice(0, 200)}-${Math.abs(hash).toString(36)}`;
+}
+
+/** Import new entries from the Claude Code auto memory of the store's project, the frontmatter .md files in ~/.claude/projects/<project>/memory/. */
+export function learnFromMemoryMd(hippoRoot: string, homeDir: string = os.homedir()): number {
+  // Only this project's folder, because every entry written here counts as this project's memory.
+  // SHORTCUT: an autoMemoryDirectory or CLAUDE_CODE_PROJECT_DIR_NAME setting imports nothing; read Claude's settings if users ask.
+  const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
+  const memoryDirs = [...claudeMemoryFolderNames(path.dirname(hippoRoot))]
+    .map((folder) => path.join(claudeProjectsDir, folder, 'memory'))
+    .filter((memDir) => fs.existsSync(memDir));
 
   if (memoryDirs.length === 0) return 0;
 
@@ -3215,10 +3232,10 @@ async function cmdSleepCore(
 ): Promise<void> {
   requireInit(hippoRoot);
 
-  // Phase 1: Auto-learn from git + MEMORY.md (CLI-only, uses process.cwd() / os.homedir()).
+  // Phase 1: Auto-learn from git + Claude Code auto memory (CLI-only, uses process.cwd() / os.homedir()).
   // Stays in cli.ts; api.sleep covers Phase 2-6 only.
   if (!flags['no-learn'] && flags['dry-run']) {
-    console.log('Dry run: skipped learning from git commits and MEMORY.md files.');
+    console.log("Dry run: skipped learning from git commits and this project's Claude Code auto memory.");
   } else if (!flags['no-learn']) {
     const config = loadConfig(hippoRoot);
     if (config.autoLearnOnSleep && isGitRepo(process.cwd())) {
@@ -3234,9 +3251,8 @@ async function cmdSleepCore(
       }
     }
 
-    // Also learn from Claude Code MEMORY.md files
     const memImported = learnFromMemoryMd(hippoRoot);
-    if (memImported > 0) console.log(`Imported ${memImported} memories from Claude Code MEMORY.md files.`);
+    if (memImported > 0) console.log(`Imported ${memImported} memories from this project's Claude Code auto memory.`);
   }
 
   // Phase 2-6: Pure-storage pipeline (consolidate + dedup + audit + share + ambient).
