@@ -167,7 +167,7 @@ import {
 } from './autolearn.js';
 import { dropHeldCopies, duplicateKey, storedTextKeys } from './same-text.js';
 import { extractInvalidationTarget, invalidateMatching, InvalidationTarget, detectChurnStale, type ChurnStaleResult } from './invalidation.js';
-import { realpathOrResolve, resolveProjectIdentity } from './project-identity.js';
+import { deriveOriginProject, realpathOrResolve, resolveProjectIdentity } from './project-identity.js';
 import { extractPathTags } from './path-context.js';
 import { detectScope, scopeMatch } from './scope.js';
 import {
@@ -3548,14 +3548,26 @@ async function cmdSessionEndWorker(
   const closeSessionId = typeof flags['session-id'] === 'string' ? (flags['session-id'] as string) : null;
   const rereadLog = await bookSessionRereads(hippoRoot, transcriptPath, closeSessionId)
     .catch((err) => [`re-read count failed: ${err instanceof Error ? err.message : String(err)}`]);
-  // Sleep starts the log file afresh, so the lines go in after it; on exit too, as sleep exits in a project with no store.
+  // Sleep starts the log file afresh, so the lines go in after it; on exit too, in case sleep exits the process.
   const flushRereadLog = (): void => { for (const line of rereadLog.splice(0)) appendSessionEndCloseLog(closeLogFile, line); };
   process.once('exit', flushRereadLog);
-  try {
-    await cmdSleep(hippoRoot, flags);
-  } catch {
-    // sleep errors are already tee'd to the log file via cmdSleep's
-    // `[hippo] sleep failed: ...` line. Continue to capture regardless.
+  // Like the other hooks: project store, else global; a folder with neither must not get one made.
+  const store = hookStoreRoot(hippoRoot);
+  if (!isInitialized(store)) {
+    appendSessionEndCloseLog(closeLogFile, 'skip: no hippo store for this folder or globally', { startFresh: true });
+    flushRereadLog();
+    return;
+  }
+  // Sleeping the global store from here would learn this folder's git commits into it; it has its own daily sleep.
+  if (isInitialized(hippoRoot)) {
+    try {
+      await cmdSleep(hippoRoot, flags);
+    } catch {
+      // sleep errors are already tee'd to the log file via cmdSleep's
+      // `[hippo] sleep failed: ...` line. Continue to capture regardless.
+    }
+  } else {
+    appendSessionEndCloseLog(closeLogFile, 'skip sleep: this folder has no store of its own', { startFresh: true });
   }
   flushRereadLog();
   try {
@@ -3564,13 +3576,15 @@ async function cmdSessionEndWorker(
     if (!transcriptPath) {
       appendSessionEndCloseLog(logFile ?? null, 'skip capture: no transcript for this session');
     } else {
-      cmdCapture(hippoRoot, {
+      cmdCapture(store, {
         source: 'last-session',
         transcriptPath,
         logFile,
         dryRun: false,
         global: false,
         tenantId: resolveTenantId({}),
+        // In the global store, rows would otherwise read as user-global and show up in every project.
+        originProject: store === hippoRoot ? undefined : deriveOriginProject(process.cwd()),
       });
     }
   } catch {
@@ -3590,7 +3604,7 @@ async function cmdSessionEndWorker(
   if (closeSessionId) {
     try {
       const tenantId = resolveTenantId({});
-      const ownSnapshot = loadActiveTaskSnapshot(hippoRoot, tenantId)?.session_id === closeSessionId;
+      const ownSnapshot = loadActiveTaskSnapshot(store, tenantId)?.session_id === closeSessionId;
       // A never-compacted session has no snapshot; read even when it has one, as another session's PreCompact can take the slot before the write.
       const derived = transcriptPath
         ? transcriptWorkingState(transcriptPath, (message) => appendSessionEndCloseLog(closeLogFile, message))
@@ -3599,7 +3613,7 @@ async function cmdSessionEndWorker(
         appendSessionEndCloseLog(closeLogFile, 'skip: no snapshot or transcript for session');
       } else {
         const evidence = collectHandoffEvidence(process.cwd(), 'unknown');
-        const handoff = writeSessionEndHandoff(hippoRoot, tenantId, closeSessionId, evidence, derived);
+        const handoff = writeSessionEndHandoff(store, tenantId, closeSessionId, evidence, derived);
         appendSessionEndCloseLog(
           closeLogFile,
           handoff ? `wrote handoff for session ${closeSessionId}` : `skip: kept the existing handoff for session ${closeSessionId}`,
@@ -3612,7 +3626,7 @@ async function cmdSessionEndWorker(
   }
   try {
     if (closeSessionId) {
-      const closed = closeTaskSnapshotsForSession(hippoRoot, resolveTenantId({}), closeSessionId);
+      const closed = closeTaskSnapshotsForSession(store, resolveTenantId({}), closeSessionId);
       appendSessionEndCloseLog(closeLogFile, `closed ${closed} active snapshot(s) for session ${closeSessionId}`);
     } else {
       appendSessionEndCloseLog(closeLogFile, 'skip: no session_id in SessionEnd payload, active snapshot left untouched');
@@ -3663,13 +3677,14 @@ async function bookSessionRereads(
  * the detached worker's `stdio: 'ignore'` — write straight to the file
  * instead, matching capture.ts's `appendPreCompactLog` convention.
  */
-function appendSessionEndCloseLog(logFile: string | null, message: string): void {
+function appendSessionEndCloseLog(logFile: string | null, message: string, opts: { startFresh?: boolean } = {}): void {
   if (!logFile) return;
   try {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     // sanitizeLogMessage: `message` interpolates the payload-controlled
     // session_id — same log-forgery guard appendPreCompactLog applies.
-    fs.appendFileSync(logFile, `[hippo] ${new Date().toISOString()} ${sanitizeLogMessage(message)}\n`, 'utf8');
+    const write = opts.startFresh ? fs.writeFileSync : fs.appendFileSync;
+    write(logFile, `[hippo] ${new Date().toISOString()} ${sanitizeLogMessage(message)}\n`, 'utf8');
   } catch {
     // Best-effort only — never let a log-write failure surface as an error.
   }
@@ -3793,11 +3808,22 @@ async function cmdCodexSessionEndWorker(
   flags: Record<string, string | boolean | string[]>,
 ): Promise<void> {
   const logFile = typeof flags['log-file'] === 'string' ? (flags['log-file'] as string) : undefined;
+  // Like the other hooks: project store, else global; a folder with neither must not get one made.
+  const store = hookStoreRoot(hippoRoot);
+  if (!isInitialized(store)) {
+    appendSessionEndCloseLog(logFile ?? null, 'skip: no hippo store for this folder or globally', { startFresh: true });
+    return;
+  }
 
-  try {
-    await cmdSleep(hippoRoot, logFile ? { 'log-file': logFile } : {});
-  } catch {
-    // sleep errors are already written via cmdSleep
+  // Sleeping the global store from here would learn this folder's git commits into it; it has its own daily sleep.
+  if (isInitialized(hippoRoot)) {
+    try {
+      await cmdSleep(hippoRoot, logFile ? { 'log-file': logFile } : {});
+    } catch {
+      // sleep errors are already written via cmdSleep
+    }
+  } else {
+    appendSessionEndCloseLog(logFile ?? null, 'skip sleep: this folder has no store of its own', { startFresh: true });
   }
 
   try {
@@ -3828,8 +3854,9 @@ async function cmdCodexSessionEndWorker(
       dryRun: false,
       global: false,
       tenantId: resolveTenantId({}),
+      originProject: store === hippoRoot ? undefined : deriveOriginProject(process.cwd()),
     };
-    cmdCapture(hippoRoot, captureOpts);
+    cmdCapture(store, captureOpts);
   } catch {
     // capture path logs its own failures
   }
