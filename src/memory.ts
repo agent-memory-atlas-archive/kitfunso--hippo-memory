@@ -490,10 +490,28 @@ export function resolveConfidence(entry: MemoryEntry, now: Date = evalNow()): Co
  */
 export const DEFAULT_HALF_LIFE_DAYS = 365;
 
-// Pinned means keep; raw rows leave only through archiveRawMemory. The SQL twin guards the DELETE itself.
-export const AUTO_DELETABLE_SQL = "pinned = 0 AND kind != 'raw'";
-export function canAutoDelete(entry: Pick<MemoryEntry, 'pinned' | 'kind'>): boolean {
-  return !entry.pinned && entry.kind !== 'raw';
+export const COMPACTION_MEMORY_TAG = 'compaction-memory';
+export const COMPACTION_SOURCE_PREFIX = 'compaction:';
+
+/** A row with `tag` and a source starting `sourcePrefix` is kept for good. Both, since merge copies source tags onto rows whose source is 'consolidation'. */
+export interface KeepPair {
+  readonly tag: string;
+  readonly sourcePrefix: string;
+}
+export const KEEP_PAIRS: readonly KeepPair[] = [{ tag: COMPACTION_MEMORY_TAG, sourcePrefix: COMPACTION_SOURCE_PREFIX }];
+
+const sqlText = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+// json_each matches the tag as a whole element; substr, not LIKE, keeps the prefix case-sensitive like startsWith.
+const keepPairSql = (p: KeepPair): string =>
+  `(COALESCE(superseded_by, '') = '' AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(tags_json) THEN tags_json ELSE '[]' END) WHERE value = ${sqlText(p.tag)}) AND substr(source, 1, ${p.sourcePrefix.length}) = ${sqlText(p.sourcePrefix)})`;
+
+// Pinned and kept rows stay (a superseded row is not kept: its successor carries the tag and source); raw rows leave only through archiveRawMemory. The SQL twin guards the DELETE itself.
+export const AUTO_DELETABLE_SQL = `pinned = 0 AND kind != 'raw'${KEEP_PAIRS.map((p) => ` AND NOT ${keepPairSql(p)}`).join('')}`;
+export function isKeptForGood(entry: Pick<MemoryEntry, 'tags' | 'source' | 'superseded_by'>): boolean {
+  return !entry.superseded_by && KEEP_PAIRS.some((p) => entry.tags.includes(p.tag) && entry.source.startsWith(p.sourcePrefix));
+}
+export function canAutoDelete(entry: Pick<MemoryEntry, 'pinned' | 'kind' | 'tags' | 'source' | 'superseded_by'>): boolean {
+  return !entry.pinned && entry.kind !== 'raw' && !isKeptForGood(entry);
 }
 
 export interface CreateMemoryOptions {
@@ -579,6 +597,30 @@ export function createMemory(content: string, options: Partial<CreateMemoryOptio
   // Recalculate strength with the emotional multiplier applied
   entry.strength = calculateStrength(entry);
   return entry;
+}
+
+/** The row that replaces `old`: a supersede never changes where a memory belongs, so source, scope, session and a stamped origin carry over. */
+export function createSuccessor(
+  old: MemoryEntry,
+  content: string,
+  opts: { tenantId: string; baseHalfLifeDays: number; layer?: Layer; tags?: string[]; pinned?: boolean },
+): MemoryEntry {
+  const next = createMemory(content, {
+    layer: opts.layer ?? old.layer,
+    tags: opts.tags ?? [...old.tags],
+    pinned: opts.pinned ?? old.pinned,
+    source: old.source,
+    confidence: 'verified',
+    tenantId: opts.tenantId,
+    scope: old.scope,
+    source_session_id: old.source_session_id,
+    baseHalfLifeDays: opts.baseHalfLifeDays,
+  });
+  // A legacy null origin has nothing to carry, so the store stamps it from its own location.
+  if (typeof old.origin_project === 'string') {
+    next.origin_project = old.origin_project;
+  }
+  return next;
 }
 
 /**

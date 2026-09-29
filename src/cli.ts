@@ -63,6 +63,7 @@ import {
 } from './hooks.js';
 import {
   createMemory,
+  createSuccessor,
   calculateStrength,
   calculateRewardFactor,
   deriveHalfLife,
@@ -201,7 +202,8 @@ import {
   importVault,
   ImportOptions,
 } from './importers.js';
-import { cmdCapture, CaptureOptions, cmdPreCompact, postCompactMessage, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage, transcriptWorkingState } from './capture.js';
+import { cmdCapture, CaptureOptions, cmdPreCompact, cmdPostCompact, resolveLastSessionTranscript, truncateCodePointSafe, sanitizeLogMessage, transcriptWorkingState } from './capture.js';
+import { replayCompactionsAt } from './compaction-record.js';
 import { readStdinBounded } from './stdin.js';
 import {
   auditMemories,
@@ -1188,24 +1190,21 @@ function cmdSupersede(
     process.exit(1);
   }
 
-  const layer = (typeof flags['layer'] === 'string' ? flags['layer'] : old.layer) as Layer;
+  const layer = typeof flags['layer'] === 'string' ? (flags['layer'] as Layer) : undefined;
   const rawTags = flags['tag'];
   const tags = Array.isArray(rawTags)
     ? (rawTags as string[]).map((t) => String(t))
     : typeof rawTags === 'string'
       ? rawTags.split(',').map((t) => t.trim()).filter(Boolean)
-      : [...old.tags];
+      : undefined;
   const pinned = flags['pin'] === true || old.pinned;
 
-  const newEntry = createMemory(newContent, {
+  const newEntry = createSuccessor(old, newContent, {
+    tenantId: old.tenantId,
+    baseHalfLifeDays: loadConfig(hippoRoot).defaultHalfLifeDays,
     layer,
     tags,
     pinned,
-    source: old.source,
-    confidence: 'verified',
-    tenantId: old.tenantId,
-    scope: old.scope,
-    baseHalfLifeDays: loadConfig(hippoRoot).defaultHalfLifeDays,
   });
 
   // AT1: write the SUCCESSOR first. The rejection guard fires on the new
@@ -3188,6 +3187,12 @@ async function cmdSleepCore(
 
     const memImported = learnFromMemoryMd(hippoRoot);
     if (memImported > 0) console.log(`Imported ${memImported} memories from this project's Claude Code auto memory.`);
+  }
+
+  // Finishes compactions a killed or busy post-compact hook left; never throws, and a dry run writes nothing.
+  if (!flags['dry-run']) {
+    const finished = replayCompactionsAt(hippoRoot, (message) => console.error(`compaction replay: ${message}`));
+    if (finished > 0) console.log(`Finished saving ${finished} compaction${finished === 1 ? '' : 's'} left over from earlier sessions.`);
   }
 
   // Phase 2-6: Pure-storage pipeline (consolidate + dedup + audit + share + ambient).
@@ -8307,6 +8312,11 @@ function cmdSetup(flags: Record<string, string | boolean | string[]>): void {
 
 function cmdDailyRunner(): void {
   const globalRoot = getGlobalRoot();
+  // No workspace sleep ever opens the global store, yet hooks in folders without a store compact into it.
+  if (isInitialized(globalRoot)) {
+    const finished = replayCompactionsAt(globalRoot, (message) => console.error(`compaction replay: ${message}`));
+    if (finished > 0) console.log(`Finished saving ${finished} compaction${finished === 1 ? '' : 's'} left over in the global store.`);
+  }
   const workspaces = listRegisteredWorkspaces(globalRoot);
 
   if (workspaces.length === 0) {
@@ -9758,10 +9768,12 @@ Commands:
                            capture from the session's last 20 user and 10 assistant messages,
                            in a detached worker
     --log-file <path>      Tee the worker's output to a log file (paired with 'hippo last-sleep')
-  pre-compact              PreCompact hook: save a working-state snapshot before compaction
+  pre-compact              PreCompact hook: record the compaction, save a working-state snapshot, and
+                           ask the summariser to end with a "Memories for hippo" list
     --log-file <p>         Diagnostic log path (default: ~/.hippo/logs/pre-compact.log)
   compact-resume           SessionStart(compact) hook: re-print the snapshot, if under 15 minutes old
-  post-compact             PostCompact hook: tell the user what pre-compact saved
+  post-compact             PostCompact hook: keep that list as memories (a busy store leaves the save to
+                           the next hippo sleep) and print one line saying how many
     --log-file <p>         Same log path as pre-compact (default: ~/.hippo/logs/pre-compact.log)
   codex-run [-- ...args]   Launch real Codex behind Hippo's session-end wrapper
   hook <sub> [target]      Manage framework integrations
@@ -10275,12 +10287,14 @@ async function main(
     }
 
     case 'post-compact': {
-      // PostCompact hook: tells the user what pre-compact saved. Plain text,
-      // because Claude Code shows this hook's stdout as-is. Always exits 0.
+      // PostCompact hook: saves the compaction summary and its memories, then prints one plain line, because Claude Code shows this hook's stdout as-is. Always exits 0.
       const { text } = await readStdinBounded();
       const logFlag = flags['log-file'];
-      const message = postCompactMessage(text, logFlag === true || logFlag === false || Array.isArray(logFlag) ? undefined : logFlag);
-      if (message !== null) console.log(message);
+      const line = cmdPostCompact(hookStoreRoot(hippoRoot), {
+        stdinText: text,
+        logFile: logFlag === true || logFlag === false || Array.isArray(logFlag) ? undefined : logFlag,
+      });
+      if (line !== null) console.log(line);
       break;
     }
 
