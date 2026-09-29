@@ -94,7 +94,7 @@ After setup, `hippo sleep` runs when a Claude Code or OpenCode session ends, and
 1. **Learns** from today's git commits
 2. **Imports** new entries from the project's Claude Code auto memory
 3. **Consolidates** memories (decay, merge, prune)
-4. **Deduplicates** near-identical memories, keeping the stronger copy
+4. **Deduplicates** identical memories, keeping the stronger copy
 5. **Shares** high-value lessons to a global store so they surface in every project
 
 ```bash
