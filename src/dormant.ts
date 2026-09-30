@@ -21,8 +21,8 @@ import type { DatabaseSyncLike } from './db.js';
 import type { MemoryEntry } from './memory.js';
 import { rejectionDigest } from './rejection.js';
 
-/** Why sleep made a memory dormant. Only the decay pass does today. */
-export type DormantReason = 'decay';
+/** Why a memory went dormant: sleep's decay pass, or an imported agent memory whose note was deleted. */
+export type DormantReason = 'decay' | 'source-deleted';
 
 /** One memory that sleep is moving out of active memory into the dormant store. */
 export interface DormantMove {
@@ -43,7 +43,7 @@ export interface DormantMemory {
   tags: string[];
   /** Live strength when it went dormant. */
   strength: number;
-  /** Why it went dormant (`decay`). */
+  /** Why it went dormant (`decay` or `source-deleted`). */
   reason: string;
   /** ISO time it went dormant. */
   dormantAt: string;
@@ -178,6 +178,18 @@ export function listDormantSnapshots(db: DatabaseSyncLike, tenantId: string): Do
        FROM dormant_memories WHERE tenant_id = ?`,
   ).all(tenantId) as DormantRow[];
   return rows.flatMap((row) => toSnapshot(row) ?? []);
+}
+
+/** Readable snapshots whose entry's source starts with `prefix`; a malformed snapshot is passed over, not an error. */
+export function dormantSnapshotsBySourcePrefix(db: DatabaseSyncLike, tenantId: string, prefix: string): DormantSnapshot[] {
+  // SAFETY: rows' shape matches the seven columns named in the SELECT.
+  const rows = db.prepare(
+    `SELECT tenant_id, id, content, entry_json, reason, strength, dormant_at
+       FROM dormant_memories
+      WHERE tenant_id = ?
+        AND CASE WHEN json_valid(entry_json) THEN json_extract(entry_json, '$.source') END LIKE ? ESCAPE '\\'`,
+  ).all(tenantId, `${escapeLike(prefix)}%`) as DormantRow[];
+  return rows.flatMap((row) => toSnapshot(row) ?? []).filter((s) => String(s.entry.source).startsWith(prefix));
 }
 
 function toSnapshot(row: DormantRow): DormantSnapshot | null {
