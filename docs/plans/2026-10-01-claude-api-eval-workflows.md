@@ -131,11 +131,73 @@ Freeze the selected description, runner/grader, model/effort, fixtures, corpus h
 
 A trigger win permits the separately registered pull-arm task experiment. It does not prove reduced repeat mistakes, lower total cost or superiority to built-in memory, and cannot bypass Z0's task/default gates. Never reopen or reuse locked Z0, Z1c or another claim-bearing hold-out for optimisation.
 
-Only after the first flow is sound:
+Prepare fresh cases and grader reviews alongside the first pilot; start further scored searches after the pilot pattern is sound and the parent gates pass:
 - **S9/TE6/TE7:** optimise memory packing/rendering under the actual token cap, retrieval floor, evidence-completeness and task-quality bounds; measure cache behaviour and total costs rather than assuming fewer characters save money.
 - **S6/SI4/Z3b:** optimise capture/correction prompts in isolated stores with independently labelled writes and false-closure/false-write bounds. Repeat independent memory builds as well as downstream scoring; repeated queries against one lucky store underestimate variance.
 - **SI1:** compare recall of previous optimisation attempts with the plain attempt log at equal budget once enough histories exist. Do not assume memory helps the optimiser.
 - **Cost-specific flow:** read the upstream cost-hillclimb guide, measure cache health, audit prompts and separately register model/effort choices. A model change belongs to that experiment, not the fixed-model Z1 description pilot.
+
+## Review of existing roadmap applications
+
+The CAE5 matrix in [ROADMAP Part XX](../../ROADMAP.md) records the complete adoption map. The review found several existing tasks with clear outputs and editable text, beyond the initial recall-description pilot:
+
+| Flow | Existing items | Why it is a useful candidate |
+|---|---|---|
+| Admission | Z1d / TE6 | Relevant versus irrelevant evidence has independently labelable outcomes. Query/gate text can be varied separately from delivery and ranking. |
+| Writes and corrections | SI4 / S0 / S6 / EI1 / Z3b / Z6 / Z9 | A source-to-memory or source-to-replacement pair exposes missing conditions, false writes and wrong closures; the model's extraction/matching instructions are a bounded surface. |
+| Rendering | S9 / TE7 / Z9 | The same supported evidence can be presented in different formats, making equal-budget application and real usage comparisons possible. |
+| Consolidation | S4 / TE9 / D10 | Independent labels can distinguish genuine duplicate assertions from superficially similar facts with different exceptions; optional merge text can be measured against evidence preservation. |
+| Handoff | W1 / CS1 / Z7 | Envelope-only resume tasks establish whether constraints and evidence survived. Delivery mechanics must pass before summary/continuation text is optimised. |
+| Tenant development | EI8 / EI12 / EI13 | Reviewed customer tasks can reveal specific convention/admission failures without tuning against the independent live control or buyer report. |
+
+**Readiness follows the failure stage.** Keep Z0 runner/smoke work first. Prepare admission and write/correction cases alongside Z10/S0/S6, then choose the next scored search from observed failures. A missed lesson suggests write/capture work; rejected useful evidence suggests admission work; unclear or expensive supported delivery suggests rendering work. Running every candidate loop in parallel would obscure attribution and consume resource ceilings before the useful bottleneck is established.
+
+**Eval-design-only applications.** Z0/TE5/F8 and Z12 benefit from fresh task, control, burden and growth-case review, grader calibration and trace checks. CD5/SI3/EI2/EV8 benefit from independently labelled poisoning and permission-negative fixtures. These are not permission to let an optimiser alter endpoint definitions, intervention policy, source ACLs, quarantine access or gold labels. Published LongMemEval/LoCoMo, VibeMemBench and DolphinBench protocols retain their locked scoring; use separate development data for tuning.
+
+**Prefer existing non-model methods where they fit.** S1/S2/FE3/LC3 already specify ablations, sweeps, data floors or trainable rankers. Use `build-eval` for review/auditing and a Claude-backed downstream task adapter, while retaining the deterministic retrieval scorer. Start a `hillclimb` only for a genuinely uncertain bounded surface with measurable headroom; a small grid does not need an LLM optimiser. Database/authentication/backup engineering and model-weight research keep their own tests and methods.
+
+### Additional invocation examples
+
+These are future operator prompts; select one reviewed scope and persist its allowed surfaces, metric/failure policy, corpus and resource manifest before scored optimisation. All command loading and confirmation rules above still apply.
+
+For the admission gate:
+
+```text
+/claude-api build-eval Prepare the Claude Code Z1d admission study on fresh
+development families. Review whether each candidate memory is applicable,
+irrelevant, conflicting or unknown. Reuse Z10 delivery evidence and the
+existing replay/scorer. Include indirect continuation and no-match cases.
+Keep the locked Z1c window inaccessible; propose independent family splits
+and useful-coverage/no-match/latency metrics for review.
+```
+
+For source-to-memory quality and correction matching:
+
+```text
+/claude-api build-eval Prepare the reviewed Claude-backed SI4/S6 and Z3b
+development evals. Reuse authorised source snapshots and isolated stores.
+Label durable extraction, evidence completeness, addressed claim and
+supported replacement separately. Include git noise, exceptions, quoted
+corrections, branch-specific facts and wrong corrections. Keep heuristic
+baselines, durable receipt/recovery fixtures and public store APIs fixed.
+```
+
+For a reviewed rendering study:
+
+```text
+/claude-api hillclimb Follow the approved S9/TE7 development plan. Vary only
+the allowlisted memory-rendering text, one hypothesis per round. Preserve
+the supported facts, conditions, provenance and hard 1500-token cap.
+Select using reviewed validation evidence/application and measured usage;
+keep model, effort, ranking and cache conditions fixed. Keep final task
+families sealed and stop at the stored resource and regression bounds.
+```
+
+The same pattern can target an already enabled optional merge prompt (S4/TE9) or bounded continuation text (W1), after their parent readiness checks. It does not enable LLM extraction, change live stores or establish another runtime's support.
+
+### Records each application needs
+
+Use one flow manifest naming parent roadmap items, loaded skill/version, actual model/effort, exact editable surface, baseline, source/fixture hashes, independent splits, scorer, failure policy, minimum useful effect, guardrail bounds and resource/stop limits. Retain paired attempt/usage/trace records and candidate diffs. Separate design review, mechanics smoke, development search, sealed confirmation and adoption statuses. An automated report is not the decision to release.
 
 ## Primary sources
 
