@@ -9,6 +9,8 @@
 >
 > **2026-09-30 execution addendum:** Parts XVI-XVIII reconcile delivery tracing, compact-memory experiments and runtime adapters with the current Z0 design. Instrument first; defaults remain frozen pending the separate retrieval and task gates.
 >
+> **2026-10-01 wording follow-up:** Part XIX, Track MSG records planned wording amendments for the core and enterprise edition. Keep the memory category; clarify the context and harness mechanisms, automation limits, evidence and feature status.
+>
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
 
 ---
@@ -1866,6 +1868,8 @@ Pitch "learns what is wrong and stops repeating it", not "decay by default". "Go
 
 Done in the README and the website (`website/`): the pitch leads with outcome marks and supersession, the claims that decay or sleep improve recall are gone, the 365-day half-life is labelled as not tuned, and the hippocampus framing is labelled as design inspiration.
 
+**Precision follow-up [planned 2026-10-01]:** Part XIX, Track MSG covers the next wording amendments for both editions. FE4's completed copy pass is historical; the new amendments are not implemented yet.
+
 #### FE5. Recency by event date, not save date [planned, eval first; added 2026-09-26]
 The mechanism audit found recency hurts current-fact recall but guards against stale facts. Part of the cost may be that recency counts from when a memory was saved, not from when its fact became true. `valid_from` already exists, but it defaults to `created` and only filters `--as-of` queries; it never ranks. The arm: fill `valid_from` from the date a memory states (a decision, deadline or incident), then apply recency to that date. It runs as an FE3 arm on E1. Ships only if it keeps the stale-fact guard without the current-fact loss. Idea from supermemory's company-brain, whose writer records an `eventDate` for dated memories.
 
@@ -2338,3 +2342,61 @@ The following files are **DRAFT / NOT REGISTERED**, not empty registrations. The
 | [S4 hygiene](docs/evals/2026-09-30-s4-sleep-hygiene-prereg.md) | Reversible merges, evidence preservation and the recall floor. |
 | [AZ1 Devin](docs/evals/2026-09-30-az1-devin-hooks-prereg.md) | Versioned delivery fixtures and a separate runtime task family. |
 | [AZ3 cross-platform connectors](docs/evals/2026-09-30-az3-consumer-connectors-prereg.md) | Packaging/identity/delivery fixtures, then fresh runtime task and supervision evidence. |
+
+---
+
+## Part XIX - 2026-10-01 update: wording amendments for core and enterprise
+
+### Track MSG - Product wording [planned; documentation and messaging only]
+
+**Purpose.** Keep "memory" as the product category while explaining the architecture precisely: persistent state is stored outside the model; context management selects and formats what reaches the model; harness integrations connect capture and recall to supported runtime events. Persistent agent memory does not require changing model weights. Hippo implements memory and supplies context through integrations; it is not a general optimiser of an agent's entire execution harness.
+
+This is a follow-up to FE4 and supports EV5/CD10. It changes no feature, default, licence boundary or evaluation gate, and does not displace Z0's priority.
+
+### MSG1. Align core and enterprise positioning [planned]
+
+Use the following as the copy direction, with capability and status qualifiers next to the relevant claim:
+
+| Edition | Lead | Technical explanation |
+|---|---|---|
+| Core | Local-first persistent memory for AI agents. | Stores experience across sessions and supplies selected memories through hooks, MCP and APIs. Uses outcome feedback and supersession to update what gets recalled. |
+| Enterprise [planned] | Shared organisational memory for AI agents. | Planned extensions add company identity, team and project administration, and governance to the open-source memory engine. |
+
+- Distinguish the memory lifecycle from context selection and runtime delivery. Describe Hippo as persistent memory with context management and harness integrations.
+- Do not reduce it to a context pruner: storage, writes, provenance, supersession and continuity persist beyond the active context window. Do not imply that it rewrites or prunes the host agent's entire conversation.
+- Keep the hippocampus framing as design inspiration, with measured findings and limitations beside mechanism claims.
+
+### MSG2. Correct RAG and learning claims [planned]
+
+- Replace "RAG searches a fixed corpus" in the README and website FAQ. Retrieval-augmented generation can use an updated corpus; distinguish Hippo by its writable memory lifecycle and integrations rather than an artificial static-corpus restriction.
+- Qualify "learns what is wrong" and "stops repeating it". Prefer "ranks memories down when reported wrong" for the outcome mechanism. Feedback can come from a user or an agent; it is a signal, not independent proof of truth.
+- Explain that supersession retires a fact when a replacement is supplied. Automatic truth detection, reliable correction capture and autonomous supersession remain subject to their Track Z experiments and gates.
+- Separate a mechanism from a demonstrated benefit. Retrieval quality, installation success or a smaller memory block does not establish fewer mistakes, lower total cost or less human supervision. Preserve negative results and the Z0/Z10/Z12 evidence requirements; do not add unmeasured savings or reliability guarantees.
+
+### MSG3. State delivery defaults and integration limits [planned]
+
+- Document the shipping per-prompt path accurately: pinned memories plus five recent memories on supported installed hooks, with unchanged-block suppression and refresh behaviour where configured.
+- State that prompt-matched recall is opt-in. Do not claim that every prompt or edited file automatically receives exactly three or four relevant lessons.
+- Describe `hippo context --auto` as assembling context through git-aware recall and saved task state. Snapshot saving and context restoration are distinct operations; do not describe the command as automatically snapshotting the terminal.
+- Keep a runtime-specific compatibility matrix: hooks, instruction-file guidance, MCP/API tool access, event/capture coverage, required trust or opt-in steps, and unsupported modes. An available MCP tool alone does not guarantee automatic invocation or capture.
+
+### MSG4. Make enterprise status consistent [planned]
+
+- Preserve the enterprise README's scaffold status until features are implemented and verified. `registerEnterprise(api)` is currently a stub; proposed enterprise capabilities are not shipped functionality.
+- Use future tense or an adjacent "planned / in development" label for SSO, SCIM, company identity, team/project administration, source-permission-aware recall and approval-based promotion while those capabilities remain pending.
+- Align the public teams page's hero, deployment diagram, feature labels and pilot offer with the enterprise README. Present existing tenants, API keys, roles, scope grants, audit, dashboard and connectors as MIT core capabilities, preserving EV1's open-core boundary.
+- Label proposed pilot measurements separately from completed results. Reconcile deployed website copy with repository source when the wording amendments are published.
+
+### MSG5. Surfaces and completion checks [planned]
+
+**Surfaces.** Core `README.md`; website shared content, hero, FAQ, how-it-works, comparison, teams and metadata; repository/package descriptions where applicable; enterprise `README.md` and buyer-facing descriptions.
+
+- [ ] Core copy consistently distinguishes persistent memory, context management and harness integration.
+- [ ] The fixed-corpus RAG claim is removed from current product copy.
+- [ ] Outcome, supersession, automation and delivery claims match the shipping implementation and defaults.
+- [ ] Enterprise copy consistently distinguishes shipped MIT features, the commercial scaffold and planned capabilities.
+- [ ] Performance claims retain their metric, setup, evidence link and limitations; no task-benefit claim is inferred from retrieval alone.
+- [ ] Documentation links and website rendering/build are checked when implementing the copy changes.
+- [ ] Repository source and deployed product copy agree after publication.
+
+**Completion.** Mark this track done only after the wording changes themselves are implemented and checked across both editions. Recording this roadmap item does not complete the amendments.
