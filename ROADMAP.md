@@ -413,6 +413,8 @@ RESEARCH §"Near-term 2". Half-life range (1-90d), retrieval boost (+1 to +5d), 
 RESEARCH §"Near-term 3". Rule-based merge vs LLM-merge vs embedding-cluster merge.
 **Pre-req:** offline judge harness reusable. **Success:** measured per-strategy retrieval usefulness on held-out tasks.
 
+**Workflow adoption [planned].** Reuse CAE5's consolidation `build-eval` and calibrated grader for the fixed strategy comparison. A separate `hillclimb` may tune an opt-in summary prompt, with evidence/exception preservation and fresh confirmation; keep the rule-based baseline unchanged.
+
 ### D11. Cross-agent transfer learning [research]
 RESEARCH §"Near-term 4". Which memory types transfer? language rules vs tool gotchas vs architectural patterns vs file paths. Schema_fit as transferability predictor.
 **Success:** transferability matrix per memory tag class.
@@ -606,6 +608,8 @@ Mem0/Letta context table: `benchmarks/LOCOMO_INVESTIGATION.md`.
 ### F8. Memory-Augmented Agent Eval benchmark [planned]
 RESEARCH §"Near-term 1". 50-task / 10-trap standardised sequence. Compares no-memory baseline vs static memory (CLAUDE.md/AGENTS.md) vs full hippo.
 **Effort:** 15d to design + harness. **Success:** hippo-equipped agents show downward trap-rate trend; static-memory agents flat. Released as open benchmark.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` representative trap sequences, executable checks and grader stability before freezing a new benchmark. Tune component candidates in separate development flows; published test tasks, labels and the scoring protocol stay outside `hillclimb`.
 
 ### F9. Hybrid-retrieval parity + competitive consolidation [shipped 2026-05-20, Gate-B FAIL on _s]
 
@@ -1064,6 +1068,8 @@ Replicate the 2606.12945 recipe on hippo's substrate: a linear (inspectable) val
 A small learning-to-rank head (logistic / GBDT over lifecycle + match features — NOT a neural cross-encoder) re-scoring the RRF candidate pool, trained on LC1's (query, shown, outcome) triples. SIGIR-2019 is the null hypothesis: BM25+RRF is a strong baseline and the head ships only if it beats it under a pre-registered paired eval. The differentiator is per-store personalization — each store learns from its own outcome history, which no static-store competitor can do.
 **Effort:** 6-8d once data exists. **Success:** pre-registered R@5 / fire-rate lift over the shipped RRF pipeline on own-store traces; identity fallback when a store has fewer labeled triples than a pre-set floor (cold-start).
 
+**Workflow adoption [planned].** Use CAE5 to `build-eval` label quality, independent family splits, cold-start fallback and downstream task checks. After the data floor, retain ordinary ranker training/sweeps; optional `hillclimb` covers only a separately allowed setting, never outcome labels or scope admission.
+
 #### LC4. RL memory controller (Memory-R1 / Mem-alpha class) [research → Track G]
 Verified feasible at 152-QA-pair scale, but it requires fine-tuning a 3B-14B backbone and a training loop — as a product default this conflicts with the zero-dep local core (non-goals #5/#6). File as the Track G realization (G3 knowledge-RLHF, G5 sleep-as-training-pipeline); candidate for grant-funded research (a GRPO run on a ~4B model is locally feasible on the RTX 5080 for the research track). Any product surface is an optional trained artifact under Track L Rules 2/3.
 
@@ -1079,6 +1085,8 @@ Mechanism (both hook events verified against code.claude.com/docs/en/hooks 2026-
 
 Feeds LC1/G8: pre-compact snapshots linked to post-compact outcomes are (state → outcome) training data for the learned lifecycle. Additive only — new hook entries + capture path, no public CLI renames.
 **Effort:** 2-3d. **Success:** `hippo setup` installs the PreCompact hook for claude-code; a compaction mid-session writes a working-state snapshot memory; the following SessionStart(compact) injects it; E2E test drives a synthetic transcript through simulated PreCompact + SessionStart(compact) hook input and asserts snapshot + re-injection; SessionEnd capture is unchanged.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` lesson/constraint preservation and resume tasks around the existing compaction fixtures. Later `hillclimb` may tune continuation/summary wording; hook delivery, compaction-record separation and protected memory rules stay fixed.
 
 ### Positioning note
 
@@ -1245,6 +1253,8 @@ Tables: `cards` (id, title, status, assignee_runtime, repo, contract, budget, le
 One pull-side adapter contract per runtime: a claim recipe (the runtime runs `hippo card claim` itself), a launch-command template that hippo prints and never executes, a limit-signal hook, and a health note. Adapters: Claude Code and Codex (hooks exist), Pi, OpenClaw, OpenCode (extensions exist), Grok Build (xAI terminal agent, v1.0 Aug 2026, Apache 2.0) and Muse Code (Meta terminal agent, GA Sep 2026); both isolate sub-agents in git worktrees, so the adapter passes a worktree, never a shared tree. Generic MCP-agent fallback. No dispatcher (decision 2026-09-20): a human, or the human's own scheduler, starts the runtime. The runtime claims the card (atomic claim and lease shipped in W2b), reads `hippo context` plus the envelope, heartbeats, and on exit writes `handoff create` and `outcome`. `hippo card reclaim` returns a card with a dead lease to `ready`. Capability file per runtime (context window, repo tools, vision, cost, known failure modes) stored as memories, per RESEARCH "Protocol and interoperability" item 7 (the capability registry and the memory store may be one structure). Limit events are `--error` memories with slow decay, so "Codex hit compaction on this module" is a first-class fact the next runtime retrieves.
 **Success:** a card started on Codex that signals a limit is released with its W1 envelope and resumed on Claude Code by a human-started session that claims it, on the 10-card fixture. Hippo starts no runtime process at any point.
 
+**Workflow adoption [planned].** Use CAE5/W1 to `build-eval` envelope-only resume and supported pull-recipe tasks. `hillclimb` only bounded Claude-side recipe/continuation text after mechanics pass; leases, isolation and human-started runtime boundaries remain invariant.
+
 #### W4. Limit-triggered migration [planned, pull mode since 2026-09-20, 2-3w, after W3]
 Detectors: CS1 PreCompact hook (exists), repeated tool-error streak, quota / rate-limit response, test-loop stall (same failing test N times), explicit "I am stuck" self-report via `hippo card block`. Migration runs the six-step protocol from Zhao et al. 2026: quiesce tools, checkpoint (envelope + git ref + test status), validate the target runtime can see the workspace, bind credentials, rehydrate the envelope into the new session, resume only after the review column or a verifier says so. Never hand off a dirty tree: missing evidence moves the card to `blocked`. Pull mode (decision 2026-09-20): the source side writes the checkpoint, then blocks or releases the card. The target-side steps (validate the workspace, bind credentials, rehydrate, resume) run inside whichever runtime next claims the card, started by a human or the human's own scheduler. Hippo never starts the target runtime and never touches its credentials.
 **Success:** each detector has a red-under-old fixture; a migration with a dirty tree is refused; zero cards resume without evidence.
@@ -1321,6 +1331,8 @@ Read subject, body, trailers (`Fixes`, `Co-authored-by`), ticket keys (`ABC-123`
 #### EI2. Permission-aware recall [critical, next, 3-4w]
 Every memory carries the ACL of its source (repo visibility and teams, channel membership, Jira project). Callers carry an identity; recall filters by ACL as a hard predicate before ranking; memories derived from several sources inherit the most restrictive ACL; ACLs re-sync on webhook events and on a schedule. **Fixed:** 1.45.0 stopped member keys minting keys or revoking other keys; PR #227 stopped a member key unlocking a private or quarantined scope by naming it, and stopped MCP over HTTP running every caller as admin; the per-scope grants that let a member read a private scope it is entitled to are the remaining EI2 work. **Slice 1 (feat/ei2-permission-recall):** scope grants for member keys (`hippo auth grant|ungrant`, schema v47); consolidation merges, DAG summaries and profiles, extracted facts, auto-promoted traces and supersede successors keep their source's restricted scope and never mix scopes; brief refresh skips restricted receipts; the JS recall filter now hides `:private:` in any case, as the SQL one did; negative tests over HTTP recall, assemble, MCP recall and the graph. **Still open:** default recall that widens to every granted scope without naming one (touches the store loader); derived memories that span several restricted scopes (needs a multi-scope ACL column); back-filling scope on derived rows written before slice 1 (a live-data change; merges keep no source link); HTTP routes for grants; team and IdP-group grants (EI11); ACL capture in connectors and re-sync on webhooks and a schedule; scope on E2 objects (decisions, policies, briefs, notes); member writes by id on restricted rows (forget, archive, promote, share); `GET /v1/audit?tenant=` honoured for member keys (pre-existing, now carries grant rows); `auth list` shows grant scopes to member keys; drill-down refuses a granted member's private summary; a self-heal for `api_key_scope_grants`; case-insensitive Bearer redaction in support bundles (pre-existing). **Success:** negative tests that a user without source access recalls nothing from that source, including through summaries and the graph.
 
+**Workflow adoption [planned].** Use CAE5 to `build-eval` realistic source-permission and derived-memory negative fixtures alongside deterministic API/MCP tests. This is an eval-design use: ACL predicates, grant semantics and source-scope inheritance are outside `hillclimb`.
+
 #### EI3. GitHub, enterprise grade [next, 2w]
 GitHub App auth (installation tokens) instead of a PAT; configurable API base for GHES and `*.ghe.com` (backfill hardcodes `api.github.com` today, `src/connectors/github/backfill.ts:40`); pull request reviews, reverts and CODEOWNERS as lesson sources; review threads that ended in a code change become convention memories.
 
@@ -1339,6 +1351,8 @@ Bitbucket Cloud and Data Center (DC is exempt from Atlassian's 2029 end of life)
 #### EI8. Company profile [planned]; onboarding hindcast [research]
 A per-company profile: sources and repos, ticket-key pattern, commit conventions, ownership from CODEOWNERS or a Backstage catalog, retention and legal hold, sensitivity rules, `.hippoignore`, model endpoint. Onboarding replays a sample of the company's own past issues, compares an agent's attempt with the merged change, and stores the differences as evidence-backed convention memories (Learning to Commit, arXiv:2603.26664). Generated-but-unverified context hurts (arXiv:2602.11988: generated context files about -3% success and +20% cost, developer-written about +4%), so hindcast memories stay probationary until outcomes confirm them. The hindcast is research, not planned (review 2026-09-24): it runs paid agent sessions per customer and reuses TE5's `make-tasks.mjs` and `ab-run.mjs`.
 
+**Workflow adoption [planned].** Use CAE5 to `build-eval` permitted company development tasks and evidence-backed convention labels. A later scoped extraction/admission `hillclimb` uses isolated history; retain probationary status, source permissions and the hindcast's research/resource gates.
+
 #### EI9. Per-tenant learned lifecycle [research, gated on LC3]
 LC2/LC3 value scorers trained per tenant on that company's outcomes and `dormant_restore` labels, deletable with the tenant's data (non-goal 15).
 
@@ -1355,6 +1369,8 @@ Replay a tenant's own history in time order with memory on and off at matched to
 
 #### EI13. Organisational-memory benchmark [research]
 A public benchmark whose tasks need knowledge that exists only outside the code (review threads, incidents, ticket decisions). No 2025-2026 memory benchmark for coding agents does this (SWE-Bench-CL, SWE Context Bench, DreamBench-SWE all use code or prior trajectories). Publishable; the natural home for the Part III "memory-system eval methodology" item.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` fresh organisational-knowledge tasks and independently reviewed ground truth from permitted sources. Keep benchmark authoring separate from candidate `hillclimb`; publish frozen scoring and fresh confirmation whatever the result.
 
 #### EI14. Compliance [moved to the Company section in Part X; funding-gated]
 SOC 2 Type II first, then ISO 27001 and ISO 42001; DPA, subprocessor list, SIG/CAIQ answers; FedRAMP only through the self-hosted SKU or a partner.
@@ -1420,6 +1436,8 @@ The per-prompt hook compares the block hash with the last one it sent in this se
 **Status:** `scripts/token-eval/budget-curve.mjs` sweeps budgets per question against recency, full context and no memory, and reports minimum tokens to reach the evidence. Verified on the bundled smoke file only (haystacks too small to discriminate); the LongMemEval_s run needs the dataset, which this container cannot download. LLMLingua-2 arm deferred.
 LongMemEval and LoCoMo at budgets 250 to 8000, reporting answer recall against injected tokens and minimum tokens to answer, against full context, naive top-k at the same budget, LLMLingua-2 compression and no memory. Deterministic, gates CI. Replaces "R@5 at a fixed 4000" as the retrieval chart, since per-haystack R@5 is saturated.
 
+**Workflow adoption [planned].** Use CAE5's rendering flow to `build-eval` evidence completeness and downstream application around the existing budget curve. Keep the deterministic scorer and benchmark protocol; `hillclimb` only a separate development rendering surface, confirmed on fresh task families.
+
 #### TE4. Session replay harness [shipped, PR #227]
 **Status:** `scripts/token-eval/replay.mjs` replays traces through the real hook in every-turn and skip-unchanged arms, cache-priced; a short trace runs in CI. On three synthetic traces skip-unchanged cut hippo's own cache-priced hook text by 84-89% and unchanged blocks were byte-identical every time (`benchmarks/token-eval/README.md`). This is hippo's overhead, not a saving on the agent's work. `scripts/token-eval/claude-usage.mjs` reads Claude Code's own per-message usage records on a desktop and joins them to the ledger by session id; running it on the founder's machine is the next input.
 Replays recorded (anonymised) agent sessions through the hooks with no LLM calls and prices the injected text with a cache model (Anthropic 0.1x read, 1.25x write). Reports tokens injected per session, share re-injected unchanged, and byte-stability. **Success:** runs in CI and fails on a regression, such as a hook that doubles its output.
@@ -1451,6 +1469,8 @@ Capture file maps, "where X lives", commands that worked and known dead ends fro
 
 #### TE9. Consolidation that compresses [research, gated on TE3 and TE5]
 Part III found merge summaries are concatenations and DAG slice 1 cost 6.3pp. Any new attempt starts from a new hypothesis and must win on both evals.
+
+**Workflow adoption [planned].** Use CAE5's consolidation `build-eval` for evidence-preserving compression and task effects. A permitted optional merge/summary prompt can `hillclimb` on independently rebuilt development stores; retain both TE3 and TE5 confirmation gates.
 
 #### TE10. VibeMemBench [next when released; plan fixed 2026-09-24]
 VibeMemBench (arXiv 2609.23570, Alibaba DAMO, September 2026) is the first public benchmark that toggles memory on real repository coding tasks with executable tests: 111 SWE-rebench V2 targets, 3,634 history trajectories, five solvers, 4 seeds. Mem0, SimpleMem, MemoryOS and A-MEM landed at or below memory-off in 11 of 12 pairings. Its code and data are not released yet (the DAMO-ConvAI folder says "Coming"). The protocol for hippo is fixed in `docs/evals/2026-09-24-vibemembench-plan.md` before seeing the data: a like-for-like top-1 arm, a separate hippo-native context arm, an outcome-feedback-off control, and publication whatever the result. Before release: trajectory ingestion (a trajectory becomes hippo memories with its outcome, never the gold patch) and a TE5 run on a few SWE-rebench V2 repositories as an early read.
@@ -1507,6 +1527,8 @@ Triggered by a founder question: many companies hand AI coding to developers thr
 #### CD1. Hippo agent plugin [next, 1-2w; the Claude Code marketplace entry shipped in PR #227]
 A Hippo agent plugin bundling the MCP server, the hooks and a short skill. That's the unit an admin can approve and turn on for everyone. Ship it in the agent-plugin format for VS Code and Copilot CLI (same bundle for Claude Code where the format matches), port the existing Claude Code hooks to VS Code's hook events, and publish a listing for the default plugin marketplaces and for private company marketplaces. **Success:** an admin enables it through managed settings and every developer's Copilot agent uses hippo with no per-developer step.
 
+**Workflow adoption [planned].** Use CAE5's tool-guidance flow to `build-eval` supported invocation and sandbox setup cases, then `hillclimb` only plugin skill/tool wording. Keep hooks, schemas and managed installation fixed; verify each client's support separately.
+
 #### CD2. Company-hosted Hippo server with company sign-in [next, 3-4w; delivered by the EI11 OAuth and registry work and the EI10 server tier]
 A company-hosted Hippo server with sign-in that the company's identity system can use (OAuth), listed in the company's approved MCP list. Remote MCP over HTTP with OAuth 2.1 (today the HTTP server has API keys only), an entry in the MCP Registry v0.1 format so it can sit in a company's GitHub or Azure API Center registry, and the CD1 plugin pointing at it. **Success:** works under a "registry only" Copilot policy, and every recall is tied to the signed-in developer for permissions (EI2) and audit.
 
@@ -1531,6 +1553,8 @@ A monthly report per company: memories used, repeated errors avoided, tokens hip
 #### CD11. Shadow holdout [commercial repo] [planned, next after TE5's pilot run; design in `docs/plans/2026-09-24-buyer-kpis.md`]
 A setting, `holdout.rate`, makes a deterministic share of sessions (or of developers) skip memory injection while capture continues. Each holdout is logged, so a pilot measures hippo against a live control group on the same days, models and people.
 
+**Workflow adoption [planned].** Use CAE5 to `build-eval` development fixtures for control assignment, capture/injection separation and leakage checks. This is eval design and correctness work; live controls, randomisation and shadow-holdout outcomes remain outside `hillclimb`.
+
 #### CD12. Agent telemetry join and pilot report [planned, with CD11] [commercial repo]
 `hippo report --pilot` joins hippo's ledger with the agent's own cost data by session id, computed inside the customer's network:
 - **Claude Code:** its OpenTelemetry export or its organisation usage API.
@@ -1542,6 +1566,8 @@ It reports, per arm with intervals:
 - repeat-error rate;
 - guardrails;
 - hippo's own cost.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` trace/usage joins, missing telemetry, arm-specific failures and report recomputation from raw records. Keep the buyer report and metric definitions independent of candidate selection; no `hillclimb` of reported savings or denominators.
 
 #### CD13. Failure-signature log [shipped, schema v46]
 Every failure signature seen is logged with its session, including skipped and duplicate ones, so repeat-error rate can be computed per arm.
@@ -1559,6 +1585,8 @@ The platform lead's first move is to ask an agent to install hippo, so install a
 - **Shipped:** `hippo doctor [--json]` (read-only health check; every warn or fail names its fix; exit 1 on failure); `npx -y hippo-memory mcp` creates the global store on first use instead of failing; `llms-install.md` (install, wire in, verify, written for agents; linked from README and `llms.txt`); `.claude-plugin/marketplace.json` (validated with `claude plugin validate`, installed from a scratch home); `server.json` and `mcpName` for the official MCP registry; the README's MCP tool list matched to the server by a test.
 - **Remaining:** publish to the MCP registry after the next npm release; VS Code and Copilot detection in `hippo init`, writing the user's MCP config (check VS Code's current config format first); a first-run "here is what I learned from your repositories, approve?" report, built as the first surface of AT4/CD4 and respecting the DF4 admission filters.
 - **Downgraded:** `hippo rollout` (an org bundle generator) waits for EI10 and EI11; it has nothing to package before them.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` clean-checkout install/doctor tasks with executable success checks. A later `hillclimb` may tune installation guidance only; preserve installer behaviour, trust settings and the supported-runtime checks.
 
 ### Sequencing
 Superseded by the 90-day queue below.
@@ -1700,6 +1728,8 @@ Attribute real results to the memories that were in context when the work was do
 
 Each signal is an `observed` outcome, logged with its evidence, and reversible. It runs only when the attribution is unambiguous (few memories in context, one task). It stays off by default, so the TE5 hippo arm stays as registered, until a second TE5 registration measures it.
 
+**Workflow adoption [planned].** Use CAE5/Z2b to `build-eval` supported, unrelated and ambiguous outcome signals against delivered evidence. Any later extractor/classifier `hillclimb` preserves unknowns and attribution rules; automatic writes remain gated by SI0 validity and a separate task registration.
+
 #### SI1. Attempt archive for harness tuning [research; after TE5]
 The RRSI experiment. Replace RRSI's edit history with hippo:
 - each proposed change is a memory holding its hypothesis, score change and verdict;
@@ -1707,6 +1737,8 @@ The RRSI experiment. Replace RRSI's edit history with hippo:
 - the proposer recalls similar past attempts before proposing.
 
 At an equal budget, measure how often failed ideas are retried and the held-out score, against RRSI's plain log. This needs RRSI's code to be public. A plain log may be enough when the history is small; hippo has to beat it, just as it has to beat BM25.
+
+**Workflow adoption [planned].** Use CAE5's retained attempt histories to `build-eval` repeated failed ideas and proposal quality against a plain log at equal budget. Freeze any memory-assisted proposer before fresh confirmation; the separate RRSI comparison still needs public code.
 
 #### SI2. Lessons earn trust on held-out work [research; after SI0 and EI12]
 RRSI's rule, applied to lessons:
@@ -1739,6 +1771,8 @@ An agent that writes its own memories can amplify its own mistakes. Limits:
 **What not to build yet.** Export of outcome-labelled trajectories for fine-tuning (weight updates). It carries privacy weight, and nothing shows a buyer needs it.
 
 **Evidence gate.** No claim that hippo makes agents improve themselves until TE5 passes H1 and H3 and SI0 is measured in a second registration. VibeMemBench found most memory systems at or below memory off (TE10), so the claim has to be earned.
+
+**Workflow adoption [planned].** Use CAE5's trust `build-eval` for poisoning, unsupported self-written lessons and rejected-value recurrence. Optional detector/extractor wording may `hillclimb`; hard caps, tombstones, provenance tiers and evidence-based promotion remain fixed.
 
 ---
 
@@ -1828,6 +1862,8 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
 - Org, team, project and scope, with roles past admin and member: editor, viewer, team admin. The A5 plan named this hierarchy (`docs/plans/2026-04-29-a5-stub-auth.md`); it was never built.
 - The admin and member pair stays in the MIT core.
 
+**Workflow adoption [planned].** Use CAE5 to `build-eval` role/action and cross-team/project negative fixtures for the enterprise implementation. Keep layered-role enforcement as deterministic correctness; no `hillclimb` of permissions or authority boundaries.
+
 ### Exit criteria for v1
 - A design partner installs it in their network from the admin guide, with no help beyond the support channel.
 - One real security questionnaire is answered with no "no" on identity, permissions or deployment.
@@ -1879,6 +1915,8 @@ Measured on a copy of the founder's store: 73 of 1,106 lessons flagged, 44 of th
 - decay off.
 
 It runs with the in-window dating lane as well. It also includes a **replay of real recall queries** from the founder's store: LC1 retrieval traces with their later outcomes, scored for each arm. This is the only test that reflects actual use, and it runs on the founder's machine.
+
+**Workflow adoption [planned].** Use CAE5 to review development recency/staleness labels and replay checks with `build-eval`. Keep this registered arm comparison fixed; explore a new bounded setting separately before fresh confirmation, without tuning on its held-out seeds or changing retention policy.
 
 #### FE4. Messaging [done 2026-09-25]
 Pitch "learns what is wrong and stops repeating it", not "decay by default". "Good memory is knowing what to forget" stays only where forgetting means wrong, superseded or unused, never age.
@@ -2070,6 +2108,8 @@ Stages 1 onward spend plan usage and wait on the founder's go. A rough guess bef
   - First check, before any code: a real compaction proves the summariser follows the instruction.
   - **PR 1 built, pending merge (2026-09-29, branch `feat/compaction-saves-memories`):** the instruction, the compaction record, the item memories, the keep rule and the own-session filter. Still unmeasured: a real compaction at 250k context, where a `no memories section` log line counts the misses.
 
+**Workflow adoption [planned].** Use CAE5's `build-eval` workflow to review fresh development families, controls and executable grades around the existing runner. Preserve this locked registration and stage order. Component `hillclimb` runs on separate development data before independently registered task confirmation.
+
 #### Z1. Recall against the prompt, gated [prompt and tool-output arms failed 2026-09-26; prompt arm shipped off by default]
 The `UserPromptSubmit` hook reads the prompt from its payload and recalls against it, then applies TE6's gate: inject nothing when nothing clears it. Pinned rules stay. **Test first, no paid call:** replay the frozen SI0 corpus (`hippo-archive/transcripts-since-2026-09-01/`) and report overlap with the work and tokens injected, today's hook against Z1. **Ships if** overlap rises well above 0.057 and median injected tokens do not grow. Latency budget: the hook stays under the current 0.28 s at 10,000 memories.
 **Result (2026-09-26):** the lexical-overlap gate failed. Overlap stayed flat (0.0545 in both arms on the held-out split), hook p95 rose to about 0.30 s, and median tokens fell from 847 to 533. It ships behind `pinnedInject.promptRecall`, off. Next arm: a relevance judge, or recall against recent tool output, not the prompt. See `docs/evals/2026-09-26-z1-prompt-recall-result.md`.
@@ -2087,16 +2127,22 @@ Credit or blame the memories Z1 injected, from signals in the session: a failed 
 A user message that corrects the agent ("no, don't...", "stop...", "use X not Y") is the strongest signal we have. Detect it in the hook, distil it through SI4's write contract, and store it as a lesson tied to what it corrected. A repeat of the same correction strengthens the existing lesson instead of adding a new one. **Detector eval, 2026-09-26: FAIL** (`docs/evals/2026-09-26-z3-correction-detect-result.md`): a rule table scored 0.82 precision on held-out sessions against a 0.90 bar; tone words caused most false hits. Next: re-register the explicit-phrasing rules on fresh sessions, plus a Jev arm.
 A correction is a claim, and users are often confidently wrong (XYEval, under Z0). A technical correction ("the bug is in X", "use flag Y") is stored `observed` (SI2) and recalled with its source and date, as what the user said rather than as a rule; Z2 retires one whose fix then fails. A preference ("don't open a PR", "use British spelling") is the user's call and is stored as-is. Repeating a correction strengthens it but never proves it, so Z4 promotes on outcome evidence only.
 
+**Workflow adoption [planned].** Use CAE5/Z3b to `build-eval` fresh correction-detection cases, with preference versus technical-claim labels. A bounded `hillclimb` may tune the optional detector prompt or threshold; keep gold labels, epistemic status and false-write bounds fixed.
+
 #### Z6. Automatic supersession of changed facts [with Z3; test first; added 2026-09-28]
 The market's most reported memory failure (r/AI_Agents, September 2026): a user moves from Delhi to Mumbai, or switches from dark mode to light, and the memory returns both facts and leaves the model to choose. Hippo has the machinery (`supersede`, `invalidate`, `conflicts`, `resolve`, `explain`, `--as-of`) but every step is a command. Its automatic conflict check runs only at sleep and needs an opposite pair (enabled/disabled, true/false, always/never) or a negation, two shared rare words and half the words shared (`src/consolidate.ts:59-65`, `1154-1189`), so "lives in Delhi" against "moved to Mumbai" is never flagged: neither has a pair or a negation. End-to-end behaviour is not yet tested.
 - **Test first:** a small update set (moves, preference flips, corrections, reversals) written in over normal prompts with no hippo commands, then asked across sessions. Pass means the current fact wins and the old one is retired with a reason, not merely ranked lower. Run it on hippo as shipped before building.
 - **Build:** on write, find memories about the same subject and attribute (same person or setting, different value) and supersede the older one, logged and reversible. A cheap classifier call is the opt-in arm when rules miss.
 - **Show it:** `hippo explain` on the current fact names the retired one, its date, its source and the rule that retired it. This is the demo, and the pitch: hippo knows what changed.
 
+**Workflow adoption [planned].** Use CAE5/Z3b to `build-eval` supported replacements, ambiguous conflicts and reversals. `hillclimb` only optional semantic matching in isolated stores; preserve atomic successor writes, scope, historical recall and reversible evidence.
+
 #### Z7. Sub-agent work is remembered [test first; added 2026-09-28]
 A sub-agent is compaction by another name: it reads forty files, hits the dead ends and hands the parent a few hundred tokens (Cyrus, Decagon, "Multi-agent systems: from coordination to negotiation", 2026-09-27). Its gotchas and errors never reach hippo. Capture skips every sidechain turn on purpose (`src/capture.ts:580`), and Claude Code keeps sub-agent transcripts in a separate `subagents/` folder per session that capture never opens; only the TE5 token counter reads it, for token counts (`scripts/token-eval/claude-usage.mjs:103`). This box wrote 1,489 sub-agent transcripts in the 30 days to 2026-09-28. As agents delegate more, this share of the work grows.
 - **Test first:** replay a sample from the SI0-style archive. Count the errors, corrections and file-level facts found inside sub-agents that are missing from the parent's capture and the parent's reply. If few survive the SI4 write contract, drop Z7.
 - **Build:** session-end capture also reads the session's `subagents/` files through the same write contract, tagged with the parent session. Where the host has a sub-agent start hook, Z1's gated recall goes into the sub-agent too, so a delegated search does not repeat a known mistake.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` independently labelled useful sidechain lessons versus parent-only capture. Only permitted semantic extraction/continuation wording may `hillclimb`; preserve parent/source identity, supported transcript coverage and SI4's write-quality gate.
 
 #### Z4. Repeated mistakes become guards [after Z2 and Z3]
 A lesson that was shown and still violated, or corrected twice, is promoted from recalled memory to an enforced check: a `PreToolUse` guard that blocks the matching action with the lesson as the reason. Guards are opt-in per store at first, listed by `hippo doctor`, and each can be dropped with one command. Promotion needs the evidence SI2 requires; a guard that blocks nothing in 30 days demotes back to a memory.
@@ -2125,6 +2171,8 @@ Claude Code spends its effort when a memory is written: the model decides what i
 **What not to build.** New commands for users to learn. Every Z item is reached through hooks `hippo init` already installs; a new CLI verb is for debugging only.
 
 **Evidence gate.** Z0 (TE5's scored run, re-registered 2026-09-29) is the proof that any of this beats the memory agents already have. Z1's replay is the cheap check; Z0 is the claim.
+
+**Workflow adoption [planned].** Apply CAE5's write, correction and rendering flows to the relevant numbered parts: `build-eval` Why/How completeness, create/update decisions, index expansion and verification behaviour. `hillclimb` each text surface separately; retain independent schema/import/mirror fixtures and task confirmation.
 
 ---
 
@@ -2250,6 +2298,8 @@ Use the existing optional embedder. Lexical and dense retrieval generate indepen
 
 Use at most 20 claims and one experience, with the token cap taking precedence. Preserve existing explicitly selected rerankers; do not introduce a required MS MARCO cross-encoder, cloud embedder or vector dependency. Optional SQLite vector indexing needs its own compatibility and latency evidence. Hybrid gains must hold after the claims exist and still cannot change defaults without Z0.
 
+**Workflow adoption [planned].** After a measured paraphrase gap, use CAE5 to `build-eval` lexical/dense coverage and downstream task cases. Prefer existing RRF/parameter sweeps; any optional reranker `hillclimb` retains eligibility filters, the zero-dependency path and S1/Z0 gates.
+
 ### S3. Forget by evidence-based closure
 
 Reuse `valid_from`, successor linkage and the existing `--as-of` contract. Current recall excludes closed/rejected/superseded versions; historical recall applies the requested temporal view. Closure and successor writes preserve scope, evidence, pins and reversibility.
@@ -2257,6 +2307,8 @@ Reuse `valid_from`, successor linkage and the existing `--as-of` contract. Curre
 Validity time and recorded knowledge time are separate: specify how late corrections and backdated facts behave before calling the design bitemporal. Preserve the existing public `--as-of` semantics; register any additional recorded-time selector and migration separately. Test historical queries before and after the correction was learned, gaps, chains, reversals and isolated scopes.
 
 Age-only archival is deferred. A 180-day policy requires a retention study, protected-row checks and recoverable archive semantics; a short Z0 run cannot validate forgetting over months. Draft: [S3 temporal closure](docs/evals/2026-09-30-s3-temporal-closure-prereg.md).
+
+**Workflow adoption [planned].** Use CAE5's correction eval to review temporal chains, backdated corrections and historical-query fixtures. Optional semantic matching can `hillclimb` only through Z3b; version-write integrity and public `--as-of` semantics retain deterministic correctness tests.
 
 ### S4. Sleep as reversible hygiene
 
@@ -2271,6 +2323,8 @@ Pass the recall floor and evidence/temporal integrity checks. Deduplication alon
 ### S5. Scoped experiences
 
 A fail/resolve sequence can produce one experience: trigger, observed action, check evidence, outcome and a bounded lesson. A failure alone does not prove a remedy. Reuse trace/provenance infrastructure before creating another table. Retrieve by scoped trigger; inject at most one per turn. Version-dependent remedies carry applicability, and unproven lessons remain observations.
+
+**Workflow adoption [planned].** Use CAE5 to `build-eval` fail/action/check sequences, unsupported remedies and version-specific applicability. `hillclimb` an optional experience-extraction prompt only after attribution passes; preserve evidence links, observation status, scope and the one-experience cap.
 
 ### S6. Automatic writes
 
@@ -2501,6 +2555,8 @@ Run `/claude-api hillclimb` with only the `hippo_recall` description editable. C
 **Exit.** A frozen-confirmation report and explicit adopt/reject decision exist. No claim of fewer mistakes or lower total cost from a trigger score alone.
 
 ### CAE5. Apply the workflows to existing roadmap items [planned; parent gates retained]
+
+**Coverage.** All 46 parent items covered by this application map, including SI1's attempt-history follow-up, carry direct workflow adoption notes. These are planned execution tasks: each specifies eval design, an eligible bounded optimisation surface or a design-only role, and retains the parent's readiness and release gates.
 
 **Use.** `build-eval` helps source and review cases, calibrate graders and adapt runners. `hillclimb` follows only when that eval can distinguish a useful change on an explicitly editable surface. The following is an adoption map for existing work, not additional feature tracks or evidence that any optimisation has run.
 
