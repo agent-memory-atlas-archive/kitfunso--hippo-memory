@@ -11,6 +11,8 @@
 >
 > **2026-10-01 wording follow-up:** Part XIX, Track MSG records planned wording amendments for the core and enterprise edition. Keep the memory category; clarify the context and harness mechanisms, automation limits, evidence and feature status.
 >
+> **2026-10-01 eval workflow follow-up:** Part XX, Track CAE records installation and explicit use of Anthropic's `/claude-api build-eval` and `/claude-api hillclimb`, with a Z1 trigger pilot, existing-runner adapters and sealed confirmation.
+>
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
 
 ---
@@ -1420,6 +1422,7 @@ Replays recorded (anonymised) agent sessions through the hooks with no LLM calls
 **Re-registered 2026-09-29 as Z0 (Part XV):** the comparison is now built-in memory, not no memory, on lesson families with scripted corrections; see `docs/evals/2026-09-29-z0-built-in-memory-prereg.md`. The text below is the first registration.
 **Status:** protocol registered in `docs/evals/2026-09-23-te5-token-ab-preregistration.md`. `scripts/token-eval/make-tasks.mjs` drafts and verifies tasks from git history, `ab-run.mjs` runs real Claude Code sessions per arm (no-memory, hippo, random-text, stale-memory; stale-memory is another repository's memory, so it tests irrelevant rather than outdated memory, and should be renamed irrelevant-memory before the first scored run) with history truncated at the task base and the user's own settings excluded, and `ab-analyze.mjs` reports cost per resolved task with CIs. Plumbing verified with a stand-in in CI and once with real Claude Code on a toy repository. No scored run exists; the next step is a reviewed task set on two or more real repositories, run on the founder's machine.
 Sequences of related coding tasks where early tasks produce lessons later ones can use: SWE-ContextBench plus fresh issues from hippo's own history and post-cutoff public repositories. Six arms on the same model and harness: no memory, hippo as shipped, all memories dumped, naive top-k at equal budget, random repository text at equal budget, stale or irrelevant memories. 3-5 seeds, standard errors clustered by repository, four-bucket costs from provider usage fields, execution-based grading. Reports dollars per resolved task, resolve-rate delta (pass@1, pass^k), turns, file reads and repeated-error rate, and net token ROI. Pre-registered in `docs/evals`; harness and every arm's configuration published (the Mem0/Zep dispute shows vendor-run baselines are not trusted). This is the eval EI12 runs on a tenant's own history. **Success:** a published result with CIs, whatever it says.
+**Official workflow adoption (planned 2026-10-01):** Part XX, CAE0-CAE4 adds installation, explicit command invocation and an adapter around this runner; it preserves the current Z0 registration and timeout/retry policy.
 **Grading and plumbing checks (added 2026-09-28).** Anthropic's eval guide (Lance Martin, "Automating eval design and hillclimbing with Claude", 2026-09-28) asks for three checks the runner lacks: grade the same output twice, count plumbing failures on their own, and keep state left over from one attempt away from the next. Close them before any scored run:
 - **Re-grade.** The hidden tests run once on the agent's final state (`ab-run.mjs:485-486`), and the next checkout wipes that state, so no grade can be checked again. Save each session's diff, run the hidden tests on it a second time, and report a grade that flips as flaky. Before scoring, read a sample of graded diffs with the arm hidden, to confirm a pass is a real fix.
 - **A timeout is a result.** A session killed at the 60-minute limit leaves no JSON result, is marked `no-result` (`ab-run.mjs:466`, `:515`) and drops out of the resolve rate as well as cost (`ab-analyze.mjs:100`). The guide counts timeouts as plumbing, but in an A/B an arm can cause them, and an arm that makes sessions hang would hide its own failures. Score a timeout as unresolved and price it from its transcript, which needs the session id fixed before the run. A crash with no result stays invalid. Report invalid sessions by arm and reason; today they are counted by reason only (`ab-analyze.mjs:101-103`).
@@ -2061,6 +2064,8 @@ The `UserPromptSubmit` hook reads the prompt from its payload and recalls agains
 **Pull arm (added 2026-09-28, untested).** Every Z1 arm so far pushes memories into the prompt. Anthropic's "Building effective agents" (December 2024) starts from the opposite design: the model writes its own search queries and decides what to keep, through tools it calls. Hippo ships that tool (`hippo_recall` and 12 others in `src/mcp/server.ts`), yet the founder's box never used it: 0 hippo MCP calls in the 135-session frozen corpus. The CLI route the instruction block asks for at every task is mostly skipped too: the agent ran `hippo context` in at most 24 sessions and `hippo outcome` in at most 32 (a count of the agent's own shell calls; Z2 replaces the self-graded outcome with signals from the environment). Test as a TE5 arm after the pilot: pinned rules only from the hook, plus `hippo_recall` alone, its description written and tested the way the article's tool appendix says (example calls, edge cases, when not to call it). Mistake-proof the CLI first, since agents probe flags: `hippo init --help` runs init and `hippo dashboard --help` starts a server (`src/cli.ts:10020`, `10703`). Every verb should print usage on `--help` and do nothing else.
 **Trigger eval before the pull arm (added 2026-09-28).** A TE5 arm built on a tool the agent does not call measures nothing, and a call rate is cheap to measure and easy to attribute. The eval guide cited under TE5 uses the same surface as its worked example: it tunes a skill's description against how often the model invokes it. Before the TE5 arm, build a prompt set in two halves, labelled before the first round: prompts where the store holds a memory that bears on the task, and prompts where it holds none. Each prompt runs through `claude -p` with `hippo_recall` as the only hippo tool, recording whether the agent calls it. Run the starting description twice first; if the two call rates differ by more than the smallest change worth keeping, add prompts before tuning. Then tune the description on a tune split, one change per round, keeping a change only if calls rise on the first half without rising on the second; after two or three flat rounds, sort the misses by cause before the next change. Score the frozen description once on the held-out split, with a CI. The TE5 arm runs only if the held-out call rate clears a bar written down before the first round. Plan usage only.
 
+**Official command pilot (planned 2026-10-01):** Part XX, CAE2-CAE4 implements this trigger-eval plan through `/claude-api build-eval` and `/claude-api hillclimb`. Use train/validation/sealed-final splits and the registered stopping rule; a trigger win remains a prerequisite to the separate task experiment, not a default-promotion result.
+
 #### Z2. Automatic outcomes [after Z1; this is SI0 re-opened]
 Credit or blame the memories Z1 injected, from signals in the session: a failed command that passes after a memory was shown (helped), the same error recurring after its lesson was shown (did not help), a user correction that contradicts a shown memory (wrong). Each is an `observed` outcome, logged with its evidence and reversible. Re-run SI0's two kill checks on Z1's injections before the write path is built.
 
@@ -2400,3 +2405,72 @@ Use the following as the copy direction, with capability and status qualifiers n
 - [ ] Repository source and deployed product copy agree after publication.
 
 **Completion.** Mark this track done only after the wording changes themselves are implemented and checked across both editions. Recording this roadmap item does not complete the amendments.
+
+---
+
+## Part XX - 2026-10-01 update: official Claude eval workflows
+
+### Track CAE - Install and use build-eval / hillclimb [planned; development tooling]
+
+**Purpose.** Explicitly adopt Anthropic's `/claude-api build-eval` and `/claude-api hillclimb`, beyond the principles already referenced in TE5 and Z1. Research and copyable setup/invocation examples: [Claude eval workflow adoption](docs/plans/2026-10-01-claude-api-eval-workflows.md). The inspected official docs bundle both subcommands from Claude Code **2.1.259**; verify the loaded version and origin before use.
+
+These are maintainer-invoked workflows around existing evals. Keep Hippo's shared runtime provider-neutral and preserve the [no-dispatch boundary](docs/plans/2026-09-12-work-plane-boundary.md). This track installs no skill today, runs no paid evaluation, changes no defaults and does not reopen a locked registration. Z0 remains the primary queue; setup, adapters and fresh development cases can proceed alongside stage 0/smoke preparation.
+
+### CAE0. Install or enable the official workflows [planned; first]
+
+- Check `claude --version`, `claude doctor`, `/skills` and slash completion on the pilot machine. Prefer the bundled `/claude-api` skill on Claude Code 2.1.259 or later; upgrade using its existing installation channel if needed.
+- If the bundle is unavailable or a separate source distribution is needed, add `anthropics/skills` and install `claude-api@anthropic-agent-skills` at local scope. Verify its namespaced `/claude-api:claude-api build-eval` and `/claude-api:claude-api hillclimb` commands. Resolve disabled bundles and name overrides instead of silently invoking a different skill.
+- Record Claude Code version, skill origin/revision/file hashes, model, explicit effort and account/usage route. Freeze the resolved distribution for a registered run; the research note records the inspected upstream revision.
+- Smoke the loaded commands in a disposable development checkout through their scope/input/plan stages. Review installation output and any API requirements; a subscription session and separately billed SDK/judge calls are different resource routes. Do not add this installation to `hippo init`.
+
+**Exit.** Both commands load the expected official workflow on the pilot machine, setup is reproducible, and the smoke is recorded separately from any scored result.
+
+### CAE1. Adapt and audit the existing eval infrastructure [planned; CAE0, TE5/Z0 stage 0]
+
+- Reuse `scripts/token-eval/` runners, graders and registrations. Add a thin adapter for rep-specific `results.jsonl`, observable `traces/`, summary, state and variant diffs; add only a focused trigger runner if the complete-task runner cannot measure Z1 invocation.
+- Close TE5/Z0 grading, timeout-denominator and retry-state defects before scored use. Preserve both project-store and `HIPPO_HOME` isolation; prevent answer leakage from retained files, history or memory.
+- Match grades, actual served model, four-bucket usage, latency and trace to the same attempt. Resume idempotently and report invalids by arm/reason. Unknown usage or delivery is not zero; arm-caused timeouts remain unresolved with observed cost.
+- Verify aggregate scores against raw rows, known-good/bad grader examples, repeated grading, mechanism wiring, headroom and baseline noise. Keep Hippo's registered statistical analysis authoritative.
+- Use the report builder actually present in the loaded skill. The inspected public source supplies `build-report-lite.mjs`, not the full viewer; validate trace links before offering reports. Keep permitted private snapshots/traces outside the repo, with hashes and retention.
+
+**Exit.** A fixture run produces faithful results and a readable report, survives interruption/retry without cross-attempt contamination, and has a documented failure policy. No new runner framework or Anthropic SDK migration is required.
+
+### CAE2. Invoke build-eval for the Z1 pull-arm trigger pilot [planned; CAE0-CAE1]
+
+Run `/claude-api build-eval` against the Claude Code `hippo_recall` trigger flow, using the example in the research note.
+
+- Review and explicitly approve inputs, grading and resource ceilings through the upstream workflow. Source independently labelled fresh cases representing real task families, with applicable-memory and no-match tasks plus distractor, stale/conflicting, wrong-scope and absent-data cases.
+- Freeze independent family-level train, validation and sealed final-test splits. Locked Z0 and Z1c corpora/answers stay outside the workflow.
+- Programmatically measure useful invocations and unnecessary invocations separately; calibrate independent usefulness judging only where needed. Verify the real installed MCP tool and description, without conflating invocation, delivery, application and task benefit.
+- Establish baseline repeats, variance/headroom, minimum useful change, guardrail bounds and adequately sized cases/repetitions before tuning. Review example grades with their actual traces.
+
+**Exit.** A reviewed, runnable development eval, frozen starting description and baseline report exist, with input/grading/resource decisions and split manifest recorded. A smoke or synthetic trigger score is not a task-benefit result.
+
+### CAE3. Invoke bounded hillclimb on the recall description [planned; CAE2]
+
+Run `/claude-api hillclimb` with only the `hippo_recall` description editable. Constrain the exact surface in `src/mcp/server.ts` or an isolated description configuration; a whole-file allowlist alone does not protect the implementation.
+
+- Freeze model/effort, tool implementation/schema, other tools, fixture stores, runner, grader, labels, split and shipping defaults. Register useful-invocation gain, no-match harm bounds, repetitions, maximum rounds, plateau rule, elapsed-time and usage/spend ceilings before round one.
+- Propose one reversible change per round from train diagnostics. Use validation aggregates for keep/revert decisions; the proposer cannot access sealed final-test cases, answers, traces or summaries through files, memory, git history or network.
+- Keep `_state.json`, baseline/`v<N>` results, `change.md`, `change.patch`, per-round metrics and decisions, including failed/reverted attempts. Stop on regression or resource cap; after the registered plateau rule (at least three rounds in the inspected guide), diagnose the remaining train failures before more edits.
+- Keep the eval and grader outside the optimiser's edit scope. Version and consistently regrade/rebaseline an independently fixed eval defect; never weaken tests or paste case-specific answers into the description.
+- After the interactive pilot, test optional `claude -p "/claude-api hillclimb ..."` invocation with the approved plan persisted, bounded permissions, cancellation/resume and event logging. Headless skill expansion is documented; an unattended Hippo integration remains unverified. Do not bypass upstream review checkpoints.
+
+**Exit.** A reproducible bounded search leaves a candidate patch and complete attempt record. More calls alone cannot pass, and optimisation does not automatically merge, release or promote a default.
+
+### CAE4. Confirm independently before adoption [planned; CAE3]
+
+- Treat the split repeatedly scored during candidate selection as validation, even if the upstream guide names it test. Freeze the selected patch and all run artefacts, then score a separately sealed final set once under the registered protocol.
+- Report paired, family/repository-clustered intervals, useful/no-match outcomes, cost, latency and guardrail failures against the frozen starting description; publish a null or negative verdict. Additional tuning after that result requires fresh confirmation families.
+- A trigger win only permits the separately registered Z1 pull-arm task experiment. Benefit beyond built-in memory and any default promotion still require Z0; preserve Z1c, the retrieval floor and Z10 delivery/application distinctions. Keep the Codex comparison as its own runtime evidence.
+
+**Exit.** A frozen-confirmation report and explicit adopt/reject decision exist. No claim of fewer mistakes or lower total cost from a trigger score alone.
+
+### CAE5. Extend only after the first flow works [planned; CAE4, each parent experiment's gates]
+
+- **S9/TE6/TE7 packing/rendering:** hillclimb a scoped format or packing surface under retrieval, evidence-completeness, hard-token-cap and task-quality bounds. Measure cache reads/writes, priced input/output, maintenance/retries and latency instead of treating shorter text as savings.
+- **S6/SI4/Z3b capture/corrections:** build a separately reviewed write eval, including false writes/closures and provenance. Repeat independent memory builds as well as scoring; a single lucky store cannot establish reliability.
+- **SI1 attempt history:** compare recall of past attempts with the plain search log at equal budget once enough histories exist.
+- **Cost/model/effort search:** follow the upstream cost-hillclimb procedure with its own registered quality/cost gates and cache checks. Keep model changes outside the fixed-model description pilot.
+
+**Exit.** Each extension has its own approved scope, baseline, splits, resource limits and confirmation protocol; no blanket permission to tune the entire harness.
