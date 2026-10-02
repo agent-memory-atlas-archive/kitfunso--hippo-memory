@@ -484,7 +484,7 @@ RESEARCH §"Phase 2: operating objects". Each object gets its own table, recall 
 
 **Status (2026-06-03): all eight E2 objects are first-class and shipped.** Only `handoff` remains partial (session-scoped; full promotion ~3d) — the single open E2 item.
 
-**Skill-lifecycle extension [planned].** CAE9 builds on the existing `skill` object and export support: validated lesson-derived `SKILL.md` drafts, project applicability, provenance, versioning and invalidation. The extension does not mark synthesis or automatic promotion as shipped.
+**Skill-lifecycle extension [planned].** CAE9 builds on the existing MIT `skill` object and export support: validated lesson-derived `SKILL.md` drafts, project applicability, provenance, versioning, permission checks and invalidation. Planned organisation administration and managed rollout extend it in the commercial package under EV1. Synthesis/promotion and those enterprise extensions remain unshipped.
 
 ### Phase E3 — graph layer over consolidated state
 
@@ -1337,6 +1337,8 @@ Every memory carries the ACL of its source (repo visibility and teams, channel m
 
 **Workflow adoption [planned].** Use CAE5 to `build-eval` realistic source-permission and derived-memory negative fixtures alongside deterministic API/MCP tests. This is an eval-design use: ACL predicates, grant semantics and source-scope inheritance are outside `hillclimb`.
 
+**Derived-skill follow-up [planned].** CAE9 requires the remaining E2/derived-object scope and source-ACL work before shared use. Source restrictions must survive synthesis, artifact export and later mutations; corrections and revoked source access propagate to dependent managed versions. Do not treat a generated instruction file as a way around recall permissions.
+
 #### EI3. GitHub, enterprise grade [next, 2w]
 GitHub App auth (installation tokens) instead of a PAT; configurable API base for GHES and `*.ghe.com` (backfill hardcodes `api.github.com` today, `src/connectors/github/backfill.ts:40`); pull request reviews, reverts and CODEOWNERS as lesson sources; review threads that ended in a code change become convention memories.
 
@@ -1535,7 +1537,7 @@ A Hippo agent plugin bundling the MCP server, the hooks and a short skill. That'
 
 **Contract and upgrade follow-up [planned].** CAE6 audits the bundled MCP tool contracts and truthful annotations before instruction optimisation; CAE7 records supported model/runtime/plugin versions and reruns the relevant fixtures after upgrades. Preserve managed installation and each client's actual lifecycle support.
 
-**ECC follow-up [planned].** CAE8 tests selective ECC/Hippo coexistence, hook ownership and safe update/uninstall before a compatibility recipe is published. Setup/recovery burden is part of acceptance, not an undocumented user task.
+**Native improvement follow-up [planned].** CAE8 tests Hippo's own supported capture/context/plugin path, including hook ownership and safe update/uninstall. Existing third-party user configuration is preserved by generic installer fixtures; an ECC integration or coexistence recipe is not a product deliverable. Setup/recovery burden is part of acceptance.
 
 #### CD2. Company-hosted Hippo server with company sign-in [next, 3-4w; delivered by the EI11 OAuth and registry work and the EI10 server tier]
 A company-hosted Hippo server with sign-in that the company's identity system can use (OAuth), listed in the company's approved MCP list. Remote MCP over HTTP with OAuth 2.1 (today the HTTP server has API keys only), an entry in the MCP Registry v0.1 format so it can sit in a company's GitHub or Azure API Center registry, and the CD1 plugin pointing at it. **Success:** works under a "registry only" Copilot policy, and every recall is tied to the signed-in developer for permissions (EI2) and audit.
@@ -1554,6 +1556,8 @@ Anyone who can write a PR comment, an issue or a chat message can try to plant i
 
 #### CD6. Admin dashboard [planned; part of A7 observability] [commercial repo]
 One place for the buyer: what is stored per team and repository, who used what, audit log search, dormant and banned memories, and token cost from the TE0 ledger.
+
+**Native skill follow-up [planned].** CAE9 reuses this commercial admin surface for evidence-backed promotion exceptions, version/status, managed rollout and rollback. Keep routine developer use automatic after the admin's policy setup and include administrator effort in the pilot result.
 
 #### CD7. Value report for buyers [planned, needs TE5; part of A7]
 A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once a CD11 holdout or EI12 has measured it for that company, cost per session and per merged PR with and without hippo (CD12). No saving figure before it is measured (non-goal 16).
@@ -1837,6 +1841,8 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
 - **The line:** documented in the README ("Open source and commercial"). The line is drawn by buyer: everything an individual developer or a self-hosted team needs stays MIT, including the CLI, MCP server, hooks, connectors, tenants, API keys, roles, scope grants, the audit log and the dashboard.
 - **CI:** builds and tests both packages against each release of the core.
 
+**Native improvement ownership [planned].** CAE8/CAE9 retain the shared memory engine, lesson validation/artifact lifecycle, ordinary adapters, grants and audit in MIT. Organisation administration, IdP/team/role policy, managed distribution/rollback and buyer/SIEM reporting extend the public API in this commercial package; no ECC product dependency or copied runtime is scheduled.
+
 #### EV2. Offline licence keys [planned, 1w] [commercial repo]
 - **The key:** a licence file signed with Ed25519 (company, seats, expiry, edition), checked offline against a public key in the enterprise package.
 - **No beacon.** This keeps the no-telemetry promise.
@@ -1870,11 +1876,15 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
 - An admin maps a repository or project to a team, and memories written there land in that team's scope with no per-write choice.
 - Needs every memory tagged with its project in the core first, Claude Code imports included (Z9 item 7, MIT).
 
+**Native skill follow-up [planned].** CAE9 applies the admin's project-to-team mapping to governed artifact distribution with no per-write/per-developer scope picker. Membership and source permission are checked at delivery; this extension waits for the project's identity/scope tagging and group support.
+
 #### EV8. Layered roles [planned, added 2026-09-29, with EV6] [commercial repo]
 - Org, team, project and scope, with roles past admin and member: editor, viewer, team admin. The A5 plan named this hierarchy (`docs/plans/2026-04-29-a5-stub-auth.md`); it was never built.
 - The admin and member pair stays in the MIT core.
 
 **Workflow adoption [planned].** Use CAE5 to `build-eval` role/action and cross-team/project negative fixtures for the enterprise implementation. Keep layered-role enforcement as deterministic correctness; no `hillclimb` of permissions or authority boundaries.
+
+**Native skill follow-up [planned].** CAE9 adds publisher/approver/distributor actions to the planned org/team/project role matrix, with wrong-tenant, revoked-member and private-source negative fixtures. Promotion policy is admin-configured and permissions remain outside optimisation.
 
 ### Exit criteria for v1
 - A design partner installs it in their network from the admin guide, with no help beyond the support channel.
@@ -2277,7 +2287,7 @@ Register supervision benefit and growth reliability separately, including qualit
 **Workflow adoption [planned].** CAE5 uses `build-eval` to review fresh burden/growth families, quality checks and label agreement on development data. Freeze the intervention protocol and independent confirmation before scoring; component `hillclimb` takes place in separate development flows, not on this study's outcomes.
 
 
-**ECC and procedural pilots [planned].** CAE8/CAE9 inherit the burden labels and intervention rules through separate registrations. Include setup, review/promotion, maintenance and recovery time, not just later-task correction counts. Measure active human time in the human pilot; synthetic replay remains a proxy.
+**Native improvement and procedural pilots [planned].** CAE8/CAE9 inherit the burden labels and intervention rules through separate registrations. Include developer and administrator setup, review/promotion, rollout, maintenance and recovery time, not just later-task correction counts. Measure active human time in the human pilot; synthetic replay remains a proxy.
 ---
 
 ## Part XVII - 2026-09-30 update: Track S, compact memory experiments
@@ -2417,7 +2427,7 @@ The [capability and packaging plan](docs/plans/2026-09-30-cross-platform-memory-
 
 **Contract and upgrade follow-up [planned].** Use CAE6 for per-client MCP schema/error/side-effect checks over the supported transports, then CAE7 for versioned capability and delivery revalidation after client/model/plugin changes. Passing one client's fixtures does not establish support in another.
 
-**ECC follow-up [planned].** CAE8 adds a version-pinned ECC integration/comparison pilot and explicit vault/handoff interchange. Use one declared canonical memory source per pilot path, preserve source scope/provenance/status, and test actual capture/delivery rather than relying on either plugin's installation result.
+**Native improvement follow-up [planned].** CAE8 evaluates Hippo-owned adapters over each client's supported interface, with actual scoped capture/delivery fixtures. ECC is an isolated research reference/comparator only; no ECC vault interchange or second product memory store is scheduled. Enterprise rollout uses the organisation's managed Hippo configuration.
 
 ### Other surfaces: capability checks, then demand-based order
 
@@ -2523,13 +2533,26 @@ Use the following as the copy direction, with capability and status qualifiers n
 
 ## Part XX - 2026-10-01 update: official Claude eval workflows
 
-### Track CAE - Install and use build-eval / hillclimb [planned; development tooling]
+### Track CAE - build-eval / hillclimb and Hippo-native improvement pilots [planned]
 
 **Purpose.** Explicitly adopt Anthropic's `/claude-api build-eval` and `/claude-api hillclimb`, beyond the principles already referenced in TE5 and Z1. Research and copyable setup/invocation examples: [Claude eval workflow adoption](docs/plans/2026-10-01-claude-api-eval-workflows.md). The inspected official docs bundle both subcommands from Claude Code **2.1.259**; verify the loaded version and origin before use.
 
 These are maintainer-invoked workflows around existing evals. Keep Hippo's shared runtime provider-neutral and preserve the [no-dispatch boundary](docs/plans/2026-09-12-work-plane-boundary.md). This track installs no skill today, runs no paid evaluation, changes no defaults and does not reopen a locked registration. Z0 remains the primary queue; setup, adapters and fresh development cases can proceed alongside stage 0/smoke preparation.
 
 **Harness reference follow-up (2026-10-02).** Use the [awesome-harness-engineering collection](https://github.com/ai-boost/awesome-harness-engineering) as a source index. CAE6 and CAE7 adopt the relevant tool-contract and upgrade-revalidation practices from the primary guidance linked below; the collection is not a runtime dependency or an installation prerequisite.
+
+**Product and enterprise review (2026-10-02).** Build Hippo's own memory lifecycle, supported runtime adapters and learning surfaces. ECC is a research reference and optional isolated comparator; this roadmap schedules no ECC product integration, vault adapter, combined deployment or required installation. The commercial edition extends Hippo's public API, with ownership and packaging governed by EV1; it is still a scaffold, not evidence that the capabilities below ship.
+
+| Items | Decision and product ownership |
+|---|---|
+| CAE0-CAE5 | Keep as optional maintainer eval/optimisation tooling. Neither edition requires these skills or a Claude account to operate; use existing provider-neutral runners for customer environments. |
+| CAE6-CAE7 | Keep as native contract/release-quality work across supported core and enterprise configurations. Authentication, source access and group/role revocation remain hard correctness requirements. |
+| CAE8 | Re-scope to one measured improvement in Hippo's own capture/context/harness path. ECC comparison is research-only and subordinate to the built-in-memory baseline; remove coexistence/interchange delivery work. |
+| CAE9 | Keep Hippo-owned lesson validation, skill artifacts and lifecycle in the MIT core. Planned org administration, IdP/team mapping, layered-role policy, managed rollout and SIEM/buyer reporting belong in the commercial package through EI11, EV6-EV8 and CD6/CD11-CD12. Basic self-hosted sharing, grants, audit and existing core capabilities stay MIT. |
+
+**Customer data and effort.** Maintainer commands default to synthetic or permitted sanitised development cases. Customer history, skill bodies and traces stay within the customer's approved deployment/provider/retention boundary; do not send them to public community plugins or an external judge without explicit data/provider authorisation. Air-gapped/customer-endpoint deployments use EI10's supported path, with drafting disabled if its optional model is unavailable. After a project/admin configures policy, automate routine work within that policy and report actionable exceptions. Count both developer and administrator setup, review, rollout and recovery effort in Z12/EI12; a new curation job is not a low-touch benefit.
+
+**Order.** These are gated native experiments, not additional Enterprise v1 release prerequisites. Z0 runner/smoke work retains priority; close source-permission/identity and deployment gaps in EI2/EI10/EI11 and EV6-EV8 before enabling their dependent shared-org capability. Keep all locked registrations, defaults and the no-dispatch boundary unchanged.
 
 ### CAE0. Install or enable the official workflows [planned; first]
 
@@ -2616,7 +2639,7 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 
 **Exit.** Each selected application has its own reviewed scope, baseline, family splits, failure policy, resource ceiling and independent confirmation. Eval-design-only uses produce reviewed drafts/fixtures, not automatic feature adoption. Existing public benchmarks, migrations, authentication, retention policy, database scaling and model-weight research keep their own methods and release gates.
 
-**ECC applications [planned].** CAE8 uses these workflows to review compatibility/comparator cases; CAE9 uses them for source-to-skill validity and applicability. They extend the linked integration and skill-lifecycle work, keep existing runners and parent gates, and count user effort as an outcome.
+**Native applications [planned].** CAE8 uses these workflows to review Hippo-specific capture/context/harness cases; CAE9 uses them for source-to-skill validity and applicability. They extend Hippo's own adapter and skill-lifecycle work, keep existing runners and parent gates, and count developer/admin effort as an outcome. Enterprise permission and deployment rules are fixed outside optimisation.
 
 ### CAE6. Audit MCP tool contracts and truthful annotations [planned; CD1/AZ3 integration fixtures]
 
@@ -2629,6 +2652,8 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 - Use `build-eval` to draft/review invocation and error cases after deterministic contracts pass. Any later `hillclimb` edits only the declared description/instruction surface, with schemas, annotations and permissions frozen; contract defects are correctness work, not score trade-offs.
 
 **Exit.** A per-tool side-effect/annotation inventory and repeatable client conformance report exist, including failures and unsupported combinations. Mechanical fixes can ship after their own checks without claiming improved agent task performance or changing memory defaults.
+
+**Enterprise acceptance [planned].** Reuse the same core tool contract in the commercial extension/release matrix. Add actor/group/project-role and revoked-source negative fixtures as EI11/EV6-EV8 become available, including derived skills under CAE9. A tool annotation or licensed feature flag never grants source access.
 
 ### CAE7. Revalidate after model and runtime upgrades [planned; CAE1/CAE4, CD1/AZ3]
 
@@ -2643,28 +2668,32 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 
 **Exit.** Each supported upgrade has a manifest diff, fixture verdict, component keep/remove decisions and an explicit compatibility-only or independently confirmed benefit verdict. Unsupported/negative results stay visible; Z0 runner/smoke work retains priority.
 
-### CAE8. ECC compatibility and comparison pilot [planned; CD1/AZ3, CAE6-CAE7]
+**Enterprise release follow-up [planned].** Record compatible core/commercial-extension versions and the approved customer deployment/model route. Revalidate membership changes, source revocation and managed artifact rollback alongside runtime upgrades; public Claude tooling is not required in an air-gapped customer installation.
 
-**Purpose.** Check whether ECC and Hippo can work together with less user effort, and whether Hippo adds useful benefit beyond ECC's own memory. The inspected [ECC snapshot](https://github.com/affaan-m/ECC/tree/ef648e01899ba3e8dc6371642deaaf64b4477775) is the 2026-10-02 starting reference; freeze the actual installed version, selected modules, skill origin and host runtime for each pilot.
 
-- Start with selective modules in disposable project/home stores. Test existing settings preservation, hook ownership/order, duplicate observation or writes, repeated context injection, compaction/resume, offline/degraded capture and safe idempotent upgrade/uninstall. Uninstalling one plugin must preserve the other's settings and memory. Register combined context, latency, retry and maintenance budgets; reuse CAE6/CAE7 fixtures.
-- Design a short setup that detects supported capabilities and explains the selected memory owner once. Prefer reuse of the installed MCP/hook interface; ECC is optional, not a dependency of Hippo's core or a catalog to inject wholesale. Routine work must not require users to choose a memory backend, issue paired commands or resolve duplicate notes on every task.
-- Specify explicit, bounded interchange for ECC's `ecc.memory.v1` vault documents and W1 handoffs where demand warrants it. Preserve external IDs, source evidence, project/team/user scope, status, timestamps and applicability; quarantine or report unmappable/unsupported records. Harness routing labels are not identity/authorization, links alone do not close an old fact, and imported memories cannot become trusted instructions. Select one canonical source per path; no silent dual-write, recursive re-import or raw transcript sync.
-- After mechanics pass, register a separate development comparison of built-in memory alone, ECC with its declared memory features, shipping Hippo, and the selected ECC + Hippo configuration. State every arm's modules and memory source; use matched model/task/source access/resource ceilings and independently built stores. Keep existing Hippo runners: ECC's inspected eval-harness example supports offline artifacts, with no candidate-execution backend.
-- Use `build-eval` to review installation/interchange, applicable/no-match, correction/reversal, poisoning and resume cases. Any `hillclimb` is restricted to declared integration/tool wording on development data; ownership, permissions and source mappings remain fixed. Independent confirmation follows CAE4; the pilot does not reopen locked Z0/Z1c arms.
-- Register task quality, repeated corrections/re-teaching, stale-follow, total cost and latency alongside setup, active supervision, approval/review and recovery burden. Use Z12's human-pilot method for time claims. Publish negative/null results and recommend coexistence only if its incremental benefit justifies its added burden.
+### CAE8. Hippo-native memory and harness improvement pilot [planned; CD1/AZ3, CAE1-CAE7, EI12]
 
-**Exit.** A version-scoped compatibility recipe or explicit unsupported verdict, an ownership/interchange contract, and an independently assessed comparison exist. Users can follow the approved setup once and continue ordinary tasks; no new manual memory-management loop or default promotion from compatibility alone.
+**Purpose.** Build and measure improvements in Hippo's own capture, context delivery and memory lifecycle that reduce repeated explanation and supervision. Use patterns from the inspected [ECC research reference](https://github.com/affaan-m/ECC/tree/ef648e01899ba3e8dc6371642deaaf64b4477775) to form hypotheses; implementation and supported delivery remain Hippo-owned.
 
-### CAE9. Validated lesson-to-skill promotion [planned; E2 skill lifecycle, SI2/SI4/S6, CAE1-CAE4]
+- Choose one observed bottleneck from Z10/S0/S6 diagnostics: missing capture, inappropriate recall/admission, unclear delivery or unsafe stale use. Reuse the existing core hooks/MCP, stores, provenance and bounded context path; keep the product focused on memory and its supported adapters. Change one declared component per arm, with cheap deterministic fixtures before scored work.
+- Validate Hippo's own plugin lifecycle through CAE6/CAE7: preservation of user settings, stable ownership, idempotent install/update/uninstall, duplicate-event handling, compaction/resume, and degraded/offline behaviour. Record actual invocation/delivery, supported runtime versions, context budgets, latency and bounded retries. A managed enterprise install must not require a separate setup step for every developer.
+- Compare shipping Hippo with one frozen native candidate on independent stores and matched teach/apply/reversal families, retaining built-in memory as the primary comparator. An optional ECC-only benchmark may use public/synthetic approved data in an isolated research setup if it answers a useful question; it adds no combined ECC + Hippo arm, connector, vault migration or customer deployment dependency.
+- Use `build-eval` to review the selected failure/applicability cases and graders. Permit bounded `hillclimb` only on the declared optional instruction/rendering/admission surface with source permissions, capture integrity, schemas, labels and shipping defaults fixed. Use existing runners; keep locked Z0/Z1c corpora and final windows outside search.
+- Apply the edition boundary: engine changes and ordinary adapters stay MIT; planned organisation distribution, group/project policy and fleet administration extend them in the commercial package. Customer-history evaluation follows EI12/CD11-CD12 and EI10's approved deployment/provider route; shared-org tests wait for the required source-access, identity and team/role features.
+- Register repeat mistakes, stale-follow, useful/no-match coverage, task quality, total cost and latency alongside developer/admin setup, correction, supervision and recovery effort. Use Z12's separately registered human pilot for time claims and CAE4 for fresh-family confirmation. Report null/negative results and reject improvements that simply shift work into manual curation.
 
-**Purpose.** Test whether supported lessons can become reusable, scoped workflows that reduce repeated explanation and supervision. Borrow ECC's instinct-to-workflow idea, not its confidence values as proof of correctness; extend the existing Hippo `skill` object and export support rather than building another memory engine.
+**Exit.** A Hippo-owned candidate has a reproducible fixture verdict and independent retain/reject result, with edition ownership, supported deployment and user/admin burden explicit. No ECC product integration is planned; task-benefit/default promotion retains Z0 and the retrieval floor.
 
-- Reuse permitted structured capture and durable source/progress handling. Draft candidates off the recall path under existing extraction/provider opt-ins and explicit budgets. Each draft names its trigger, steps, preconditions/exceptions, project/runtime applicability, evidence, source lesson versions and expiry/invalidation conditions; preserve contradictions instead of merging them into a rule.
-- Validate source support and independent task outcomes under SI2, then validate the target runtime's `SKILL.md` format, successful/incorrect invocation and no-match abstention in isolated development fixtures. Repetition, the agent's own verdict, silence from the user and a confidence threshold cannot establish correctness. Reject privilege expansion, policy overrides and unsupported commands; inherited memory scope is never widened by clustering.
-- Produce inactive, inspectable drafts with a compact evidence summary. Define project-scoped promotion policy and batched/exception review before activation; promotion requires evidence and rationale, and publishing or widening an executable artifact's scope is a separate governed decision. After setup, routine capture, eligibility checks, applicability selection and use of approved skills should be automatic through supported host interfaces. Do not require users to run a command or approve each ordinary memory.
-- Version every generated artifact and its source links; keep reversible previous versions and an invalidation path. A correction or source supersession must flag dependent artifacts for revalidation and prevent knowingly stale versions from being selected by the integration. Do not silently rewrite governed repository instructions, install privileged hooks or promote project-specific behaviour globally. The host controls execution; Hippo starts or supervises no runtime.
-- Use `build-eval` for source-to-skill validity, missed/incorrect triggers, exceptions, scope, contradictory lessons and correction propagation. Permit a bounded `hillclimb` of one declared draft/template or description surface on development families, with evidence requirements, labels, permissions and promotion rules fixed. Freeze before independent confirmation.
-- Compare the same underlying lesson evidence delivered as ordinary recall with the frozen approved-skill representation at matched budgets, retaining a built-in-memory baseline. Measure task quality, repeat mistakes, unsupported/stale use, unnecessary activation, total capture/validation/maintenance cost and latency. Count review/promotion, interruptions, recovery and active supervision using Z12's rules; lower burden during later tasks must not merely move work into curation.
 
-**Exit.** A separately registered pilot shows whether validated skills improve useful outcomes or reduce user burden within quality/safety/resource bounds, with fresh-family confirmation and a retain/reject verdict. A successful export or more generated skills is not a benefit result; preserve the retrieval floor, Z0/default gates and negative findings.
+### CAE9. Hippo-native lesson-to-skill lifecycle and enterprise governance [planned; E2, SI2/SI4/S6, EI2/EI10/EI11, EV6-EV8, CAE1-CAE4]
+
+**Purpose.** Test whether Hippo's supported lessons can become scoped reusable workflows that reduce repeated explanation and supervision. Extend the existing Hippo `skill` object and public export/API surfaces with native validation and lifecycle; an external project's instinct design is a research reference, not a runtime or trust dependency.
+
+- **Core artifact and evidence [MIT].** Draft off the recall path from permitted structured capture under existing extraction/provider opt-ins and budgets. Record tenant/project/scope, source lesson IDs and versions, provenance, trigger, steps, preconditions/exceptions, runtime/tool applicability, owner, lifecycle status and invalidation conditions. Validate source support and independent task outcomes under SI2 plus target-runtime `SKILL.md`/invocation/no-match fixtures. Confidence, repetition, the agent's verdict or user silence cannot substitute for evidence; keep reversible versions and exported-artifact/source links.
+- **Permissions and invalidation [core correctness; enterprise identity adapters separate].** Apply EI2's source-access predicate before derivation and delivery, retaining the most restrictive source permissions; never infer an org-wide skill from private/team evidence. The same grants/roles must protect artifact reads, exports and mutations. Correction, source supersession, deletion or access revocation invalidates affected derived versions and managed cached/exported copies before subsequent permitted delivery; register propagation bounds and stale-copy failure cases. This is gated on the missing E2-object/derived-scope support, not a claim it exists today.
+- **Promotion and low-touch use [planned].** Start with inactive drafts, a compact evidence/rationale record and batch/exception review. Define a one-time project/admin promotion policy; separately validate any bounded automatic project-local promotion under that approved policy before enabling it. Routine capture, checks, selection and use of approved versions should run through supported host interfaces without per-lesson commands or approval prompts. Uncertain evidence, authority changes and widening scope go to the relevant owner; generated content cannot override governed instructions, install privileged hooks or grant access. The host owns execution and Hippo starts no runtime.
+- **Organisation governance and distribution [commercial package, after dependencies].** Use EI11/EV6-EV8 identity, group roles and project-to-team mapping for admin-configured allowed sources, publishers/approvers and distribution scope. Extend CD6 with artifact status, evidence, exception batches, staged rollout and rollback; use the core audit trail and EI11's commercial SIEM export. Re-check membership/source access when serving a skill, and test revocation, team changes, wrong-tenant requests and interrupted rollback. Basic self-hosted sharing and existing grants/audit stay MIT; org policy cannot bypass the core's permission checks. The enterprise scaffold gains none of these capabilities from this roadmap edit.
+- **Deployment and data [both editions].** Keep Hippo's own stores and public extension boundary authoritative. Use the customer's approved local/VPC/air-gapped model route under EI10 where supported; no mandatory ECC plugin, community observer, public judge or extra Claude subscription. If drafting is disabled or unavailable, ordinary memory continues with bounded pending work. Freeze schemas/artifacts and compatible core/enterprise versions for customer rollout; private history and generated skill bodies follow the customer's retention and egress policy.
+- **Evaluation [planned].** Use `build-eval` on permitted development cases for source-to-skill validity, applicability, exceptions, scope, poisoned candidates, correction propagation and review burden. A bounded `hillclimb` may edit one draft/template or description surface; evidence requirements, ACLs, promotion rules, judges and held-out labels stay fixed. Compare the same lesson evidence as ordinary recall versus a frozen approved skill at matched budgets, with a built-in-memory baseline and independent confirmation. Enterprise evaluation follows EI12/CD11-CD12; count both developer and administrator review, rollout, recovery and maintenance effort alongside task quality, unsupported/stale use, cost and latency.
+
+**Exit.** A native artifact/permission/invalidation contract and separate core/enterprise pilot verdict exist, with an evidenced retain/reject decision and deployment/edition ownership. Recommend rollout only for useful outcomes or reduced total user/admin burden within quality and resource bounds; generated skill count/export success is not benefit. Preserve Z0/default gates, the retrieval floor and negative findings; do not make this gated experiment an Enterprise v1 release prerequisite.
