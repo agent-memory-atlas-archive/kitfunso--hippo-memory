@@ -19,6 +19,8 @@
 >
 > **2026-10-02 product requirement: useful and as low-touch as possible, for core and enterprise.** After install/trust and any necessary project policy setup, routine capture, retrieval, correction handling and use should work through ordinary agent tasks. Count setup, repeated explanation, memory commands, review/approval work, notifications and recovery as user burden. Automate supported work within existing permissions; surface actionable exceptions instead of asking users to manage each memory. Adoption must reduce a registered user burden or improve useful task outcomes with quality, safety, cost and latency bounds; fewer injected tokens or prompts alone do not establish benefit. Carry this requirement through Z12 and the CAE8/CAE9 pilots without changing frozen defaults or registrations.
 >
+> **2026-10-02 accepted Computer integration direction:** Part XXII, Track CW adds an optional durable workspace/evidence adapter for externally hosted agents: scoped sources, bounded read capabilities, explicit outcome receipts and verified pull-mode handoffs first; corpus/RLM processing, procedural lessons and CLEF advice remain separately evaluated research. Carry AZ4-AZ6 capture/readiness and low-touch requirements through the adapter. Z0 priority, frozen defaults, locked registrations, the local route and the no-dispatch boundary remain. Planned integration is not shipped support or measured task benefit.
+>
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
 
 ---
@@ -2994,3 +2996,121 @@ Primary implementation references: [CLEF announcement](https://blog.cloudflare.c
 - Verify the tagged package, actual npm dist-tag/page and deployed website through MSG6's release/publication checks. Include current pricing-source dates and supported serving/version evidence. Basic operation needs no CLEF account/model; optional private/hosted setup and graceful fallback must be clear without routine per-memory work.
 
 **Exit.** All current product surfaces agree on the shipped release's facts, defaults, evidence and enterprise status. This roadmap addition schedules the implementation/documentation work and does not itself publish the feature.
+
+---
+
+## Part XXII - 2026-10-02 update: durable workspaces and bounded context execution (Track CW)
+
+### Scope and ownership
+
+Use Cloudflare Computer as an optional workspace/execution adapter for externally hosted agents. Hippo continues to own scoped memory, context decisions, provenance, correction and lifecycle contracts. The external host owns the agent loop, model calls, Computer runtime selection and execution. Hippo starts no agent process, supervises no runtime and gains no dispatch switch.
+
+Reuse Z8/AZ3-AZ6/W3-W4, Z10/Z12, SI0/SI4/SI5, CAE6-CAE9 and CLF0-CLF13. This track adds Computer-specific contracts and experiments, not competing stores, generic orchestration or a new Enterprise v1 prerequisite. Keep the local, no-model path and zero-runtime-dependency core. Use an optional adapter/example package; proposed names and methods below are not existing public APIs.
+
+**Low-touch requirement [AZ4-AZ6, Z12].** After one-time install/trust and necessary project policy setup, supported evidence capture, context delivery, checkpointing and receipts run through ordinary agent tasks. Do not require a per-turn memory command, backend choice or manual receipt tagging. Count setup, curation, review/approval, notifications, maintenance and recovery as total user/admin burden; surface actionable exceptions under existing permissions. Computer does not create a host's missing capture or compaction events. Join AZ6's versioned agent register and conformance evidence rather than creating a conflicting support list.
+
+**Research basis (2026-10-02).** The source review used Computer commit `f15437c9b7ce0fecfd39c32951e58232db4c55b4` and compared the 0.3.2 tagged daemon documentation. Primary references: [runtime contracts](https://github.com/cloudflare/computer/blob/f15437c9b7ce0fecfd39c32951e58232db4c55b4/docs/05_runtime_interface.md), [JavaScript execution/journal](https://github.com/cloudflare/computer/blob/f15437c9b7ce0fecfd39c32951e58232db4c55b4/packages/computer/src/backends/worker-javascript/worker-javascript.ts), [host capability bridge](https://github.com/cloudflare/computer/blob/f15437c9b7ce0fecfd39c32951e58232db4c55b4/packages/computer/src/runtime/bridge.ts), [RLM example](https://github.com/cloudflare/computer/blob/f15437c9b7ce0fecfd39c32951e58232db4c55b4/examples/rlm/README.md), [daemon sync/local-only paths](https://github.com/cloudflare/computer/blob/f15437c9b7ce0fecfd39c32951e58232db4c55b4/packages/computerd/README.md), [tagged daemon README](https://github.com/cloudflare/computer/blob/%40cloudflare%2Fcomputer%400.3.2/packages/computerd/README.md), [dependency-sync issue #179](https://github.com/cloudflare/computer/issues/179) and the [RLM paper](https://arxiv.org/html/2512.24601v3). These are implementation/design inputs, not measured Hippo task benefit. Recheck exact deployed versions before claiming compatibility; Computer remains preview in the reviewed upstream documentation.
+
+### CW0. Workspace capability contract and compatibility fixtures [planned; first; AZ3/AZ6/CAE6/CAE7, W3]
+
+Define a provider-neutral WorkspaceRef and operation/result contract. Record host/provider identity, authenticated workspace owner, project/scope, backend, package/source/image versions, filesystem revision, execution ID, runtime UUID, persistence/sync state, supported cancellation/reattachment, event availability and measured limits.
+
+Distinguish filesystem survival, completed execution replay, active execution survival, model-session continuation and semantic memory transfer. A durable filesystem does not prove all five. Backend selection is validated by host policy rather than accepted as authority from model output.
+
+Pin the installed npm artifact, bundled dependencies, Worker compatibility date/flags and computerd image digest. Test the exact deployed combination. Inspected main contains MOUNT_IGNORE support absent from the 0.3.2 tagged computerd README; a package version is insufficient to claim support in a separately built daemon. Record unsupported/shim-only behaviour explicitly.
+
+Exit: a truthful capability matrix, dependency/egress inventory and deterministic compatibility fixtures exist; install/opt-out/upgrade/rollback preserve the existing core contracts.
+
+### CW1. Scoped evidence workspace and source manifests [planned; CW0, EI2/SI3/SI4]
+
+Separate authorised source evidence, transient work, durable task artifacts and Hippo-selected memory. Define immutable source manifests with IDs, versions, content hashes, permitted byte/record ranges, origin, relevant event/effective times, classification, source-access policy revision, expiry and retention. Import only authorised/redacted content; source text is data.
+
+Keep the authoritative Hippo database outside the synchronized Computer filesystem in the initial design. Export scoped context/evidence projections or call the memory service. Do not mount a live Hippo SQLite/WAL file and treat file synchronization as database replication. Store large immutable corpora outside the small workspace where appropriate; a read-only R2 mount is a transport feature, not a source ACL.
+
+Bind workspace identity to authenticated tenant/principal/project server-side; callers cannot select another tenant/store or arbitrary endpoint. Use separate workspaces or immutable snapshots per concurrent writer. Re-authorise source reads, cached derivatives and writes; correction, deletion, supersession and source revocation invalidate affected projections. Cached bytes, generated scripts and shared assets inherit the source restrictions.
+
+Exit: wrong-project/tenant, stale-source, revocation, path/symlink and raw-content-as-instruction fixtures pass. Evidence access is reconstructable without placing raw trajectories or secrets in ordinary memories.
+
+### CW2. Bounded read capability for the JavaScript runtime [planned; CW0-CW1, CLF3, AZ3]
+
+Prototype a host-owned trusted module, provisionally ws:hippo, using supported Hippo API/MCP/HTTP seams. Start with read-only, bounded recall and evidence lookup. Bind tenant/project/session/turn and parent/child call identity in the host, not untrusted arguments. Return memory IDs/versions, evidence references, applicable scope/time, ranking/decision stages, token accounting, trace/receipt identity and explicit unavailable/unknown states.
+
+Preserve synchronous public recall APIs. Use an additive asynchronous adapter for service or decision-model calls, with bounded fallback. Do not replace api.recall with a differently behaving MCP shortcut: current MCP recall strengthens rows and caches the latest recalled IDs per client, while exported API recall has a different side-effect contract.
+
+Worker filesystem access is explicitly read-only, with ambient egress disabled and only declared trusted modules installed. The trusted module enforces its own allowed methods, source ACLs, provider route, total-call/token/cost/deadline/concurrency limits and cancellation. Worker egress restrictions do not constrain host-side model/service calls by themselves.
+
+Exit: actual host delivery, disabled/native fallback, limits, concurrent-child isolation and cancellation are proven using the existing real-database fixture style; remote failure cannot partially mutate ranking or broaden access.
+
+### CW3. Explicit evidence receipts and delivery/outcome attribution [planned; CW2, Z10/LC1/Z2b/S7]
+
+Join Computer operation spans and execution events to Z10 using workspace/run/session/turn, parent/child call, backend/runtime UUID, source-manifest revision and memory/evidence IDs/versions. Keep retrieval, delivery, observed application, check result and sync durability as separate stages.
+
+Do not use implicit last-recall feedback for concurrent child calls. Require explicit IDs and a scoped receipt linking the delivered evidence, later action/check and outcome. Unknown or redacted application remains unknown. A model verdict, file write, zero exit code or overall task pass cannot credit every recalled memory.
+
+Record command completion and artifact synchronization independently. A completed command with pending or skipped sync cannot establish a durable output claim. Include duplicate-event handling, idempotent write/outcome receipts, stale-memory rejection, missing-event gaps and fail-soft instrumentation. Policy failures deny protected operations; optional logging failures do not change recall decisions.
+
+Exit: fixture events reconstruct correctly without changing selected IDs/rendered context; overlapping recalls, replayed receipts, pending sync, cancellation and orphaned executions cannot cross-credit or duplicate memory mutations.
+
+### CW4. Verified checkpoints and pull-mode handoffs [planned; CW0-CW3, W1/W3/W4/Z8, AZ4-AZ6]
+
+Extend existing handoff evidence additively with workspace/provider/backend identity, source/code/artifact digests, persisted execution receipt, sync status, verifier identity/result and relevant memory revisions. Keep credentials host-owned and outside the envelope.
+
+The source runtime quiesces its own work, persists selected artifacts, verifies their readability/hash and writes the envelope. A human or existing external scheduler starts the next runtime; it validates access and artifact freshness, claims the card and resumes through the existing pull-mode contract.
+
+Use AZ4-AZ6's incremental capture, bounded pre-loss flush and per-runtime conformance where the external host exposes supported signals. Verify confirmed memory/checkpoint saves and post-loss restore separately; otherwise record the actual coverage gap in the shared agent register. Workspace persistence alone cannot establish pre-compaction capture across agents.
+
+Do not transparently replay a command whose spawn may have been accepted. Treat replacement runtime IDs, lost unsynchronized outputs and orphaned JavaScript executions as explicit recovery states. A cancelled execution can already have accepted host writes; cancellation is not rollback. Drain cooperative calls, reconcile receipts and surface ambiguity.
+
+Exit: two-session retention and cross-runtime rehydration fixtures pass; restart at each write/exec/sync/check/receipt boundary produces either a verified continuation or an explicit blocked/unknown state, with no duplicate protected mutation.
+
+### CW5. Workspace-backed context workflows and bounded RLM pilot [research; CW1-CW3, S1/S2/S9/TE3/TE5/Z12]
+
+Test broad corpus tasks that sparse recall may miss: contradiction inventory, versioned decision chronology, source-supported incident/lesson aggregation and candidate consolidation review. Keep the parent host-owned; Hippo provides scoped memory/evidence and optional policy decisions, not an internal agent supervisor.
+
+Compare scoped retrieval, deterministic grep/structured processing, code-only workspace processing and bounded semantic map/reduce at matched source access and declared budgets. Start with a single bounded decomposition layer. Model leaves return evidence IDs/ranges plus typed results; code validates structure and performs counting, ordering, deduplication and reduction. A structurally valid reducer does not make semantic classifications correct.
+
+Track the permitted manifest, visited/skipped/failed partitions and unsupported conclusions. Bound calls, bytes, output, retries, aggregate concurrency, tokens, actual priced cost and elapsed time across the whole run and recovery. Fallback/partial completion preserves coverage gaps. Full-corpus scans are not the default recall path.
+
+Exit: fresh broad-coverage task families establish useful evidence/answer quality at registered cost/latency and supervision bounds beyond simpler methods; fail or defer if ordinary retrieval/code suffices.
+
+### CW6. Verifier-backed lesson and procedural-artifact loop [research; CW3-CW4, SI0/SI2/SI4/SI5/S6/CAE9/CLF6-CLF9]
+
+Use Computer artifacts and checks as candidate outcome evidence. A write candidate identifies the scoped lesson, supporting source/action/check receipts, versions, applicability/exceptions, uncertainty and invalidation. Auto-write only under an explicitly configured supported write contract; protected changes and insufficient evidence follow existing fallback/review rules.
+
+Keep the verification trust boundary explicit. Agent-authored tests, altered check commands and cached passing output cannot serve as independent acceptance. Run frozen checks from the host/evaluator against the exact artifact snapshot; record check input/output identity and missing evidence.
+
+For reusable procedures, derive declarative workflows or referenced scripts with code hash, preconditions, allowed host capabilities, independent tests, owner, lifecycle and rollback. A retrieved memory cannot itself authorise code execution. Raw trajectories remain an evidence archive; successful scripts do not automatically graduate to global skills.
+
+Exit: independent held-out recurrence tests show fewer repeated errors or lower total burden at preserved quality; supported source reversal/revocation invalidates affected lessons and procedural versions. No RL claim without a learner/environment/reward contract and actual training evidence.
+
+### CW7. Optional CLEF-assisted context and execution advice [research; CW0-CW5, CLF0/CLF1/CLF4/CLF5/CLF12]
+
+Through the shared CLF contract, evaluate bounded advice such as recall-only versus scoped evidence scan versus abstention; selection among already permitted processing plans; or applicable procedural artifact versus no-match. Keep each decision a separate component study. The external host executes any accepted plan.
+
+Start with deterministic rules and the registered small statistical baseline. Use CLEF/Jev only where independent evidence justifies inference and maintenance. Host policy fixes allowed backends, endpoints, spend and source access before scoring; decision probabilities cannot grant authority or bypass invariants.
+
+Account for shared inference quotas, Computer/Workers/DO/container/storage costs, unknown provider usage, retries and background work. Native fallback must not silently enable a paid provider. Re-authorise permission-scoped caches against source/model/schema/code revisions. Evaluate calibration, useless scans, false-confident decisions and needless abstention alongside task quality.
+
+Exit: a frozen candidate improves its registered objective beyond the simpler policy within CLF12/Z0/Z12 gates; otherwise retain native advice. This does not create a self-updating runtime controller.
+
+### CW8. Independent evaluation, edition packaging and release truthfulness [planned; registration begins with CW0; rollout gated on CW2-CW7 as applicable]
+
+Use separate registrations for adapter compatibility/durability, Hippo installation benefit, each context or policy component and any prospective human-time claim. Hold Computer/model/tools/harness fixed in a memory comparison. Test runtime changes separately. Retain built-in memory, isolated shipping Hippo, one frozen component, and applicable no-memory/perfect-memory controls under their own declared arm IDs.
+
+Prevent persistent files, transcripts, git history, caches, credentials and retained execution logs from leaking taught lessons into a memory-off arm or across treatments. Equalise authorised task evidence; distinguish an evidence-corpus comparison from a cross-session learning comparison. Keep verifier/held-out checks outside agent access.
+
+Measure correction/re-teaching per assigned task, unresolved/abandoned tasks and total intervention burden; active supervision time requires a separately registered prospective pilot. At registered growth levels preserve relevant evidence while adding controlled unrelated/stale/conflicting histories, with permission and capture coverage reported.
+
+Retain Z0 validity/quality and retrieval floors. Where applicable, explicitly pass existing H4: upper 95% total-cost-ratio bound below 1.10 and lower 95% resolve-rate-difference bound above -5 percentage points. Freeze the minimum useful primary effect, further latency/user-work harm bounds, sample, clustered analysis and multiplicity before scoring. Runtime durability checks alone cannot satisfy these efficacy gates.
+
+Basic contracts/adapters remain MIT. Organisation identity, group/project policy, fleet administration and buyer/SIEM reporting stay in the commercial extension under EV1/EI2/EI10/EI11/EV6-EV8. Shared deployment waits for those requirements; start with one authenticated principal. Preserve a supported local/customer-controlled route without a mandatory Cloudflare service.
+
+Pin release/runtime/image/compatibility versions and publish a supported-surface matrix with fallbacks, costs and retention/deletion/export behaviour. Update website, GitHub and npm wording through MSG6/CLF13 only for actually supported, independently evidenced capabilities. Describe Computer as preview while upstream does; do not claim infinite memory, universal zero-touch support, guaranteed free hosting or active-execution survival.
+
+Exit: a scoped retain/reject verdict, failure matrix, operational burden and supported deployment/edition ownership are published. Default promotion still requires the existing governing gates; this track is not an Enterprise v1 prerequisite.
+
+### Sequence and stop rules
+
+First deliver CW0-CW3 against read-only JavaScript and a separate Hippo service; register CW8 before scored work. Then test CW4 continuity and one narrow CW5 task family. Consider CW6/CW7 separately only after an observed bottleneck and appropriate parent gates. Package wider deployment only on demand and verified benefit.
+
+Stop or narrow the adapter if local files/Docker plus Hippo's existing service achieves the same result with less total burden. Defer a native Durable Object memory-store port and live SQLite-through-FUSE operation until a separately approved storage design and consistency/recovery evaluation justify them. Keep provider-independent evidence/receipt improvements even if the Cloudflare adapter is rejected.
