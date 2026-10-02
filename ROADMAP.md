@@ -1397,6 +1397,16 @@ A public benchmark whose tasks need knowledge that exists only outside the code 
 #### EI14. Compliance [moved to the Company section in Part X; funding-gated]
 SOC 2 Type II first, then ISO 27001 and ISO 42001; DPA, subprocessor list, SIG/CAIQ answers; FedRAMP only through the self-hosted SKU or a partner.
 
+#### EI15. Business-objective and task-outcome links [planned; EI0/EI5/EI6/EI8, EV7, Z10/Z2b, CW3; added 2026-10-02]
+Connect permitted task evidence to the business objective the customer wants the work to serve. Extend the existing enterprise connectors and company profile; source systems remain authoritative for objectives, tickets and acceptance.
+
+- Configure project objectives and a success-metric contract once: owner, metric definition/unit, eligible work, acceptance evidence, observation window and source. Reuse existing ticket/project metadata and EV7 mappings wherever available. The customer defines value; token usage, activity counts and a model's opinion cannot supply the objective.
+- Join objective → source ticket/task → runtime/session/turn → accepted artifact or independent check → observed outcome, with the applicable delivered memory IDs/versions from Z10/CW3. Keep work acceptance, business results and evidence of memory application separate. A merged PR or task pass cannot credit every delivered memory; ambiguous, missing or delayed evidence stays unknown under Z2b.
+- Version objective/metric mappings and source evidence. Preserve task timing, project/tenant scope and evidence references across retries, compaction and runtime handoffs. A source correction, reopened task, reverted artifact or changed objective updates the derived status with its history intact; unavailable business results do not prevent ordinary scoped memory use.
+- Apply EI2 source permissions to joins and derived reports, including multi-source restrictions, revocation and retention. Reuse the MIT core's task/source/provenance foundations; enterprise objective configuration and cross-source business-outcome joins follow EV1 packaging.
+
+**Exit.** Permitted fixtures reconstruct the objective-to-outcome chain and distinguish accepted work from demonstrated memory benefit. Cover conflicting project mappings, unrelated outcomes, concurrent tasks, missing results, reversals and denied source access. No business-value or employee-performance claim from trace coverage alone.
+
 ### Deferred in this track
 Gerrit and Perforce (automotive, games) through Git bridges or partners; observability alerts as memories; a "who knows what" directory built from review and outcome evidence rather than `git blame` (arXiv:2606.20882).
 
@@ -1580,6 +1590,8 @@ One place for the buyer: what is stored per team and repository, who used what, 
 #### CD7. Value report for buyers [planned, needs TE5; part of A7]
 A monthly report per company: memories used, repeated errors avoided, tokens hippo spent, and, once a CD11 holdout or EI12 has measured it for that company, cost per session and per merged PR with and without hippo (CD12). No saving figure before it is measured (non-goal 16).
 
+**Business-outcome follow-up [planned].** EI15/CD14 extend this report with agreed customer outcomes; EV9 verifies automatic population after initial configuration. Existing cost and guardrail reporting remains independently defined.
+
 #### CD11. Shadow holdout [commercial repo] [planned, next after TE5's pilot run; design in `docs/plans/2026-09-24-buyer-kpis.md`]
 A setting, `holdout.rate`, makes a deterministic share of sessions (or of developers) skip memory injection while capture continues. Each holdout is logged, so a pilot measures hippo against a live control group on the same days, models and people.
 
@@ -1603,6 +1615,16 @@ It reports, per arm with intervals:
 Every failure signature seen is logged with its session, including skipped and duplicate ones, so repeat-error rate can be computed per arm.
 
 **Status:** the `failure_log` table records every failure the capture-error hook sees: outcome, session, tool, the routine rule that skipped it, and two hashes of the error, never its text. `failuresBySession` (`src/failure-log.ts`) is CD12's per-arm input. `hippo failures` prints counts, not a rate, until CD11 gives it a holdout arm. Only Claude Code feeds it. The definition, and its known biases, are in `docs/plans/2026-09-24-buyer-kpis.md`.
+
+#### CD14. Customer-specific business-outcome reporting [planned; EI15, CD7/CD11/CD12, EI12, Z0/Z12; added 2026-10-02] [commercial repo]
+Extend the existing buyer report with the customer's agreed outcomes, alongside total cost and quality. Report at task/project/team level so successful approaches and reusable lessons can be assessed in their working context.
+
+- Select applicable metrics from EI15's contract, such as resolution time, accepted deliverables, escaped defects, review/rework and independently measured human supervision. Define eligibility, denominators, task mix, observation windows and source coverage before scoring. Include unresolved/abandoned work, reopened or reverted results, delayed outcomes and explicit unknowns. A passing check, accepted artifact and business result remain distinct measurements.
+- Count Hippo's extraction, inference, maintenance, retry and administration costs as well as agent spend and latency. Preserve quality and no-lesson guardrails; lower tokens alone cannot establish value. Measure active human time in a registered human pilot, never infer it from synthetic turns or convert token savings into assumed revenue.
+- Register a fresh tenant study using EI12/CD11 and Z12's shared-memory contamination controls. Choose an appropriate task/project/team assignment unit and independent outcome checks; do not treat overlapping memory across arms as an independent control. Existing locked registrations remain unchanged. CAE5 may help design development fixtures, but reported metrics, live controls and confirmation data remain outside hillclimb.
+- Make each report recomputable from permitted evidence with metric versions, coverage, arm sizes and intervals. Separate observed outcomes from causal estimates; publish null results and harm as well as improvement. Surface evidence-backed approaches and contributions without an automatic employee ranking. MSG1-MSG6 keep public wording within the measured scope.
+
+**Exit.** A design-partner report reproduces the agreed business metrics and total costs from source evidence, with a valid comparison or an explicit descriptive-only verdict. Missing evidence cannot become a zero, a success or a savings claim. Benefit/default claims still require the applicable Z0/H4 gates.
 
 #### CD8. Reliability of the central server [merged into EI10]
 Backup and restore, high availability, disaster recovery, upgrade and schema-migration runbooks, and monitoring for the company-hosted server.
@@ -1907,6 +1929,16 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
 **Workflow adoption [planned].** Use CAE5 to `build-eval` role/action and cross-team/project negative fixtures for the enterprise implementation. Keep layered-role enforcement as deterministic correctness; no `hillclimb` of permissions or authority boundaries.
 
 **Native skill follow-up [planned].** CAE9 adds publisher/approver/distributor actions to the planned org/team/project role matrix, with wrong-tenant, revoked-member and private-source negative fixtures. Promotion policy is admin-configured and permissions remain outside optimisation.
+
+#### EV9. Low-touch enterprise outcome acceptance [planned; EI15/CD14, CD10, EV6-EV8, S6/AZ4-AZ6, Z10/Z12; added 2026-10-02] [commercial repo]
+Extend the shared zero-touch acceptance contract to the enterprise objective, evidence and reporting flow.
+
+- After initial install/trust and admin configuration of sources, project/team mappings and success metrics, ordinary work automatically captures lessons, correlates permitted task/outcome evidence, retrieves applicable context and populates the report. Reuse existing project metadata and provisioning; no routine user memory scoring, outcome report, per-write scope picker or remember/outcome/supersede command is required.
+- Missing objectives, unavailable telemetry, ambiguous attribution and unsupported runtime events leave visible coverage gaps while ordinary memory use continues where supported. Provide actionable admin diagnostics and exception handling; do not ask every user to label each task or curate each lesson. Automatic capture, outcome writes and lesson promotion retain their existing evidence and rollout gates.
+- Verify the flow across sessions and every runtime claimed for the pilot: task → permitted capture → confirmed delivery/application evidence → independently accepted result → objective/report join → useful lesson on later work. Exercise pre-compaction saves and restore, interruption/retry, duplicate events, source outage, changed objectives, reverts and revoked access. Use AZ6's runtime inventory; installation, hook registration or a saved transcript alone cannot pass.
+- Register bounds for automatic coverage, write/attribution precision, recovery delay and setup/ongoing burden before the pilot. Count developer and administrator configuration, maintenance, exception review and recovery alongside Z12's task supervision; preserve task quality and report evidence gaps. Acceptance must pass without routine user scoring.
+
+**Exit.** A design partner completes the ordinary-work acceptance path after initial configuration and receives an evidence-backed CD14 report without routine memory/outcome commands. Publish supported-runtime coverage and measured residual effort; no universal zero-touch or business-benefit claim from fixtures alone.
 
 ### Exit criteria for v1
 - A design partner installs it in their network from the admin guide, with no help beyond the support channel.
@@ -2281,6 +2313,8 @@ Register false-write and false-closure bounds, label agreement and abstention co
 ### Zero-touch acceptance contract [shared by Z0, Z10, S6 and AZ]
 
 For each claimed runtime, install/trust once, teach through an ordinary conversation, need the lesson in a later session, correct it, compact or interrupt, then resume. Verify the appropriate scoped version is durably stored and available, reaches the actual agent context, and is applied on a task where it matters. Include a no-match task, a plausible wrong memory, a long-lived session that never ends normally, duplicate events and a missing-input case. No routine user `remember`, `outcome` or `supersede` command is part of the acceptance path.
+
+**Enterprise extension [planned].** EV9 applies this contract to EI15's objective/evidence links and CD14's reports, including administrator setup and ongoing burden.
 
 Report stages separately on labelled fixtures or independently labelled eligible events:
 
