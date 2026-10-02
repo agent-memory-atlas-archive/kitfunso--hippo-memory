@@ -11,6 +11,8 @@
 >
 > **2026-10-01 wording follow-up:** Part XIX, Track MSG records planned wording amendments for the core and enterprise edition. Keep the memory category; clarify the context and harness mechanisms, automation limits, evidence and feature status.
 >
+> **2026-10-02 content consistency requirement:** All current content on hippo-memory.com, the GitHub repository and the npm package page must agree on product claims, feature status, defaults, installation, evidence and core/enterprise boundaries. MSG6 adds a shared claim inventory and release/publication checks, including the README and metadata actually published to npm. Label differences by version/edition; planned work must not appear shipped.
+>
 > **2026-10-01 eval workflow follow-up:** Part XX, Track CAE records installation and explicit use of Anthropic's `/claude-api build-eval` and `/claude-api hillclimb`, with a Z1 trigger pilot, existing-runner adapters and sealed confirmation.
 >
 > **2026-10-02 product requirement: useful and as low-touch as possible, for core and enterprise.** After install/trust and any necessary project policy setup, routine capture, retrieval, correction handling and use should work through ordinary agent tasks. Count setup, repeated explanation, memory commands, review/approval work, notifications and recovery as user burden. Automate supported work within existing permissions; surface actionable exceptions instead of asking users to manage each memory. Adoption must reduce a registered user burden or improve useful task outcomes with quality, safety, cost and latency bounds; fewer injected tokens or prompts alone do not establish benefit. Carry this requirement through Z12 and the CAE8/CAE9 pilots without changing frozen defaults or registrations.
@@ -1077,6 +1079,8 @@ A small learning-to-rank head (logistic / GBDT over lifecycle + match features �
 #### LC4. RL memory controller (Memory-R1 / Mem-alpha class) [research → Track G]
 Verified feasible at 152-QA-pair scale, but it requires fine-tuning a 3B-14B backbone and a training loop — as a product default this conflicts with the zero-dep local core (non-goals #5/#6). File as the Track G realization (G3 knowledge-RLHF, G5 sleep-as-training-pipeline); candidate for grant-funded research (a GRPO run on a ~4B model is locally feasible on the RTX 5080 for the research track). Any product surface is an optional trained artifact under Track L Rules 2/3.
 
+**Decision-policy research [optional; CAE10].** First define a bounded memory decision and replayable state/action/outcome contract. Keep trace collection, independent outcome checks, candidate training and deployment separate; observational memory feedback or prompt hillclimbing alone does not establish an RL learner or a task benefit.
+
 ### Adjacent hooks item — compaction survival (added 2026-08-01, AutoCompact follow-up)
 
 #### CS1. PreCompact capture + compact-aware re-injection [SHIPPED 2026-08-03, PR #136]
@@ -1774,6 +1778,8 @@ The source is the `MemoryDoc` schema in supermemory's company-brain (`src/brain/
 
 **Procedural follow-up [planned].** CAE9 extends the write contract to evidence-backed lesson-to-skill drafts. Validate conditions, exceptions, applicability and source links before export; routine lesson capture remains automatic where the supported runtime and existing opt-ins allow it.
 
+**Decision-policy research [optional; CAE10].** Compare a schema-bound subject-quality decision with the existing rules-first/Jev arms only under a fresh registration; keep source support, scope and the recall floor fixed. This is a choice of experimental decision backend, not a required provider integration.
+
 #### SI5. Distil before the host deletes [planned, after SI4]
 Claude Code deletes session transcripts after 30 days by default (`cleanupPeriodDays`). Hippo distils a session only when its SessionEnd or PreCompact hook fires, so a crashed session, a session from before install, or one on a box without the hooks is lost for good. `hippo capture --backfill` sweeps transcripts older than 20 days whose session id has no capture yet and distils them. It never archives the raw transcript (Phase E6 cut: "Ingesting every raw transcript forever"). `hippo doctor` reports the host's retention and how many sessions are within 7 days of deletion with no capture. Gated on SI4, because backfilling today's capture quality would add junk faster. **Pitch, once SI4 and SI5 ship:** "Claude Code forgets your sessions after 30 days; hippo keeps what they taught."
 
@@ -2236,6 +2242,8 @@ The 2026-09-26 lexical `promptRecall` arm stays off by default. Z1c's locked jud
 
 **Workflow adoption [planned].** CAE5 supplies a reviewed `build-eval` corpus for relevance/admission and a separate bounded `hillclimb` after Z10. Freeze the independent labels and vary query construction, gate wording or a threshold separately; Z1c's held-out window remains unavailable.
 
+**Decision-policy research [optional; CAE10].** A fresh candidate may score bounded relevance choices with an explicit abstention/fallback policy. Validate probability calibration and false-confident admissions on independent cases at the same input/token budget; do not alter Z1c's judge or held-out window.
+
 ### Z2b. Evidence-specific outcomes [extends Z2]
 
 Link feedback only to IDs confirmed delivered in the applicable turn/task, using Z10. A later pass does not credit every shown memory, and an unrelated failure does not blame them. Record ambiguous signals as unknown. Use evidence tied to the claim's prediction or prescribed action; log the rule, source and reversal. Preserve manual explicit-ID feedback. No default batch auto `--bad`, and no strengthening merely because a row appeared in context. Re-run SI0's validity checks before enabling automatic outcome writes.
@@ -2517,7 +2525,7 @@ Use the following as the copy direction, with capability and status qualifiers n
 
 ### MSG5. Surfaces and completion checks [planned]
 
-**Surfaces.** Core `README.md`; website shared content, hero, FAQ, how-it-works, comparison, teams and metadata; repository/package descriptions where applicable; enterprise `README.md` and buyer-facing descriptions.
+**Surfaces.** Core `README.md` and current repository docs, including agent-facing installation guidance; website shared content, hero, FAQ, how-it-works, comparison, teams and metadata; GitHub repository description; `package.json` description/links and the README/metadata on the published npm package page; enterprise `README.md` and buyer-facing descriptions. MSG6 owns cross-surface consistency and publication verification.
 
 - [ ] Core copy consistently distinguishes persistent memory, context management and harness integration.
 - [ ] The fixed-corpus RAG claim is removed from current product copy.
@@ -2525,9 +2533,23 @@ Use the following as the copy direction, with capability and status qualifiers n
 - [ ] Enterprise copy consistently distinguishes shipped MIT features, the commercial scaffold and planned capabilities.
 - [ ] Performance claims retain their metric, setup, evidence link and limitations; no task-benefit claim is inferred from retrieval alone.
 - [ ] Documentation links and website rendering/build are checked when implementing the copy changes.
-- [ ] Repository source and deployed product copy agree after publication.
+- [ ] Repository source, deployed website and the actual published npm README/metadata agree for the stated release and edition after publication; unreleased repository changes are clearly labelled.
 
 **Completion.** Mark this track done only after the wording changes themselves are implemented and checked across both editions. Recording this roadmap item does not complete the amendments.
+
+---
+
+### MSG6. Keep website, GitHub and npm content consistent [planned; release requirement, added 2026-10-02]
+
+**Goal.** Users should get the same accurate product facts wherever they discover or install Hippo, without reconciling conflicting descriptions themselves. Different page formats may use different wording; claims, capability/status, defaults and evidence must agree for the stated version and edition.
+
+- **Canonical facts.** Maintain one reviewed, versioned claim/capability inventory in the repository: positioning and terminology from MSG1-MSG4, shipped versus opt-in/planned features, supported runtime/capture paths, install prerequisites, model/network behaviour, licence and core/commercial ownership, and benchmark metric/setup/source/limitations. Identify the owner and source for each claim. Generate reusable copy where practical and validate manually written sections against this inventory.
+- **All current surfaces.** Inventory the full website (including teams/pricing/comparison pages, FAQs, SEO/Open Graph/structured metadata and agent-facing text), GitHub README/description/current docs/examples, package metadata and npm-rendered README/links. Include enterprise README, buyer copy and any future separate package listing. Historical releases, changelogs and eval records retain their dated evidence/status; link to current corrections rather than rewriting the audit trail.
+- **Version-aware release checks.** Compare the intended npm release's packaged README and metadata with its GitHub tag and website's stated release. Distinguish development-branch additions from npm `latest`; keep planned enterprise capabilities explicit. Add a release checklist/check that catches contradictory claims, obsolete commands, broken npm-relative links and unexplained version/edition differences, with review for prose a script cannot establish.
+- **Publication and verification.** Update source copy together, then use the existing website/package release processes and verify the deployed pages plus actual registry/package-page content after publication. npm's [README guidance](https://docs.npmjs.com/about-package-readme-files/) says the displayed README updates when a new package version is published: a GitHub README commit alone does not update that page. Record the checked commit, site deployment, npm version/dist-tag and any remaining discrepancy; route failures to the release owner.
+- **Low-touch maintenance.** Run feasible checks in existing CI/release workflows, show a concise actionable diff and avoid adding a routine customer task. Re-check affected claims after capability/default/edition changes and after corrections or retractions.
+
+**Exit.** MSG5's wording amendments are implemented and every current surface has been checked against the same facts, with version/edition differences explained. A roadmap commit is not evidence that live copy has been synchronised. No new release or deployment is performed by adding this item.
 
 ---
 
@@ -2549,6 +2571,7 @@ These are maintainer-invoked workflows around existing evals. Keep Hippo's share
 | CAE6-CAE7 | Keep as native contract/release-quality work across supported core and enterprise configurations. Authentication, source access and group/role revocation remain hard correctness requirements. |
 | CAE8 | Re-scope to one measured improvement in Hippo's own capture/context/harness path. ECC comparison is research-only and subordinate to the built-in-memory baseline; remove coexistence/interchange delivery work. |
 | CAE9 | Keep Hippo-owned lesson validation, skill artifacts and lifecycle in the MIT core. Planned org administration, IdP/team mapping, layered-role policy, managed rollout and SIEM/buyer reporting belong in the commercial package through EI11, EV6-EV8 and CD6/CD11-CD12. Basic self-hosted sharing, grants, audit and existing core capabilities stay MIT. |
+| CAE10 | Research bounded decision policies within Hippo's own memory pipeline. Optional model comparisons and offline training do not require Cloudflare or change the core/enterprise boundary; tenant identity, org policy and managed rollout follow the same existing gates. |
 
 **Customer data and effort.** Maintainer commands default to synthetic or permitted sanitised development cases. Customer history, skill bodies and traces stay within the customer's approved deployment/provider/retention boundary; do not send them to public community plugins or an external judge without explicit data/provider authorisation. Air-gapped/customer-endpoint deployments use EI10's supported path, with drafting disabled if its optional model is unavailable. After a project/admin configures policy, automate routine work within that policy and report actionable exceptions. Count both developer and administrator setup, review, rollout and recovery effort in Z12/EI12; a new curation job is not a low-touch benefit.
 
@@ -2697,3 +2720,16 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 - **Evaluation [planned].** Use `build-eval` on permitted development cases for source-to-skill validity, applicability, exceptions, scope, poisoned candidates, correction propagation and review burden. A bounded `hillclimb` may edit one draft/template or description surface; evidence requirements, ACLs, promotion rules, judges and held-out labels stay fixed. Compare the same lesson evidence as ordinary recall versus a frozen approved skill at matched budgets, with a built-in-memory baseline and independent confirmation. Enterprise evaluation follows EI12/CD11-CD12; count both developer and administrator review, rollout, recovery and maintenance effort alongside task quality, unsupported/stale use, cost and latency.
 
 **Exit.** A native artifact/permission/invalidation contract and separate core/enterprise pilot verdict exist, with an evidenced retain/reject decision and deployment/edition ownership. Recommend rollout only for useful outcomes or reduced total user/admin burden within quality and resource bounds; generated skill count/export success is not benefit. Preserve Z0/default gates, the retrieval floor and negative findings; do not make this gated experiment an Enterprise v1 release prerequisite.
+
+### CAE10. Bounded decision policies for low-touch memory [research; SI4/Z1d, LC1/LC3/LC4, EI9; added 2026-10-02]
+
+**Reference and scope.** Cloudflare's [CLEF announcement](https://blog.cloudflare.com/clef-decision-models/), [typed decision API](https://developers.cloudflare.com/workers-ai/models/clef/) and [open-weight model card](https://huggingface.co/Cloudflare/clef) provide a research reference for schema-bound choices, probability calibration and a separate training/deployment loop. Adapt useful principles to Hippo's own lifecycle; no Cloudflare product integration, mandatory model download or automatic customer-data export is scheduled.
+
+- **One bounded decision first.** Choose one evidenced bottleneck under SI4 (write-quality screening) or Z1d (admit relevant context versus abstain). Define Hippo's input/output schema, allowed choices, evidence IDs/versions, input bounds, fallback and invalid-output/timeout behaviour. Start with native deterministic rules or a small statistical policy; keep LC3's logistic/GBDT baseline intact. An optional CLEF/Jev-style comparator must justify its extra inference, deployment and maintenance cost.
+- **Confidence and evidence.** A model probability is not proof of correctness. Pre-register independent supported labels, reliability/Brier calibration checks, useful coverage, false-confident decisions and needless abstention, including contradictory, stale, poisoned and missing evidence. Missing or ambiguous outcomes remain unknown; do not reward every recalled item because a later task passed. Permission, source validity, rejection and supersession checks remain deterministic and cannot be overridden by a decision score.
+- **Evaluate before training.** Use CAE1/CAE5 `build-eval` to review permitted development cases; optional `hillclimb` varies one declared schema description/prompt/threshold without changing labels, judges, safety rules or confirmation data. Compare rules/current shipping policy, the small learned baseline where eligible, and one frozen candidate at matched inputs/budgets. Report downstream task quality, retrieval floor, tokens, latency, cost and total developer/admin burden under Z12/EI12; provider benchmark wins do not establish Hippo benefit.
+- **Learning loop only after data/gates.** LC1/Z10 and evidence-specific outcome checks supply versioned episodes for offline replay. LC3/EI9 govern data floors and scoped statistical learning; LC4/Track G separately require an actual learner, environment/reward contract and training evidence before an RL claim. Freeze candidate versions, confirm independently and retain rollback; do not update live weights or silently promote a policy from user traffic. Cloudflare describes its fine-tuning service as FDE-assisted now, with self-service planned, so it is not evidence of a ready low-touch training dependency.
+- **Core and enterprise deployment.** Keep the local no-model path usable, with bounded fallback if optional inference is disabled or unavailable. Apply source ACLs before constructing model input and again at delivery/mutation; EI2/EI10/EI11 and EV6-EV8 gate shared-org use. Use approved local/VPC/air-gapped or customer-authorised endpoints where supported; tenant training requires explicit opt-in, with traces/datasets and derived policy artifacts subject to retention, deletion, source revocation and egress policy under EI9. Keep training tenant-scoped; any pooled training needs separate authorisation. Native contracts/basic permissions/audit stay MIT; org identity, administrator policy/managed rollout and buyer/SIEM reporting remain in the commercial package under EV1.
+- **Low-touch use.** After project/admin setup, run permitted routine decisions automatically with sensible bounded defaults. Uncertainty normally invokes the registered fallback/abstention; batch only actionable authority or evidence exceptions for an owner. Count calibration, review, configuration, rollout and recovery work, so a new model-maintenance or curation job cannot masquerade as reduced user effort.
+
+**Exit.** A scoped research verdict identifies the decision, baseline, independently measured benefit/burden, failure/fallback behaviour and edition/deployment ownership. Reject the extra machinery if the simpler native policy is sufficient. Preserve Z0 priority, locked registrations, frozen defaults and the no-dispatch boundary; this is not an Enterprise v1 release prerequisite.
