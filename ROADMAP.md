@@ -1529,6 +1529,8 @@ A Hippo agent plugin bundling the MCP server, the hooks and a short skill. That'
 
 **Workflow adoption [planned].** Use CAE5's tool-guidance flow to `build-eval` supported invocation and sandbox setup cases, then `hillclimb` only plugin skill/tool wording. Keep hooks, schemas and managed installation fixed; verify each client's support separately.
 
+**Contract and upgrade follow-up [planned].** CAE6 audits the bundled MCP tool contracts and truthful annotations before instruction optimisation; CAE7 records supported model/runtime/plugin versions and reruns the relevant fixtures after upgrades. Preserve managed installation and each client's actual lifecycle support.
+
 #### CD2. Company-hosted Hippo server with company sign-in [next, 3-4w; delivered by the EI11 OAuth and registry work and the EI10 server tier]
 A company-hosted Hippo server with sign-in that the company's identity system can use (OAuth), listed in the company's approved MCP list. Remote MCP over HTTP with OAuth 2.1 (today the HTTP server has API keys only), an entry in the MCP Registry v0.1 format so it can sit in a company's GitHub or Azure API Center registry, and the CD1 plugin pointing at it. **Success:** works under a "registry only" Copilot policy, and every recall is tied to the signed-in developer for permissions (EI2) and audit.
 
@@ -2399,6 +2401,8 @@ The [capability and packaging plan](docs/plans/2026-09-30-cross-platform-memory-
 
 **Workflow adoption [planned].** CAE5 uses `build-eval` for capability/invocation/delivery cases and a bounded `hillclimb` of instruction or tool text in the Claude-backed pilot. Each target client still needs its own supported-interface and identity/delivery fixtures; source permissions and event mappings stay fixed.
 
+**Contract and upgrade follow-up [planned].** Use CAE6 for per-client MCP schema/error/side-effect checks over the supported transports, then CAE7 for versioned capability and delivery revalidation after client/model/plugin changes. Passing one client's fixtures does not establish support in another.
+
 ### Other surfaces: capability checks, then demand-based order
 
 | Surface | Capability known from current official docs | Hippo work still required |
@@ -2459,12 +2463,17 @@ Use the following as the copy direction, with capability and status qualifiers n
 - Do not reduce it to a context pruner: storage, writes, provenance, supersession and continuity persist beyond the active context window. Do not imply that it rewrites or prunes the host agent's entire conversation.
 - Keep the hippocampus framing as design inspiration, with measured findings and limitations beside mechanism claims.
 
+- Additional positioning direction: **"Continuous improvement for agent memory through context engineering and harness integration."** Keep persistent memory as the product category; explain the shipped outcome-feedback mechanism separately from the planned CAE eval workflows. Apply the same distinction to core and enterprise copy, retaining enterprise capability/status qualifiers.
+
 ### MSG2. Correct RAG and learning claims [planned]
 
 - Replace "RAG searches a fixed corpus" in the README and website FAQ. Retrieval-augmented generation can use an updated corpus; distinguish Hippo by its writable memory lifecycle and integrations rather than an artificial static-corpus restriction.
 - Qualify "learns what is wrong" and "stops repeating it". Prefer "ranks memories down when reported wrong" for the outcome mechanism. Feedback can come from a user or an agent; it is a signal, not independent proof of truth.
 - Explain that supersession retires a fact when a replacement is supplied. Automatic truth detection, reliable correction capture and autonomous supersession remain subject to their Track Z experiments and gates.
 - Separate a mechanism from a demonstrated benefit. Retrieval quality, installation success or a smaller memory block does not establish fewer mistakes, lower total cost or less human supervision. Preserve negative results and the Z0/Z10/Z12 evidence requirements; do not add unmeasured savings or reliability guarantees.
+
+- Qualify continuous-improvement claims: outcome feedback updates memory ranking today; CAE's maintainer-invoked eval design, bounded optimisation and independent confirmation remain planned. Neither guarantees autonomous learning or a task-benefit gain.
+- Reserve **"RL environment for agent memory"** for optional LC4 / Track G research until there is a documented observation/action space, resettable episodes, action-to-state transitions, independently checked rewards, termination/truncation semantics and a reproducible learner interface (see the [Gymnasium environment contract](https://gymnasium.farama.org/api/env/)). An environment can serve an external learner without fine-tuning the host LLM; claiming RL-driven improvement additionally requires evaluated policy updates. Memory-strength feedback and prompt hillclimbing alone do not establish that capability. Suggested research wording: **"Persistent agent memory with eval-driven optimisation and reinforcement-learning support on the roadmap."**
 
 ### MSG3. State delivery defaults and integration limits [planned]
 
@@ -2504,6 +2513,8 @@ Use the following as the copy direction, with capability and status qualifiers n
 
 These are maintainer-invoked workflows around existing evals. Keep Hippo's shared runtime provider-neutral and preserve the [no-dispatch boundary](docs/plans/2026-09-12-work-plane-boundary.md). This track installs no skill today, runs no paid evaluation, changes no defaults and does not reopen a locked registration. Z0 remains the primary queue; setup, adapters and fresh development cases can proceed alongside stage 0/smoke preparation.
 
+**Harness reference follow-up (2026-10-02).** Use the [awesome-harness-engineering collection](https://github.com/ai-boost/awesome-harness-engineering) as a source index. CAE6 and CAE7 adopt the relevant tool-contract and upgrade-revalidation practices from the primary guidance linked below; the collection is not a runtime dependency or an installation prerequisite.
+
 ### CAE0. Install or enable the official workflows [planned; first]
 
 - Check `claude --version`, `claude doctor`, `/skills` and slash completion on the pilot machine. Prefer the bundled `/claude-api` skill on Claude Code 2.1.259 or later; upgrade using its existing installation channel if needed.
@@ -2520,6 +2531,8 @@ These are maintainer-invoked workflows around existing evals. Keep Hippo's share
 - Match grades, actual served model, four-bucket usage, latency and trace to the same attempt. Resume idempotently and report invalids by arm/reason. Unknown usage or delivery is not zero; arm-caused timeouts remain unresolved with observed cost.
 - Verify aggregate scores against raw rows, known-good/bad grader examples, repeated grading, mechanism wiring, headroom and baseline noise. Keep Hippo's registered statistical analysis authoritative.
 - Use the report builder actually present in the loaded skill. The inspected public source supplies `build-report-lite.mjs`, not the full viewer; validate trace links before offering reports. Keep permitted private snapshots/traces outside the repo, with hashes and retention.
+
+- CAE6 supplies transport/tool contract fixtures; CAE7 adds a versioned execution manifest and upgrade-triggered smoke/replay checks. Join protocol failures and infrastructure faults to the attempt ledger without relabelling agent-caused failures as invalid.
 
 **Exit.** A fixture run produces faithful results and a readable report, survives interruption/retry without cross-attempt contamination, and has a documented failure policy. No new runner framework or Anthropic SDK migration is required.
 
@@ -2551,6 +2564,8 @@ Run `/claude-api hillclimb` with only the `hippo_recall` description editable. C
 - Treat the split repeatedly scored during candidate selection as validation, even if the upstream guide names it test. Freeze the selected patch and all run artefacts, then score a separately sealed final set once under the registered protocol.
 - Report paired, family/repository-clustered intervals, useful/no-match outcomes, cost, latency and guardrail failures against the frozen starting description; publish a null or negative verdict. Additional tuning after that result requires fresh confirmation families.
 - A trigger win only permits the separately registered Z1 pull-arm task experiment. Benefit beyond built-in memory and any default promotion still require Z0; preserve Z1c, the retrieval floor and Z10 delivery/application distinctions. Keep the Codex comparison as its own runtime evidence.
+
+- CAE7 scopes evidence to the frozen model/runtime/resource configuration. An upgrade requires its own comparison and, before renewed benefit claims or default promotion, fresh independent confirmation under an appropriate registration; do not reuse a repeatedly inspected final set.
 
 **Exit.** A frozen-confirmation report and explicit adopt/reject decision exist. No claim of fewer mistakes or lower total cost from a trigger score alone.
 
@@ -2584,3 +2599,28 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 **SI1 extension.** Once enough CAE attempt histories exist, compare recalling previous attempts with the plain attempt log at equal budget. This retains SI1's research status and does not assume memory improves the optimiser.
 
 **Exit.** Each selected application has its own reviewed scope, baseline, family splits, failure policy, resource ceiling and independent confirmation. Eval-design-only uses produce reviewed drafts/fixtures, not automatic feature adoption. Existing public benchmarks, migrations, authentication, retention policy, database scaling and model-weight research keep their own methods and release gates.
+
+### CAE6. Audit MCP tool contracts and truthful annotations [planned; CD1/AZ3 integration fixtures]
+
+**Purpose.** Make the advertised tool contract match the real behaviour before optimising how agents choose tools. Follow the supported published MCP revision and the [official tool-annotation guidance](https://blog.modelcontextprotocol.io/posts/2026-03-16-tool-annotations/).
+
+- Inventory every tool's inputs, outputs, errors, scope, reads/writes, retry effects and external access. Include recall's retrieval-strength/count updates and any ledger/telemetry writes; a search-like name is not evidence of read-only or idempotent behaviour.
+- Add only justified `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openWorldHint` values after that audit, recording deployment differences where needed. Annotations are client hints; server authentication, tenant/actor/project scope and role enforcement remain authoritative.
+- Test advertised input schemas against valid, missing, malformed and unsupported arguments; check successful/empty results, output budgets and retry behaviour. Map protocol errors and tool-execution errors correctly for the negotiated revision. Evaluate additive output schemas/structured results where clients support them, preserving existing text clients and public APIs.
+- Run reproducible protocol/conformance probes, using MCP Inspector or scripted clients as appropriate, over stdio and authenticated HTTP in isolated disposable stores. Include permission-negative and cross-project/tenant cases; record client, transport and protocol versions. A successful tools/list response does not establish successful invocation or delivery.
+- Use `build-eval` to draft/review invocation and error cases after deterministic contracts pass. Any later `hillclimb` edits only the declared description/instruction surface, with schemas, annotations and permissions frozen; contract defects are correctness work, not score trade-offs.
+
+**Exit.** A per-tool side-effect/annotation inventory and repeatable client conformance report exist, including failures and unsupported combinations. Mechanical fixes can ship after their own checks without claiming improved agent task performance or changing memory defaults.
+
+### CAE7. Revalidate after model and runtime upgrades [planned; CAE1/CAE4, CD1/AZ3]
+
+**Purpose.** Check whether integrations and optional scaffolding still help when their underlying assumptions change. Use Anthropic's [long-running harness guidance](https://www.anthropic.com/engineering/harness-design-long-running-apps) and [infrastructure-noise findings](https://www.anthropic.com/engineering/infrastructure-noise) to design Hippo-specific checks.
+
+- Maintain a versioned run manifest: actual served model/effort, host runtime/client, plugin/skill revision, Hippo commit/settings, hook/MCP transport/schema versions, fixture/corpus/prompt hashes and isolated-store setup. Record execution image/dependencies, CPU/RAM allocation and kill limits, concurrency, timeouts/retries, cache/usage route and pricing basis; mark unavailable fields unknown.
+- On a model/runtime/plugin/hook or tool-contract change, rerun the affected installation, invocation, capture/delivery, permission and interruption/resume fixtures first. Use cheap deterministic/smoke/replay checks before a separately budgeted scored experiment; a detected upgrade does not auto-install software or launch paid runs.
+- Compare Hippo against the appropriate shipping/built-in-memory baseline within each frozen configuration. To study the upgrade itself, compare old/new configurations explicitly under matched resources; do not attribute a model or hardware change to memory. Preserve the registered timeout/failure policy and report infrastructure incidents separately.
+- Ablate optional memory instructions, relevance gates or formatting one component at a time on development/validation families. Record why each component exists and the evidence for keeping/removing it, including task quality, useful/no-match coverage, total cost and latency. Authentication, scope/isolation and protected-memory rules are fixed invariants, outside the ablation/search surface.
+- Use `build-eval` to review fresh upgrade/regression cases and grader calibration; use bounded `hillclimb` only if validated headroom warrants it. Freeze a candidate before independent confirmation. Reusable engineering fixtures establish compatibility; renewed task-benefit claims/default promotion still need CAE4 and the existing Z0/retrieval gates.
+- Keep locked Z0/Z1c registrations and final windows unchanged. Record a new manifest and an appropriately registered fresh confirmation for the changed configuration rather than silently extending old evidence or repeatedly searching its final set. Revalidation does not delete stored memory or weaken the no-dispatch boundary.
+
+**Exit.** Each supported upgrade has a manifest diff, fixture verdict, component keep/remove decisions and an explicit compatibility-only or independently confirmed benefit verdict. Unsupported/negative results stay visible; Z0 runner/smoke work retains priority.
