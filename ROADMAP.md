@@ -15,6 +15,8 @@
 >
 > **2026-10-01 eval workflow follow-up:** Part XX, Track CAE records installation and explicit use of Anthropic's `/claude-api build-eval` and `/claude-api hillclimb`, with a Z1 trigger pilot, existing-runner adapters and sealed confirmation.
 >
+> **2026-10-02 accepted CLEF integration direction:** Part XXI, Track CLF plans a Hippo-owned decision layer across capture, retrieval, context admission, correction, consolidation and reusable lessons, for core and enterprise. Start with CLEF-flash in a free-first hosted profile plus a compatible private-serving interface; paid inference is explicit opt-in. Provider contracts and budget/fallback controls come first, then ranking, admission/corrections, write/lifecycle workflows and separately gated learning. Integration is planned, not shipped; Z0 priority, frozen defaults and locked registrations remain.
+>
 > **2026-10-02 product requirement: useful and as low-touch as possible, for core and enterprise.** After install/trust and any necessary project policy setup, routine capture, retrieval, correction handling and use should work through ordinary agent tasks. Count setup, repeated explanation, memory commands, review/approval work, notifications and recovery as user burden. Automate supported work within existing permissions; surface actionable exceptions instead of asking users to manage each memory. Adoption must reduce a registered user burden or improve useful task outcomes with quality, safety, cost and latency bounds; fewer injected tokens or prompts alone do not establish benefit. Carry this requirement through Z12 and the CAE8/CAE9 pilots without changing frozen defaults or registrations.
 >
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
@@ -1076,10 +1078,12 @@ A small learning-to-rank head (logistic / GBDT over lifecycle + match features �
 
 **Workflow adoption [planned].** Use CAE5 to `build-eval` label quality, independent family splits, cold-start fallback and downstream task checks. After the data floor, retain ordinary ranker training/sweeps; optional `hillclimb` covers only a separately allowed setting, never outcome labels or scope admission.
 
+**CLEF integration comparison [planned; CLF4/CLF9/CLF12].** Keep the logistic/GBDT head, data floor and cold-start fallback as the small learned baseline. Compare any pretrained decision features/backend separately; CLEF does not replace this statistical plan or convert it into required backbone fine-tuning.
+
 #### LC4. RL memory controller (Memory-R1 / Mem-alpha class) [research → Track G]
 Verified feasible at 152-QA-pair scale, but it requires fine-tuning a 3B-14B backbone and a training loop — as a product default this conflicts with the zero-dep local core (non-goals #5/#6). File as the Track G realization (G3 knowledge-RLHF, G5 sleep-as-training-pipeline); candidate for grant-funded research (a GRPO run on a ~4B model is locally feasible on the RTX 5080 for the research track). Any product surface is an optional trained artifact under Track L Rules 2/3.
 
-**Decision-policy research [optional; CAE10].** First define a bounded memory decision and replayable state/action/outcome contract. Keep trace collection, independent outcome checks, candidate training and deployment separate; observational memory feedback or prompt hillclimbing alone does not establish an RL learner or a task benefit.
+**CLEF integration and learning follow-up [CLF9/CLF12, CAE10; research gates retained].** Pretrained inference in other CLF items does not wait for this training track. For learned lifecycle decisions, first define a bounded decision and replayable state/action/outcome contract; keep permitted trace capture, independent checks, candidate training and deployment separate. Observational memory feedback or prompt hillclimbing alone does not establish an RL learner or task benefit.
 
 ### Adjacent hooks item — compaction survival (added 2026-08-01, AutoCompact follow-up)
 
@@ -1366,8 +1370,12 @@ A per-company profile: sources and repos, ticket-key pattern, commit conventions
 #### EI9. Per-tenant learned lifecycle [research, gated on LC3]
 LC2/LC3 value scorers trained per tenant on that company's outcomes and `dormant_restore` labels, deletable with the tenant's data (non-goal 15).
 
+**CLEF learning follow-up [research; CLF9/CLF11].** Tenant-specific datasets, learned policies and derived model artifacts require explicit opt-in and the same deletion/retention/source-revocation boundary. Pretrained inference needs no customer training; pooled cross-tenant learning requires separate authorisation.
+
 #### EI10. Deployment tiers [planned, 6-10w; absorbs A6 packaging, A4 encryption and CD8 reliability]
 Single-tenant or customer-VPC (Helm, Terraform, Postgres per A6), fully air-gapped (local embeddings, customer model endpoint, no telemetry), and an outbound-only relay so self-hosted Git servers need no inbound port. TLS, per-key quotas, encryption at rest (A4), plus the central server's backup, restore, high availability and upgrade runbooks (was CD8).
+
+**CLEF deployment follow-up [planned; CLF2/CLF11].** Support the shared typed decision contract on approved customer-controlled local/VPC/air-gapped endpoints, with pinned serving artifacts and working native fallback. Include decision-head compatibility, offline installation, model footprint, health/capacity, upgrade, backup and recovery in the deployment validation.
 
 #### EI11. Enterprise identity and governance [planned]
 SAML/OIDC SSO and SCIM [commercial repo] (the A5 stubs were deleted in 1.45.0, so this is new work), remote MCP over HTTP with OAuth 2.1 and an MCP-registry entry (was CD2), roles from IdP groups, OIDC workload identity for machines, SIEM export of the audit log [commercial repo], listing in internal MCP registries (Copilot "registry only" policies block unlisted servers).
@@ -1778,7 +1786,7 @@ The source is the `MemoryDoc` schema in supermemory's company-brain (`src/brain/
 
 **Procedural follow-up [planned].** CAE9 extends the write contract to evidence-backed lesson-to-skill drafts. Validate conditions, exceptions, applicability and source links before export; routine lesson capture remains automatic where the supported runtime and existing opt-ins allow it.
 
-**Decision-policy research [optional; CAE10].** Compare a schema-bound subject-quality decision with the existing rules-first/Jev arms only under a fresh registration; keep source support, scope and the recall floor fixed. This is a choice of experimental decision backend, not a required provider integration.
+**CLEF integration [planned; CLF6/CLF12, CAE10].** Add schema-bound subject-quality and source-support screening through the shared decision interface. Compare native rules, the registered Jev arm and CLEF on fresh cases; keep source support, scope, observation status and the recall floor fixed. Optional inference does not replace the source/drafting contract.
 
 #### SI5. Distil before the host deletes [planned, after SI4]
 Claude Code deletes session transcripts after 30 days by default (`cleanupPeriodDays`). Hippo distils a session only when its SessionEnd or PreCompact hook fires, so a crashed session, a session from before install, or one on a box without the hooks is lost for good. `hippo capture --backfill` sweeps transcripts older than 20 days whose session id has no capture yet and distils them. It never archives the raw transcript (Phase E6 cut: "Ingesting every raw transcript forever"). `hippo doctor` reports the host's retention and how many sessions are within 7 days of deletion with no capture. Gated on SI4, because backfilling today's capture quality would add junk faster. **Pitch, once SI4 and SI5 ship:** "Claude Code forgets your sessions after 30 days; hippo keeps what they taught."
@@ -1848,6 +1856,8 @@ Existing items are named by their IDs; new ones are EV1 to EV5 below.
 - **CI:** builds and tests both packages against each release of the core.
 
 **Native improvement ownership [planned].** CAE8/CAE9 retain the shared memory engine, lesson validation/artifact lifecycle, ordinary adapters, grants and audit in MIT. Organisation administration, IdP/team/role policy, managed distribution/rollback and buyer/SIEM reporting extend the public API in this commercial package; no ECC product dependency or copied runtime is scheduled.
+
+**CLEF ownership [planned; CLF0-CLF13].** Keep the shared decision interface, hosted/private adapters, ordinary setup, basic usage controls, lifecycle validation and core grants/audit MIT. Org identity, administrator model/egress policy, managed rollout/rollback and pilot/SIEM reporting extend the public API in the commercial package. The enterprise scaffold is not an implemented CLEF offering.
 
 #### EV2. Offline licence keys [planned, 1w] [commercial repo]
 - **The key:** a licence file signed with Ed25519 (company, seats, expiry, edition), checked offline against a public key in the enterprise package.
@@ -2242,7 +2252,7 @@ The 2026-09-26 lexical `promptRecall` arm stays off by default. Z1c's locked jud
 
 **Workflow adoption [planned].** CAE5 supplies a reviewed `build-eval` corpus for relevance/admission and a separate bounded `hillclimb` after Z10. Freeze the independent labels and vary query construction, gate wording or a threshold separately; Z1c's held-out window remains unavailable.
 
-**Decision-policy research [optional; CAE10].** A fresh candidate may score bounded relevance choices with an explicit abstention/fallback policy. Validate probability calibration and false-confident admissions on independent cases at the same input/token budget; do not alter Z1c's judge or held-out window.
+**CLEF integration [planned; CLF5/CLF12, CAE10].** Register a fresh shared-interface candidate for relevance, applicability and explicit no-applicable-memory decisions. Validate calibration, false-confident admissions and evidence coverage at matched input/token budgets; native fallback and applicable pins remain. Do not alter Z1c's judge or held-out window.
 
 ### Z2b. Evidence-specific outcomes [extends Z2]
 
@@ -2259,6 +2269,8 @@ User preferences update in their stated scope; technical claims remain observati
 Register false-write and false-closure bounds, label agreement and abstention coverage before scoring. Include quotations, hypothetical changes, branch-specific facts, confidently wrong corrections and reversals. Task confirmation must lower stale-follow without raising repeat mistakes or failing H4. Draft: [Z3b correction writes](docs/evals/2026-09-30-z3b-correction-write-prereg.md).
 
 **Workflow adoption [planned].** CAE5 shares a `build-eval` across Z3/Z6/S3 for detection, claim matching and replacement, scored as separate stages. An opt-in semantic prompt/threshold can `hillclimb` in isolated stores; atomic version writes, scope/time integrity and false-closure bounds are correctness gates.
+
+**CLEF integration [planned; CLF6/CLF7/CLF12].** Test correction classification, affected-claim selection and supported-replacement decisions as separate typed stages. Preserve preference versus technical-observation status, unknown/pending conflicts, source/time/scope matching and deterministic atomic/reversible version writes.
 
 ### Zero-touch acceptance contract [shared by Z0, Z10, S6 and AZ]
 
@@ -2342,6 +2354,8 @@ Age-only archival is deferred. A 180-day policy requires a retention study, prot
 
 **Workflow adoption [planned].** Use CAE5's correction eval to review temporal chains, backdated corrections and historical-query fixtures. Optional semantic matching can `hillclimb` only through Z3b; version-write integrity and public `--as-of` semantics retain deterministic correctness tests.
 
+**CLEF integration [planned; CLF7].** Semantic relationship decisions can nominate a supported replacement; only the existing validated closure/successor path changes validity. Test branch/environment exceptions, late corrections and historical recall independently of the classifier.
+
 ### S4. Sleep as reversible hygiene
 
 Close only supported contradictions through Z3b/S3. Merge duplicates only when assertion, scope, applicability and exceptions are equivalent; preserve all provenance and a reversible record. Shorter text alone is not a merge criterion. Do not concatenate episodes to manufacture a lesson.
@@ -2352,11 +2366,15 @@ Pass the recall floor and evidence/temporal integrity checks. Deduplication alon
 
 **Workflow adoption [planned].** CAE5's consolidation `build-eval` covers equivalence, exceptions, provenance and replay/reversal. `hillclimb` may tune an already permitted optional merge/summary prompt, with independent store rebuilds and evidence/recall/task checks; protected rows and reversible writes remain fixed.
 
+**CLEF integration [planned; CLF7].** Use scoped typed decisions to screen equivalence, contradictions and merge candidates, retaining the current extraction opt-in and reversible hygiene contract. A model score cannot authorise unsupported compression, mixed-scope derivation or protected-row deletion.
+
 ### S5. Scoped experiences
 
 A fail/resolve sequence can produce one experience: trigger, observed action, check evidence, outcome and a bounded lesson. A failure alone does not prove a remedy. Reuse trace/provenance infrastructure before creating another table. Retrieve by scoped trigger; inject at most one per turn. Version-dependent remedies carry applicability, and unproven lessons remain observations.
 
 **Workflow adoption [planned].** Use CAE5 to `build-eval` fail/action/check sequences, unsupported remedies and version-specific applicability. `hillclimb` an optional experience-extraction prompt only after attribution passes; preserve evidence links, observation status, scope and the one-experience cap.
+
+**CLEF integration [planned; CLF8].** Classify a permitted fail/action/check sequence and its current-task applicability; independent check evidence establishes the remedy. Keep one-experience delivery, version/condition support and observed status for unproven lessons.
 
 ### S6. Automatic writes
 
@@ -2369,6 +2387,8 @@ Separate durable receipt/progress handling from semantic extraction and the read
 **Workflow adoption [planned].** Share CAE5's reviewed write eval with SI4/S0 and Z3b. `hillclimb` addresses only semantic extraction/instruction quality; source receipt, atomic progress, idempotence, recovery and spend limits retain deterministic failure/retry fixtures.
 
 **Procedural follow-up [planned].** CAE9 reuses supported capture and progress/retry handling for optional skill drafting off the recall path. Users should not have to curate each lesson or repeatedly launch extraction; preserve bounded cost, recoverable pending work and exception-based reporting.
+
+**CLEF integration [planned; CLF3/CLF6].** Route supported capture events and candidate-memory screening through the shared decision interface under the existing provider opt-in, receipt/progress and write-quality contracts. Inference failure leaves bounded recoverable work; runtime coverage and source access must be proved rather than inferred from model availability.
 
 ### S7. Ledger
 
@@ -2551,6 +2571,8 @@ Use the following as the copy direction, with capability and status qualifiers n
 
 **Exit.** MSG5's wording amendments are implemented and every current surface has been checked against the same facts, with version/edition differences explained. A roadmap commit is not evidence that live copy has been synchronised. No new release or deployment is performed by adding this item.
 
+**CLEF publication [planned; CLF13].** Include deployment mode, free weights versus hosted allocation/pricing, supported automatic paths, data egress, fallback/defaults and role-specific evidence in the canonical facts. Verify website, GitHub, npm and enterprise descriptions for the actual release; do not advertise the planned CLF track as shipped.
+
 ---
 
 ## Part XX - 2026-10-01 update: official Claude eval workflows
@@ -2571,7 +2593,7 @@ These are maintainer-invoked workflows around existing evals. Keep Hippo's share
 | CAE6-CAE7 | Keep as native contract/release-quality work across supported core and enterprise configurations. Authentication, source access and group/role revocation remain hard correctness requirements. |
 | CAE8 | Re-scope to one measured improvement in Hippo's own capture/context/harness path. ECC comparison is research-only and subordinate to the built-in-memory baseline; remove coexistence/interchange delivery work. |
 | CAE9 | Keep Hippo-owned lesson validation, skill artifacts and lifecycle in the MIT core. Planned org administration, IdP/team mapping, layered-role policy, managed rollout and SIEM/buyer reporting belong in the commercial package through EI11, EV6-EV8 and CD6/CD11-CD12. Basic self-hosted sharing, grants, audit and existing core capabilities stay MIT. |
-| CAE10 | Research bounded decision policies within Hippo's own memory pipeline. Optional model comparisons and offline training do not require Cloudflare or change the core/enterprise boundary; tenant identity, org policy and managed rollout follow the same existing gates. |
+| CAE10 | Adopt the accepted CLEF integration through Part XXI, CLF0-CLF13. Ship a shared Hippo decision contract with CLEF-flash/CLEF and private-endpoint adapters; use the existing eval workflows to confirm each role. Keep native fallback, explicit provider/data policy, MIT/commercial ownership and enterprise gates. |
 
 **Customer data and effort.** Maintainer commands default to synthetic or permitted sanitised development cases. Customer history, skill bodies and traces stay within the customer's approved deployment/provider/retention boundary; do not send them to public community plugins or an external judge without explicit data/provider authorisation. Air-gapped/customer-endpoint deployments use EI10's supported path, with drafting disabled if its optional model is unavailable. After a project/admin configures policy, automate routine work within that policy and report actionable exceptions. Count both developer and administrator setup, review, rollout and recovery effort in Z12/EI12; a new curation job is not a low-touch benefit.
 
@@ -2597,6 +2619,8 @@ These are maintainer-invoked workflows around existing evals. Keep Hippo's share
 - CAE6 supplies transport/tool contract fixtures; CAE7 adds a versioned execution manifest and upgrade-triggered smoke/replay checks. Join protocol failures and infrastructure faults to the attempt ledger without relabelling agent-caused failures as invalid.
 
 **Exit.** A fixture run produces faithful results and a readable report, survives interruption/retry without cross-attempt contamination, and has a documented failure policy. No new runner framework or Anthropic SDK migration is required.
+
+**CLEF eval adapter [planned; CLF12].** Extend existing result/trace manifests for requested/actual provider and model revision when known, decision schema/input bounds, candidate/evidence versions, fallback, quota/cost and cache/quantisation mode. Reuse the same deterministic scorers and attempt accounting; do not replace independent labels with the candidate model's own verdict.
 
 ### CAE2. Invoke build-eval for the Z1 pull-arm trigger pilot [planned; CAE0-CAE1]
 
@@ -2693,6 +2717,7 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 
 **Enterprise release follow-up [planned].** Record compatible core/commercial-extension versions and the approved customer deployment/model route. Revalidate membership changes, source revocation and managed artifact rollback alongside runtime upgrades; public Claude tooling is not required in an air-gapped customer installation.
 
+**CLEF revalidation [planned; CLF2/CLF12].** Pin private model/code/head/tokenizer and quantisation artifacts. Hosted model names are not sufficient evidence of an immutable revision; record available metadata and fixed compatibility/drift probes. Provider/schema/serving changes require affected fixtures and fresh confirmation before renewing benefit/default claims.
 
 ### CAE8. Hippo-native memory and harness improvement pilot [planned; CD1/AZ3, CAE1-CAE7, EI12]
 
@@ -2721,15 +2746,183 @@ Fresh case/rubric preparation can proceed after CAE0-CAE1 alongside the first Z1
 
 **Exit.** A native artifact/permission/invalidation contract and separate core/enterprise pilot verdict exist, with an evidenced retain/reject decision and deployment/edition ownership. Recommend rollout only for useful outcomes or reduced total user/admin burden within quality and resource bounds; generated skill count/export success is not benefit. Preserve Z0/default gates, the retrieval floor and negative findings; do not make this gated experiment an Enterprise v1 release prerequisite.
 
-### CAE10. Bounded decision policies for low-touch memory [research; SI4/Z1d, LC1/LC3/LC4, EI9; added 2026-10-02]
+**CLEF integration [planned; CLF8/CLF11/CLF12].** Use typed decisions for supported-lesson selection, applicability and approved-skill routing. CLEF supplies no new free-form skill body: retain the existing permitted drafting producer, evidence/invalidation lifecycle and core/commercial split. Fast approved guards remain local rather than making a decision-model call per tool action.
 
-**Reference and scope.** Cloudflare's [CLEF announcement](https://blog.cloudflare.com/clef-decision-models/), [typed decision API](https://developers.cloudflare.com/workers-ai/models/clef/) and [open-weight model card](https://huggingface.co/Cloudflare/clef) provide a research reference for schema-bound choices, probability calibration and a separate training/deployment loop. Adapt useful principles to Hippo's own lifecycle; no Cloudflare product integration, mandatory model download or automatic customer-data export is scheduled.
+### CAE10. CLEF decision-layer integration and evaluation [planned; Part XXI, CLF0-CLF13; direction accepted 2026-10-02]
 
-- **One bounded decision first.** Choose one evidenced bottleneck under SI4 (write-quality screening) or Z1d (admit relevant context versus abstain). Define Hippo's input/output schema, allowed choices, evidence IDs/versions, input bounds, fallback and invalid-output/timeout behaviour. Start with native deterministic rules or a small statistical policy; keep LC3's logistic/GBDT baseline intact. An optional CLEF/Jev-style comparator must justify its extra inference, deployment and maintenance cost.
-- **Confidence and evidence.** A model probability is not proof of correctness. Pre-register independent supported labels, reliability/Brier calibration checks, useful coverage, false-confident decisions and needless abstention, including contradictory, stale, poisoned and missing evidence. Missing or ambiguous outcomes remain unknown; do not reward every recalled item because a later task passed. Permission, source validity, rejection and supersession checks remain deterministic and cannot be overridden by a decision score.
-- **Evaluate before training.** Use CAE1/CAE5 `build-eval` to review permitted development cases; optional `hillclimb` varies one declared schema description/prompt/threshold without changing labels, judges, safety rules or confirmation data. Compare rules/current shipping policy, the small learned baseline where eligible, and one frozen candidate at matched inputs/budgets. Report downstream task quality, retrieval floor, tokens, latency, cost and total developer/admin burden under Z12/EI12; provider benchmark wins do not establish Hippo benefit.
-- **Learning loop only after data/gates.** LC1/Z10 and evidence-specific outcome checks supply versioned episodes for offline replay. LC3/EI9 govern data floors and scoped statistical learning; LC4/Track G separately require an actual learner, environment/reward contract and training evidence before an RL claim. Freeze candidate versions, confirm independently and retain rollback; do not update live weights or silently promote a policy from user traffic. Cloudflare describes its fine-tuning service as FDE-assisted now, with self-service planned, so it is not evidence of a ready low-touch training dependency.
-- **Core and enterprise deployment.** Keep the local no-model path usable, with bounded fallback if optional inference is disabled or unavailable. Apply source ACLs before constructing model input and again at delivery/mutation; EI2/EI10/EI11 and EV6-EV8 gate shared-org use. Use approved local/VPC/air-gapped or customer-authorised endpoints where supported; tenant training requires explicit opt-in, with traces/datasets and derived policy artifacts subject to retention, deletion, source revocation and egress policy under EI9. Keep training tenant-scoped; any pooled training needs separate authorisation. Native contracts/basic permissions/audit stay MIT; org identity, administrator policy/managed rollout and buyer/SIEM reporting remain in the commercial package under EV1.
-- **Low-touch use.** After project/admin setup, run permitted routine decisions automatically with sensible bounded defaults. Uncertainty normally invokes the registered fallback/abstention; batch only actionable authority or evidence exceptions for an owner. Count calibration, review, configuration, rollout and recovery work, so a new model-maintenance or curation job cannot masquerade as reduced user effort.
+**Decision.** Integrate the pretrained CLEF models into Hippo's own memory pipeline, extending the successful query-conditioned Jev path and testing additional roles separately. Part XXI is the implementation, dependency and acceptance plan. Cloudflare's engineering-assisted fine-tuning service is not a prerequisite for pretrained inference.
 
-**Exit.** A scoped research verdict identifies the decision, baseline, independently measured benefit/burden, failure/fallback behaviour and edition/deployment ownership. Reject the extra machinery if the simpler native policy is sufficient. Preserve Z0 priority, locked registrations, frozen defaults and the no-dispatch boundary; this is not an Enterprise v1 release prerequisite.
+**Scope.** One versioned Hippo decision interface serves native rules/statistical policies, existing Jev, CLEF-flash and CLEF, with hosted and customer-controlled transport. Cover supported CLI, hooks/context, MCP and HTTP/library surfaces; preserve synchronous public APIs and ordinary no-model memory. CLEF selects supplied choices; source extraction and free-form lesson/skill drafting retain their existing permitted producers.
+
+**Delivery and evaluation.** Start with CLF0-CLF3 contracts, free-first operation, private serving and runtime parity, then CLF4 ranking and CLF5/CLF6 admission/corrections. CLF7/CLF8 extend validated workflows; CLF9 learning and CLF10 multimodal use remain separate research/optional gates. CAE1/CAE5 and CLF12 reuse the existing runners with explicit `/claude-api build-eval` and bounded `/claude-api hillclimb` on permitted development cases. Labels, confirmation windows, scope/permission rules and deterministic mutation checks stay outside optimisation.
+
+**Ownership and user effort.** Shared adapters/contracts, ordinary self-hosting, basic budgets, permissions and audit stay MIT; CLF11/EV1 place org identity, administrator policy, managed rollout and buyer/SIEM reporting in the commercial extension. After one-time project/admin setup, automate supported routine decisions with bounded fallback and actionable exceptions. Count total developer/admin work alongside task quality and resource use.
+
+**Exit.** CLF12 records separate compatibility and independently confirmed benefit verdicts for each enabled role; CLF13/MSG6 align published claims. Model availability, provider benchmarks or a roadmap edit do not establish task benefit. Preserve Z0 priority, frozen defaults, locked registrations and the no-dispatch boundary.
+
+---
+
+## Part XXI - 2026-10-02 update: CLEF integration across Hippo (Track CLF)
+
+### Track CLF - Hippo-owned, free-first decision layer [planned; accepted 2026-10-02]
+
+**Product goal.** Improve what Hippo captures, retrieves, injects, corrects, retains and reuses so people encounter fewer repeated mistakes, less irrelevant context and less memory-management work. Integrate CLEF into Hippo's own core and enterprise workflows through a reusable decision interface. After one-time install/trust, provider/data policy and any project/admin setup, routine supported work should run automatically; users should not issue per-memory commands or review every decision.
+
+**Accepted deployment direction.** Start with pretrained CLEF-flash in a free-first hosted profile, with a compatible customer-controlled endpoint path. Compare the larger CLEF where Flash is insufficient. Paid inference requires explicit opt-in; customer training is not required for pretrained use. Keep SQLite, BM25, existing optional embeddings and the working native/no-model path. Integration availability does not promote a default: Z0, H4, retrieval/correctness floors and each parent registration remain authoritative.
+
+**Research basis.** The [Jev reranker results](docs/evals/2026-09-19-jev-reranker.md) show query-conditioned ranking gains on a private developer store and LongMemEval, plus shorter-context evidence; they do not establish better answers than the free cross-encoder. The [Jev experiment ledger](docs/EXPERIMENT-PROTOCOL.md) records failed generic durability/error-tag promotion work and the contaminated no-answer labels in Lane 21. Reuse the successful decision shape and preserve the failed findings. CLEF has not been benchmarked inside Hippo by adding this track.
+
+Primary implementation references: [CLEF announcement](https://blog.cloudflare.com/clef-decision-models/), [CLEF API](https://developers.cloudflare.com/workers-ai/models/clef/), [CLEF-flash API](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Workers AI REST transport](https://developers.cloudflare.com/workers-ai/get-started/rest-api/), [pricing/allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/), [data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/), [Flash model card](https://huggingface.co/Cloudflare/clef-flash), [released decision-head implementation](https://huggingface.co/Cloudflare/clef/blob/main/joint_schema_model.py). Recheck current API, serving support, licence, allocation and prices when implementing.
+
+**Planning map; existing parent gates stay in force.**
+
+| Deliverable | Existing work extended | Ownership / sequencing |
+|---|---|---|
+| CLF0-CLF3 | Current Jev/reranker seams, CD1/AZ3, CAE6, EI10 | MIT contracts, free-use controls, private-serving interface and transport/runtime parity first |
+| CLF4 | S1/S2, LC3, current reranker evidence | MIT query-conditioned ranking; preserve the native and small learned baselines |
+| CLF5 | Z1d/TE6, Z10/Z12 | MIT context admission/coverage; fresh registration after delivery instrumentation |
+| CLF6 | SI4, S0/S6, Z3/Z3b/Z9 | MIT capture/write/correction screening; source and false-write gates |
+| CLF7 | Z3b/S3/S4, EI2 | MIT reversible reconciliation/consolidation; permission and temporal correctness |
+| CLF8 | S5, SI2, Z4, CAE9 | MIT experience/lesson/skill selection; org distribution remains commercial |
+| CLF9 | LC1-LC4, Z2b, EI9, Track G | Research/data-gated lifecycle learning; no prerequisite for pretrained inference |
+| CLF10 | Supported AZ capture paths, S0/S6, EI10 | Optional multimodal extension after text workflows |
+| CLF11 | EI2/EI10/EI11, EV1/EV6-EV8, CD6/CD11-CD12 | Core correctness/private-serving hooks MIT; org administration and reporting commercial |
+| CLF12 | CAE1/CAE4/CAE5/CAE7, TE5/Z0/Z12/EI12 | Existing runners, independent confirmation and upgrade/release checks |
+| CLF13 | MSG1-MSG6 | Consistent source and published website/GitHub/npm/enterprise claims |
+
+**Order.** CLF0-CLF3 foundations and development fixtures can proceed alongside the primary Z0 runner/smoke queue. Then validate ranking, admission and corrections, followed by write/reconciliation and reusable lessons. Keep lifecycle training and multimodal work separate. Close the applicable identity, source-permission and deployment gaps before shared-org rollout. This track does not make every research role an Enterprise v1 prerequisite or exempt an enabled feature from its correctness gates.
+
+### CLF0. Shared typed decision contract and provider adapters [planned; foundation]
+
+- Define a Hippo-owned, versioned task/result contract for native rules/statistical policies, existing Jev, CLEF-flash and CLEF. Include task/schema identity, bounded state, allowed options, evidence IDs/versions and applicable tenant/project/scope. Record requested/actual provider/model/revision when available, probabilities, decision/abstention, input bounds/truncation, timing/usage, cache and fallback reason.
+- Support the released `noul`, `choice` and `score` semantics through transport adapters. Normalize the Cloudflare REST `result` envelope and the Jev/SystemOne-style response rather than only changing Jev's URL. Validate complete expected question/option sets, finite in-range values, response type and model identity; malformed or partially scored responses invoke the registered fallback.
+- Keep classification probability separate from Hippo's observed/inferred/verified memory status. Binary `noul` provides a true probability, not a separate confidence signal; choice confidence is the chosen option probability. Include explicit none/unknown choices where appropriate, and measure calibration/abstention per task rather than trusting one global threshold.
+- Scope/redact input before transmission and apply deterministic permission, rejection, supersession/temporal and evidence checks before delivery or mutation. Treat source content as untrusted data; model output cannot grant access, widen applicability, execute tools or change guarded policy. Configure endpoints/credentials through trusted local/admin settings, not arbitrary remote call arguments.
+- Freeze question wording, field/order/batching and input construction per comparison. The decision head scores fields jointly, so adding a presence/quality question to a ranking request is a separately tested change. Keep stable tie handling and original score/rank provenance. Ordinary memory remains usable when no decision backend is configured.
+
+**Exit.** Native, Jev, hosted CLEF and private-endpoint fixtures implement the same documented contract; invalid inputs/responses and unavailable providers degrade predictably without partial mutation, secret leakage or a silent paid-provider switch.
+
+### CLF1. Free-first setup, quotas and low-touch operation [planned; CLF0]
+
+- Provide one-time project/admin setup with clearly named native/off, free-first hosted, private endpoint and explicitly enabled paid profiles. Selecting a profile enables only its supported validated roles. Preserve today's shipping defaults until their existing promotion gates pass; environment keys alone do not authorise a new provider or data route.
+- Separate free Apache-2.0 model weights from inference/hosting costs. Snapshot checked 2026-10-02: Workers AI lists 10,000 free neurons/day shared across account usage; Flash $0.09 and CLEF $0.24 per million input tokens outside the allocation. At 10,000 total input tokens per request, the published conversions imply about 122 Flash or 45 CLEF calls if that is the account's only usage. These are illustrative estimates, not reserved capacity or a forever-free product claim.
+- Budget by provider/account as well as store/tenant: request input, daily usage, concurrency, retries and backlog. Include schema/context tokens and all other inference stages in cost accounting. Use authoritative provider limits/usage where available; unknown usage is not zero. Strict $0 hosted operation needs provider-enforced free-plan/allocation controls: local counters alone cannot guarantee no overage on a shared paid account.
+- Batch compatible decisions only after CLF0 equivalence checks. Cache within tenant/permission boundaries using task/schema/model/input and source-version identity; re-authorise and recheck invalidation before reuse. Avoid duplicating raw private state in caches/logs. Register timeout, circuit-breaker, bounded retry and quota-exhaustion policies; free-first failures fall back to native/local behaviour, not paid Jev or a paid larger model.
+- Run routine decisions automatically after setup. Expose concise health, usage, provider/fallback and pending-work status through existing doctor/log/dashboard surfaces; notify actionable exceptions without repetitive prompts. Capture queues preserve source receipts/progress idempotently under S6 while the read/task path continues.
+
+**Exit.** Tests cover shared-account exhaustion, unknown usage, racing callers, provider outage, timeout/retry, cache invalidation and interrupted backlog processing. Ordinary memory continues, configured spending is respected, and setup/review/recovery work is counted in CLF12.
+
+### CLF2. Customer-controlled CLEF serving and hardware validation [planned; CLF0, EI10]
+
+- Provide an optional serving recipe/service implementing the same typed endpoint with the released `systemone` / `joint_schema_model` path. Load the trained joint decision head, backbone and processor together. A generic Qwen/chat-completion server or model-download success is not proof of CLEF decision-head compatibility.
+- Keep Python/PyTorch/GPU dependencies and weights outside the zero-runtime-dependency npm core. Installation/download is explicit and one-time; support an already managed customer endpoint. Pin model commit, weight/head hashes, tokenizer/processor, serving code/image and dependencies, with health/schema probes, bounded requests and rollback.
+- Validate a 16 GB consumer-GPU path with quantisation or offloading before recommending it: the released Flash BF16 artifacts total roughly 19 GB before runtime overhead. Report actual peak memory, input-length/concurrency limits, warm/cold latency, startup/download footprint and CPU-offload tradeoffs. Test decision quality, calibration and head/processor integrity against the reference model; do not assume a community quantisation or generic runtime preserves them.
+- Support approved local/VPC/air-gapped modes under EI10, including offline artifact installation, credentials/TLS where applicable, capacity and upgrade/recovery guidance. Private means the configured data boundary is tested; no mandatory Cloudflare account, Gateway/storage service or outbound inference/telemetry. Preserve the no-agent-dispatch boundary.
+
+**Exit.** Hosted/private conformance and a documented hardware/support matrix exist. Each recommended private configuration has measured resource and decision-quality evidence plus a working native fallback; unsupported combinations are explicitly identified.
+
+### CLF3. Full integration across supported runtime and API surfaces [planned; CLF0/CLF1, CD1/AZ3]
+
+- Trace the actual entrypoints before wiring: the shipping Jev flag is in the CLI reranker path and does not automatically upgrade prompt hooks, MCP or library recall. Reuse public search/decision seams and expose consistent opt-in configuration through supported CLI, context/hooks, MCP and HTTP/library routes.
+- Preserve current synchronous public recall APIs and their side-effect contracts. Use additive asynchronous enrichment through appropriate existing/new async surfaces for network decisions; do not turn synchronous calls into Promises or introduce blocking network calls. Retain native behaviour when disabled and avoid duplicated scoring, strengthening, audit or trace writes.
+- Build scoped eligible candidates before provider input/limits and pack only validated admitted results. Preserve each caller's established scope semantics, temporal view, applicable pins, rendered token accounting, score/rank stage order and default-off controls. Do not let a later boost/sort silently undo decision ordering; any changed stage composition is explicit and registered.
+- Join proposed/scored/admitted/delivered IDs and decisions to Z10's per-turn ledger, distinguishing unchanged valid context, newly emitted blocks, fallback and unavailable delivery. Keep attribution tied to what the host actually received. AZ's runtime capability matrix remains truthful: CLEF cannot create events/prompts/transcripts a host does not expose.
+- Test installation/trust, invocation, supported capture/delivery, opt-out, duplicate hooks/calls, interruption and upgrade behaviour per runtime and transport. Ordinary tasks should invoke the configured policy without users adding a reranker flag or memory command each turn.
+
+**Exit.** A supported-surface matrix and end-to-end fixtures prove configured decisions reach the actual host, disabled paths preserve existing behaviour, permissions/tokens agree, and failure/capture gaps are observable.
+
+### CLF4. Query-conditioned ranking and evidence packing [planned; CLF0-CLF3, S1/S2, LC3]
+
+- Start with the measured Jev request shape: query plus the same eligible top-40 pool and one relevance question per candidate, at matched content/input bounds. Compare native shipping order, available local cross-encoder, pinned Jev, CLEF-flash and CLEF in one runner; include the LC3 small learned baseline only when its data floor is met.
+- Measure ranking and the real rendered token-budget cut separately. Preserve original scores/order, deterministic tie fallback and all evidence/condition text needed for delivery. Smaller context must retain the sources needed for an answer; evaluate any-evidence and all-evidence coverage, multi-hop/temporal cases and per-category regressions.
+- Candidate recall is a separate ceiling: a reranker cannot recover evidence absent from its pool. Diagnose miss types before widening candidates or adding S2's optional independent dense stream. Keep representation, candidate generation, MMR/RRF and lifecycle-factor changes out of this comparison unless separately registered.
+- Select Flash or the larger CLEF by the measured quality/resource tradeoff for this role, not vendor leaderboard claims. Register repeat-score/near-tie behaviour, calibration where used, end-to-end latency and actual usage/fallback. Context compression, answer quality and task benefit need their own comparisons.
+
+**Exit.** CLF12 records reproducible paired ranking/packing and task/resource results, including failed arms. Add an opt-in supported ranking backend only after the applicable compatibility/retrieval gates; default promotion remains Z0-gated.
+
+### CLF5. Context relevance, applicability and no-memory admission [planned; CLF3/CLF4, Z1d/TE6, after Z10]
+
+- Separate ranking from admission: the first-ranked item can still be irrelevant. Register typed relevance/applicability decisions with explicit no-applicable-evidence/unknown handling, bounded task/recent context and preserved applicable pins. Abstaining from extra memory is different from making the agent refuse a task or ask the user a question.
+- Build fresh independently labelled negatives: topics the store never held, plausible distractors and stale/wrong-condition evidence. Accept alternative valid evidence and near-duplicates in labels; Lane 21's missing-target-ID label is not a clean no-answer population.
+- Calibrate probabilities and operating points on development cases; freeze before confirmation. Include reliability/Brier checks, useful delivered coverage, confidently wrong admissions, needless abstention, contradictory/missing evidence and prompt-injection cases. Do not inherit a Jev threshold or treat CLEF's probability/confidence as truth.
+- Test evidence sets: selecting one high scorer must not drop the second fact/condition a multi-hop task needs. Bound final claim/experience counts and rendered tokens under the parent contract. On uncertainty or inference failure, use the registered native/fallback policy rather than routine human review.
+- Confirm repeat-mistake, task-quality, token/latency and user-supervision effects through Z0/Z12. Keep Z1c's locked judge, final window and registration unchanged.
+
+**Exit.** A fresh admission policy has supported thresholds/fallback and independent false-admission/coverage results, with no misleading answerability claim or loss of required evidence.
+
+### CLF6. Capture, correction and memory-write decisions [planned; CLF3, SI4/S0/S6, Z3/Z3b/Z9]
+
+- Screen supported capture inputs/candidate memories for useful standalone assertions, source support, preserved conditions/subject, duplicates and existing tag/type choices. Where useful, classify whether extraction is warranted before an optional drafting call. Retain evidence spans, source/date, tenant/project/scope and observation status.
+- CLEF returns bounded choices; it does not supply new free-form lesson text. Keep deterministic source extraction, host-provided structured candidates or the existing permitted generative producer for factual wording, with extraction/provider opt-ins and full cost accounting. High classification probability cannot manufacture evidence or graduate a long-term lesson.
+- Register correction classification, affected-claim selection and replacement/support as separate stages. Include implicit corrections, frustration without correction, quotations, hypotheticals, branch/environment differences and confidently wrong technical claims. User preferences apply in their stated scope; technical claims remain observations until independently supported.
+- Use Z3b's deterministic idempotent write/version path; unresolved matching/support remains pending with both sources intact. Routine supported capture/correction runs automatically after setup, including durable receipt/progress handling without depending on normal SessionEnd. Source loss or provider failure stays visible and recoverable under bounded retention/backlog.
+- Score write precision, missed lessons, false extraction/closure, duplicate rate, condition/evidence completeness and correction delay before task confirmation. Compare explicit-phrasing rules, applicable Jev and CLEF arms on fresh supported labels; do not re-score the failed detector's final set into a new verdict.
+
+**Exit.** Automatic writes preserve source/epistemic/permission contracts, meet registered false-write/correction bounds and reduce useful-task or correction burden without extra curation work.
+
+### CLF7. Reversible conflict, supersession, merge and sleep decisions [planned; CLF6, Z3b/S3/S4, EI2]
+
+- Classify eligible candidate relationships as supported replacement, contradiction, equivalent duplicate, compatible under different conditions or unknown. Match subject/attribute, source authority, applicability and effective time; compare only within permitted derivation partitions.
+- Let Hippo's validated executor apply closure/successor writes atomically and reversibly. Model output cannot directly delete, overwrite, auto-pin or widen scope. An unsupported/uncertain contradiction is a pending conflict; a next-turn disagreement alone does not establish replacement.
+- Screen consolidation/merge candidates for assertion and condition/exception equivalence. Retain provenance and source links, preserve pins/rejections and source-revocation propagation, and test undo/replay plus historical/as-of retrieval. Mixed restricted scopes remain unmergeable under the current accepted scope contract.
+- Keep sleep as the reversible hygiene work in S4. Shorter text or a confident classification is not a memory/task improvement. Respect existing extraction opt-ins, receipts/privacy rules, compaction-table separation and protected compaction-memory tag/source keep rules.
+
+**Exit.** Relationship classification and deterministic mutation each have independent verdicts; evidence, scope/time, history and retrieval floors survive consolidation and reversal.
+
+### CLF8. Experiences, reusable lessons, skill selection and fast guards [planned; CLF6/CLF7, S5/SI2/Z4, CAE9]
+
+- Classify permitted fail/action/check/outcome sequences and whether a supported experience/lesson applies now. An observed failure alone does not validate its proposed remedy; retain trigger, version/runtime/tool requirements, preconditions/exceptions and evidence-specific outcome links.
+- Use CLEF for selecting supported lessons and routing among approved native skill/workflow artifacts, including no-match. Keep CAE9's existing permitted free-form drafting producer, inactive-draft/evidence/promotion rules, invalidation and core/commercial distribution ownership. No ECC runtime/plugin or vault integration is introduced.
+- Evaluate ordinary recall versus the same evidence in an approved experience/skill at matched budgets, counting unsupported/stale use and all developer/admin review/rollout effort. Preserve the one-experience delivery limit and independently tested applicability.
+- Keep fast tool guards local: build/cache approved deterministic rules through Z4's evidenced promotion path rather than call a decision model before every tool action. Guard runtime failures, permissions and rollback follow the existing registered contract.
+
+**Exit.** Approved selection/reuse improves task outcomes or reduces supervision within quality/resource bounds; generated artifact count is not benefit, and per-tool guard latency stays within Z4's gate.
+
+### CLF9. Outcome attribution, retention and optional learning [research; LC1-LC4, Z2b, EI9/Track G]
+
+- Pretrained ranking/capture decisions do not require customer training. Retain LC2/LC3's small statistical scorer, cold-start/data-floor and opt-in contracts as baselines. Generic durability scoring failed in the Jev campaign; any new learned keep/forget/promotion feature needs a fresh label, registration and long-run store-growth/retention evidence.
+- Join feedback to IDs confirmed delivered and evidence tied to the prescribed action/prediction. A later task pass does not reward every memory; model self-ratings, repeated retrieval, user silence and repetition do not prove usefulness. Missing/ambiguous outcomes remain unknown.
+- Existing recall traces persist query hashes/IDs and structured scores, not a reconstructable full training prompt. Build replayable permitted episodes only through explicit data capture/retention authorisation; preserve the privacy contract and keep private frozen corpora outside the repository.
+- Separate trace collection, independent checks, offline replay, policy/model fitting, held-out confirmation and versioned deployment. Customer training requires tenant opt-in; datasets and derived artifacts obey deletion/source-revocation/retention policy. Any pooled training needs separate authorisation.
+- For an RL claim, LC4/Track G must establish the environment/state/actions/reset/transition/reward/termination contract, a real learner and training evidence. RLCD in pretrained CLEF does not make Hippo a live RL system; prompt hillclimbing alone is not that learner. No silent live weight updates, autonomous policy promotion or irreversible model-directed forgetting. Freeze candidates, stage confirmed rollouts and retain rollback.
+
+**Exit.** A separate research verdict supports or rejects each learning/retention role against simpler baselines; no learning requirement blocks pretrained inference or changes existing default gates.
+
+### CLF10. Optional multimodal decision inputs [planned experiment; after text workflows, supported AZ capture, S0/S6]
+
+- Test screenshot/document evidence only from a runtime/source Hippo is authorised and able to capture. Define source identity, permitted input types/sizes, processing/retention and output evidence references; no assumption that a model's vision support exposes a host's screen or full trajectory.
+- Use bounded decisions such as document/receipt relevance, legibility or applicability. Free-form transcription, new facts and lesson text retain their appropriate permitted producer and independent support checks. Keep image source evidence outside automatic injection unless its permitted derived claim passes the write contract.
+- Validate the actual hosted/private processor path, encoding, input limits/truncation, cost, memory/latency and scope/egress behaviour. Compare text-only/current handling first; add multimodal processing only for a measured evidence gap and useful outcome, with disabled/failure fallback.
+
+**Exit.** Each supported multimodal source has a tested capability/privacy/resource matrix and independently validated use; no mandatory image pipeline or new default is implied.
+
+### CLF11. Enterprise policy, deployment, permissions and rollout [planned; EI2/EI10/EI11, EV1/EV6-EV8]
+
+- Keep the shared contract, hosted/private adapters, ordinary self-hosted setup, basic usage/fallback controls and existing tenants/grants/audit in MIT. The commercial extension adds organisation identity/group/project/role policy, administrator provider/model/egress controls, managed rollout/rollback and buyer/SIEM reporting through the public API.
+- Configure approved providers, endpoints, permitted source classes and role-specific decision features once at the appropriate admin/project boundary. Check actor/tenant/source access before constructing model input and again before delivery/export/mutation/cache reuse. Ranking probability never substitutes for authentication/authorisation.
+- Derived memories/skills retain the accepted source-scope partition and applicable restrictions. Revocation, membership/team/project changes, correction/deletion and managed-copy invalidation have registered propagation bounds; test wrong-tenant and stale-cached-source cases. Close dependent scope/identity gaps before enabling shared-org use.
+- Support approved customer-local/VPC/air-gapped serving and explicit external-provider egress under EI10. Keep credentials server/local-side and raw customer prompts/skill bodies out of routine logs. If an optional AI Gateway route is used, configure and verify its payload logging/retention explicitly; its logging is enabled by default. No mandatory traffic capture, training dataset export or third-party storage.
+- Join provider/quota/fallback and rollout status to existing core audit plus planned CD6/admin, CD11-CD12 pilot reports and commercial SIEM export. Test supported core/enterprise version pairs, outages, interrupted rollout/rollback and offline operation. Count administrator setup, calibration, exception review, maintenance and recovery alongside developer burden.
+- Enterprise remains a scaffold today. This item defines planned ownership and release gates; an optional model adapter does not implement SSO/team governance or establish enterprise readiness.
+
+**Exit.** A supported tenant pilot proves data/permission boundaries, native fallback, staged rollout/recovery and total user/admin value on the approved deployment; enabled capabilities pass their own gates.
+
+### CLF12. Evaluation, workflow use and upgrade revalidation [planned; CAE1/CAE4/CAE5/CAE7, TE5/Z0/Z12/EI12]
+
+- Reuse existing runners, deterministic scorers and attempt/usage ledgers. Use explicit `/claude-api build-eval` for permitted fresh development labels, coverage and grader review; bounded `/claude-api hillclimb` may vary one declared schema description/prompt/threshold after headroom is shown. Retain ordinary finite sweeps for weights. These maintainer workflows are optional for customer operation and are not assumed free or installed by this roadmap.
+- Freeze representation, allowed state sources, candidate/input bounds, questions/order/batching, provider/model/serving/quantisation, budgets, fallback, labels and graders before confirmation. Independent evidence/labels cannot be replaced by the candidate CLEF's own judgement. Use development family/time/store splits and new confirmation where required; do not reopen sealed Z0/Z1c windows.
+- Compare native/shipping and built-in agent memory baselines, repaired local reranker, applicable Jev, Flash and larger CLEF as relevant to each task. Include cold-start, clean no-match/alternative-evidence, multi-hop, stale/contradictory evidence, source injection, false corrections and scope/revocation fixtures. Diagnose candidate-pool ceilings before claiming model gains.
+- Report repeat mistakes, resolved-task quality, stale-follow, correction count, supervision time/burden and growing-store behaviour; retain all-evidence retrieval/evidence completeness as diagnostics and regression floors. Count total token/inference/hosting cost, caller-observed latency, timeouts/retries/fallbacks, quotas, setup and administrator work. Unknown usage/delivery is not zero; synthetic burden is labelled a proxy until a human pilot measures it.
+- Test provider conformance and real mechanism/delivery wiring, not only mocked rank order. Record actual served revision when available; a hosted model name alone does not guarantee immutable weights. Pin private artifacts and use fixed compatibility/drift probes, run manifests and CAE7 upgrade checks for provider/model/schema/runtime/quantisation changes.
+- Freeze a winning candidate before independent confirmation. Publish negative/unsupported results with role-specific compatibility versus task-benefit verdicts. Default changes still require Z0 and H4 with the existing retrieval/correctness gates; research adoption and lower token counts alone do not satisfy them.
+
+**Exit.** Reproducible manifests, faithful reports and separate retain/reject verdicts exist for each proposed enabled role and supported deployment. No paid run, install, live-data export or default promotion occurs by adding this plan.
+
+### CLF13. Release documentation and cross-surface consistency [planned; MSG1-MSG6, CLF12]
+
+- Update the canonical claim/capability inventory for each actually shipped role: pretrained decision backend, supported runtime/event coverage, automatic versus opt-in behaviour, model/network/deployment route, provider allocation/paid costs, private-serving requirements, fallback and edition ownership.
+- Keep free weights distinct from unlimited free inference, and decision-model probability distinct from verified memory/truth. Retain the measured Jev findings and CLEF-specific limitations; do not transfer provider benchmarks, ranking gains or RLCD terminology into unsupported task-benefit/live-learning claims.
+- Coordinate core README/current docs/CLI help and agent-install guidance, GitHub/package metadata, website hero/FAQ/comparison/teams/SEO/agent-facing content, published npm README and enterprise buyer/package descriptions. Explain development versus released and core versus planned commercial capabilities.
+- Verify the tagged package, actual npm dist-tag/page and deployed website through MSG6's release/publication checks. Include current pricing-source dates and supported serving/version evidence. Basic operation needs no CLEF account/model; optional private/hosted setup and graceful fallback must be clear without routine per-memory work.
+
+**Exit.** All current product surfaces agree on the shipped release's facts, defaults, evidence and enterprise status. This roadmap addition schedules the implementation/documentation work and does not itself publish the feature.
