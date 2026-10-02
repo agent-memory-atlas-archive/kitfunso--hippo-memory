@@ -23,6 +23,35 @@
 >
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
 
+## Current execution index
+
+**Reviewed 2026-10-02.** This is the governing execution view. Dated queues and estimates below remain historical records; they do not supersede this index, Z0's stage order, the default freeze or a locked preregistration. The full agent-preservation and CLEF integration scope remains required; phasing changes the delivery order, not the coverage goal. ECC remains a research reference and Computer remains optional.
+
+**Accountability.** Keith is the product and release owner. The maintainer owns implementation and evidence records; the selected customer's administrator owns source/identity policy and the customer defines business value. These are responsibility labels, not an assumption of additional engineers. Before an item enters active work, name its implementation owner, remaining scope, next deliverable, eligible population, success/guardrail bounds and evidence source. Re-estimate from remaining work and available capacity; the historical 16-22 week forecast is not a refreshed delivery promise.
+
+| Window and priority | Existing items | User outcome | Next deliverable and evidence gate | Accountable role |
+|---|---|---|---|---|
+| Now, 1 | Z0 stage 0; Z10 development instrumentation | Establish whether Hippo adds useful value beyond built-in memory and identify capture/retrieval/delivery/application failures | Complete isolated arms, teaching, sham/control, Codex and blind-analysis prerequisites; instrument without changing selected IDs or rendered context. Then the existing smoke, calibration, freeze and scored protocol. Z10 does not amend Z0's locked endpoints. | Maintainer; Keith for resource/run decisions |
+| Now, 2 | AZ6 foundation; S6 capture/recovery fixtures; AZ4/AZ5 per supported mode | Preserve useful lessons before loss and recover without routine save commands | Inventory every named runtime/mode; establish shared contracts and fixtures, then verify native hooks or supported incremental checkpoints on real hosts. Record source/trust gaps, gold capture precision/coverage, delay, restore and actual delivery separately. No CLEF or new claims schema prerequisite. | Integration maintainer |
+| Next, 3 | One diagnosed S0/S9, Z1d or Z3b component; CAE5; Z12 | Reduce wrong/stale context, repeated mistakes and supervision | Select the bottleneck from Z10 evidence. Isolate representation, admission or correction on fresh development labels; freeze before independent task confirmation. Deterministic permissions/version writes and sealed cases stay outside hillclimb. | Memory/evaluation maintainer |
+| Next, 4 | EI2/EI10/EV1/EI11/EV6-EV9; required source adapters; EI15/CD11-CD14 | Deliver governed, low-touch memory and customer-defined value in an enterprise pilot | Scope one partner, required sources, identity provider and deployment. Close applicable access/derivation/revocation gates; configure one objective/metric contract and join permitted outcomes through Z10/Z2b. Include developer and administrator burden. Computer is not a prerequisite. | Keith; enterprise maintainer; customer administrator |
+| Next, 5; bounded development can accompany Now | CLF0/CLF1/CLF4/CLF12; CAE0-CAE4 | Improve a specific memory decision without unpredictable costs or recurring backend management | First compare one role at matched eligible candidates/input bounds against native and applicable Jev/local baselines, with quota controls and native fallback. Complete supported-surface conformance and independent task confirmation before adoption; extend all accepted CLEF roles one at a time. | Decision-layer/evaluation maintainer |
+| Alongside all priorities | MSG1-MSG6; canonical product facts; CAE6/CAE7 | Give users consistent capability, setup, edition and evidence information | Correct current source copy, check roadmap IDs/references and affected tool contracts, then verify the tagged package, actual npm listing and deployed website through their release processes. A source commit is not publication evidence. | Product/release maintainer |
+| Later or separately gated research | Wider CLF rollout/private serving; CAE9; optional CW; S2/S8 where justified; LC4/Track G and grant research | Retain optional capabilities only when they improve useful outcomes or total burden against simpler baselines | Keep required runtime coverage visible; register role-specific comparisons, data floors, deployment/permission checks and retain/reject decisions. No provider, learning system or agent dispatcher becomes required for ordinary memory. | Relevant track maintainer; Keith |
+
+**Operating rule.** Prefer one complete memory loop and a small number of bounded experiments over opening every track simultaneously. Engineering fixtures and development prototypes can proceed alongside Z0 prerequisites; task-benefit/default claims retain their independent gates. Measure repeat mistakes, quality, correction/supervision burden, total cost and latency. Simulated intervention counts are proxies; active human time needs its own registered pilot. Historical benchmark scores do not establish these outcomes.
+
+### Dependency types
+
+- **Hard prerequisite:** functionality or a correctness contract needed for the selected implementation; specify which slice, rather than assuming a whole track must finish.
+- **Conditional integration:** required only for the chosen runtime, source, identity or deployment. Other required modes remain owned backlog entries.
+- **Optional producer/baseline:** can add evidence or a comparison when available; its absence cannot block the provider-neutral path.
+- **Rollout/evaluation gate:** proof required before the affected enablement, release claim or default promotion; development-only prototypes do not bypass it.
+
+Apply these meanings to active item headers and run manifests. Slash-separated legacy references are cross-references, not an instruction to build every optional adapter or baseline first. EI15, CLF4 and AZ6 below now specify their slices explicitly.
+
+**Product facts and publication.** [Canonical product facts](docs/product-facts.md) records current source claims, implementation/publication/evidence distinctions and the dated GitHub/npm/website checks. MSG6 owns remaining inventory, publication and semantic review across all current surfaces. Run `node scripts/check-roadmap.mjs` for duplicate initiative IDs, current-index references, typed dependency headers and local roadmap anchors. Historical bare references are not treated as dependency declarations; this is document validation, not a product or task-benefit test.
+
 ---
 
 ## Part I - Grant-Tied Deliverables (formerly ROADMAP.md)
@@ -31,7 +60,7 @@
 
 This roadmap tracks planned work for the hippo-memory codebase. Items are grouped by funding status: committed, conditional on grant award, and speculative.
 
-Current version: the top entry of `CHANGELOG.md` for npm `hippo-memory`. The Python SDK (PyPI `hippo-memory-sdk`) has its own version line.
+Development package version: `package.json`. Published versions come from the actual npm dist-tags and corresponding GitHub tags; `CHANGELOG.md` is the release history, not proof that source changes are published. See [canonical product facts](docs/product-facts.md). The Python SDK (PyPI `hippo-memory-sdk`) has its own version line.
 
 For non-grant execution status (Tracks A-I, sequencing, shipped items, bets, non-goals) see **Part II** below (formerly `ROADMAP-RESEARCH.md`). For operational follow-ups and per-version post-ship tails see `TODOS.md`. For the research lineage and seven-mechanisms backgrounder see `RESEARCH.md`.
 
@@ -175,7 +204,7 @@ This is the canonical execution roadmap. Every actionable item from `RESEARCH.md
 
 This file supersedes the prior research-only frame. **Part I** above (formerly `ROADMAP.md`) tracks grant-tied deliverables. `PLAN.md` documents architecture and CLS principles.
 
-Current version: the top entry of `CHANGELOG.md`, as in Part I.
+Development and published versions are tracked separately, as in Part I and [canonical product facts](docs/product-facts.md).
 Active branch: `master`
 
 ## Status as of 2026-05-24
@@ -183,6 +212,8 @@ Active branch: `master`
 The original 90-day plan (lines below, scoped April→July) is **functionally complete**: A3 envelope shipped v0.39 (security hardening), A5 stub auth shipped, A1 server shipped v0.36, E1.3 Slack ingestion shipped v0.37, F6 reranker hardening shipped v1.9.0, and the F-track hit its roadmap R@5 ≥ 85% target on the oracle split (v1.9.2, F13 chunk-per-turn + F9 sub-agent rerank = R@5 = 86.8). E1.4 GitHub ingestion shipped v1.3.0. The v1.10.x-v1.11.x arc added pidfile-ownership guards, conflict-subsystem tenant isolation, per-IP rate limiting on `/v1`, the opencode plugin installer fix, and the api.ts refactor that unlocked the v0.1.0 Python SDK on PyPI. v1.12.0 sub-1 shipped the A5 v2 auth/role plumbing (Actor object shape + admin-gate on `/v1/sleep`); sub-2 (L9 background pipelines tenant-scoping, 8 files) is next. 33 npm releases from v0.33 (2026-04-23) to v1.12.0 (2026-05-23).
 
 **Next 90 days (2026-05-23 → 2026-08-23) priority queue** (revised at end-of-arc):
+
+**Historical schedule.** Retained as the dated record; use the [current execution index](#current-execution-index) for active priority and readiness. Historical release/evaluation statements retain their original evidence and scope.
 - ~~Episode A/B/C tail → v1.11.5 patch or v1.12.0 minor: per-tenant `/v1/sleep` scoping decision~~ — **DONE** in v1.11.5 (7/8 items) + v1.12.0 sub-1 (admin-gate option (a)). Remaining v1.12.0 follow-ups (HTTP DoS caps on outcome+context, audit-emission on sleep phases, api.recall parity, CLI snapshot tests, mid-phase test coverage, afterAll guard) tracked in `TODOS.md` §"v1.12.0 sub-2 / later".
 - ~~Python SDK v0.2: sync wrappers (HippoSync), ContextResult.projected() helper~~ — **SHIPPED** python-v0.2.0 (2026-05-24); v0.3.0 (2026-05-28, Decision API). 204 handling deferred-by-design (dead code path).
 - ~~F9 hybrid retrieval — the BM25+vector RRF fusion the F-track never actually measured locally~~ — **SHIPPED 2026-05-20** via PR #27 (`feat/f9-hybrid-retrieval-parity`). Phase 1 oracle: 4 hybrid cells all beat dense-only baseline 79.0; best `turn_asym` R@5=82.0 (+3.0). Phase 2 `_s` Gate-B FAIL @ 97.7 (best `turn_sym` R@5=50.8 vs F14 baseline 41.0, +9.8 lift at zero LLM cost; ties the F14+F9-Sonnet-rerank stack). HARD RETRACTION executed per prereg discipline — that's why the canonical-doc trail (CHANGELOG/README/this file pre-correction) didn't mention it. Result + audit trail at `docs/evals/2026-05-20-f9-hybrid-rrf-result.md`. The locally-runnable embedder is the structural ceiling on `_s` (F14 R@100=86.2 confirmed in F16; F9 doesn't lift it).
@@ -199,15 +230,21 @@ The per-track status tags below are updated to reflect shipped-vs-active state. 
 
 ## Status legend
 
-- **[shipped]** merged or in-flight on a feature branch
-- **[next]** scoped, ready to start within 90 days
+- **[building]** work in progress or on a feature branch; not merged or released
+- **[merged]** implementation is on the default branch; publication and evidence are separate
+- **[released] / [shipped]** available in an identified published version/package or deployment; name the version and edition. Never use this for an in-flight branch.
+- **[next]** scoped for the current execution index, with owner, next deliverable, dependencies and gates; not a calendar promise
 - **[planned]** committed direction, scoping pending
 - **[research]** open question, needs investigation before scoping
 - **[grant]** funded conditional on FAD or AIC-P1 award (see `ROADMAP.md`)
 - **[cut]** explicit non-goal; here so it stays cut
 - **[critical]** priority overlay, not a lifecycle status — highest-urgency item; always paired with a lifecycle tag, e.g. `[critical, next]`
 
+**Evidence is a separate dimension.** Record fixture-tested, live-compatible and independently benefit-verified separately, each with runtime/model/configuration, corpus or fixture source and verdict. Unknown or unmeasured evidence stays explicit. A merged/released implementation, configured hook or retrieval score cannot imply a live automatic-save guarantee or task benefit. Legacy dated status labels are historical assertions; missing release/evidence records remain unknown until reconciled, rather than being silently promoted by this legend change.
+
 ## Benchmarks (priority order for shipping decisions)
+
+**Historical hierarchy.** This list records the earlier benchmark strategy. Current task-benefit/default decisions follow Z0's built-in-memory comparison, validity/H4 and the applicable retrieval/correctness floors; see the [current execution index](#current-execution-index). Retain the losses and retractions below.
 
 1. **Paired A/B fire-rate** on tier-1 micro-eval — own harness, fastest signal, Wilcoxon-tested. Commit `5ef6d78`.
 2. **Sequential-learning trap-rate** — own benchmark, directly tests the agent-learning thesis. ~~(78% -> 14% baseline over 50 tasks)~~ **(RETRACTED v1.7.9 — see `CHANGELOG.md` v1.7.9 entry; magnitude does not reproduce on the formal multi-seed harness across three pre-registered workload variants. Mechanism shipped.)**
@@ -852,6 +889,8 @@ Titans' learn-to-memorize/forget-at-test-time is hippo's D2 decay + D3 strengthe
 
 ## Sequencing (next 90 days, single-engineer cadence)
 
+**Historical sequence and capacity assumptions.** The following April-August plan is retained for provenance. Its queues and calendar estimates are superseded by the [current execution index](#current-execution-index); refresh remaining-work estimates before making a new delivery commitment.
+
 **Sequence revised after Codex + eng-review (consolidated patch).** Original sequence had Wks 1-4 over-budgeted ~3x and put A1 server before A3 provenance, despite A3 being a prerequisite for E1 ingestion. Cut to 4 items max for 90 days; everything else moves to days 91-180.
 
 ### Effort & calendar reconciliation
@@ -1091,6 +1130,8 @@ Verified feasible at 152-QA-pair scale, but it requires fine-tuning a 3B-14B bac
 
 #### CS1. PreCompact capture + compact-aware re-injection [SHIPPED 2026-08-03, PR #136]
 Source: AutoCompact (Du et al., autocompact.github.io, 2026-07-30) fine-tunes Qwen3-30B-Coder to call `compact()` itself (judge-guided SFT + GRPO; post-RL it compacts proactively in 58.5% of tasks). Its supervision splits into when-to-compact 24%, **what-to-preserve 53%, how-to-continue 23%**. The when-decision needs a fine-tuned policy model — not hippo's lane (same verdict as LC4). The preserve/continue 76% is external-memory territory: make working state survive compaction independently of summary quality, with no model training.
+
+**Historical design description.** The mechanism and estimate below record the August plan, not the current installation contract. Current source uses PreCompact for derivable working state/compaction records and PostCompact for listed-lesson extraction; see [canonical product facts](docs/product-facts.md) and the README FAQ. Live pre-loss lesson preservation remains separately gated by S6/AZ4-AZ6.
 
 Mechanism (both hook events verified against code.claude.com/docs/en/hooks 2026-08-01):
 - **PreCompact hook** (fires on manual and auto compaction): run `hippo capture` over the tail of the session transcript before the summary is written — decisions, open items, ids, next step, tagged with session id. The transcript parser already exists (`src/capture.ts`); `hippo setup` currently installs only SessionEnd + SessionStart (`src/hooks.ts`), so mid-session compaction is a blind spot today.
@@ -1397,11 +1438,13 @@ A public benchmark whose tasks need knowledge that exists only outside the code 
 #### EI14. Compliance [moved to the Company section in Part X; funding-gated]
 SOC 2 Type II first, then ISO 27001 and ISO 42001; DPA, subprocessor list, SIG/CAIQ answers; FedRAMP only through the self-hosted SKU or a partner.
 
-#### EI15. Business-objective and task-outcome links [planned; EI0/EI5/EI6/EI8, EV7, Z10/Z2b, CW3; added 2026-10-02]
+#### EI15. Business-objective and task-outcome links [planned; hard: EI0/EI2/EI8/EV1/Z10/Z2b; conditional: selected source adapters and EV7; optional producer: CW3; added 2026-10-02]
 Connect permitted task evidence to the business objective the customer wants the work to serve. Extend the existing enterprise connectors and company profile; source systems remain authoritative for objectives, tickets and acceptance.
 
+**Dependency slices.** Use the provider-neutral Z10 delivery/task evidence and Z2b outcome contract with EI2 source permissions, EI8 objective configuration and EV1 edition ownership. Only the customer's required source adapter(s) from EI3-EI7 and applicable EV7 mapping are required; both Jira and Azure DevOps are not mandatory. CW3 contributes Computer-specific receipts when that optional adapter is installed. Ordinary enterprise objective joins and CD14/EV9 acceptance do not require Computer, CW0-CW2, a CLEF backend or an RL learner.
+
 - Configure project objectives and a success-metric contract once: owner, metric definition/unit, eligible work, acceptance evidence, observation window and source. Reuse existing ticket/project metadata and EV7 mappings wherever available. The customer defines value; token usage, activity counts and a model's opinion cannot supply the objective.
-- Join objective → source ticket/task → runtime/session/turn → accepted artifact or independent check → observed outcome, with the applicable delivered memory IDs/versions from Z10/CW3. Keep work acceptance, business results and evidence of memory application separate. A merged PR or task pass cannot credit every delivered memory; ambiguous, missing or delayed evidence stays unknown under Z2b.
+- Join objective → source ticket/task → runtime/session/turn → accepted artifact or independent check → observed outcome, with applicable delivered memory IDs/versions from Z10; include CW3's provider-specific receipts only for Computer work. Keep work acceptance, business results and evidence of memory application separate. A merged PR or task pass cannot credit every delivered memory; ambiguous, missing or delayed evidence stays unknown under Z2b.
 - Version objective/metric mappings and source evidence. Preserve task timing, project/tenant scope and evidence references across retries, compaction and runtime handoffs. A source correction, reopened task, reverted artifact or changed objective updates the derived status with its history intact; unavailable business results do not prevent ordinary scoped memory use.
 - Apply EI2 source permissions to joins and derived reports, including multi-source restrictions, revocation and retention. Reuse the MIT core's task/source/provenance foundations; enterprise objective configuration and cross-source business-outcome joins follow EV1 packaging.
 
@@ -1676,6 +1719,8 @@ What follows for this roadmap:
 
 ### 90-day queue (all of Parts VII-X; review 2026-09-24)
 
+**Historical schedule, superseded for execution.** Preserve the item record and completed decisions; the [current execution index](#current-execution-index) and redesigned Z0 stage order govern new work. The week ranges below are not current delivery commitments.
+
 Each Part's own "0-3 months" added up to about 16-20 weeks of work against 13 calendar weeks. One queue for a solo founder, in order:
 
 1. **Weeks 0-4:**
@@ -1947,11 +1992,13 @@ Extend the shared zero-touch acceptance contract to the enterprise objective, ev
 - A pilot report is produced from a partner's own telemetry, with a holdout group, whatever its result.
 
 ### Estimate
+- **Forecast status (2026-10-02): historical, not re-estimated.** Re-scope the selected partner/source/identity/deployment, remaining work and available capacity under the [current execution index](#current-execution-index) before promising a date. Optional CLEF, skills and Computer work are not general Enterprise v1 prerequisites.
 - **Engineering:** about 16 to 22 weeks for one developer working with an AI assistant, based on the item estimates above. That is longer than the 90-day queue, so v1 lands after it.
 - **Cutting it to a design partner's needs** (one git host, one identity provider, one deployment shape) is the main lever.
 - **Founder-track work** (IP assignment, contracts, insurance, Cyber Essentials) runs in parallel and is not engineering time.
 
 ### What the 90-day queue gains
+**Historical additions to the 2026-09-24 schedule.** Retained for provenance; current priorities and dependency slices come from the [current execution index](#current-execution-index).
 - **Weeks 4-8:** CD13's failure-signature log, since it is small and starts collecting the baseline early. Shipped (schema v46).
 - **Weeks 8-13:**
   - CD11 and CD12, scoped to the first design partner's agent;
@@ -2008,6 +2055,19 @@ The mechanism audit found recency hurts current-fact recall but guards against s
 
 ## Part XIV - 2026-09-25 update: hippo on Kubernetes (Track K8)
 
+**Identifier migration (2026-10-02).** Kubernetes items now use K8.1-K8.8; PKM keeps K1-K6. Legacy bare K1-K8 references mean the old Kubernetes item only when qualified by this track. Old Kubernetes heading anchors remain as aliases; use the new IDs in current work. Historical research and evaluation records are unchanged.
+
+| Legacy Kubernetes reference | Current initiative ID |
+|---|---|
+| Kubernetes/K1 | K8.1 |
+| Kubernetes/K2 | K8.2 |
+| Kubernetes/K3 | K8.3 |
+| Kubernetes/K4 | K8.4 |
+| Kubernetes/K5 | K8.5 |
+| Kubernetes/K6 | K8.6 |
+| Kubernetes/K7 | K8.7 |
+| Kubernetes/K8 | K8.8 |
+
 **Why.** EI10 lists Helm as one line of the VPC tier (line 1331) and nothing is built. The research round (`docs/plans/research-k8s-web-2026-09-25.md`, `research-k8s-papers-2026-09-25.md`, `research-k8s-code-audit-2026-09-25.md`) found three things:
 - **No direct memory competitor ships a Helm chart.** Mem0, Zep/Graphiti and Letta stop at Docker Compose, and Mem0 has an open issue asking for one. Cognee and the community Chroma chart ship single-replica and say so plainly. That is the posture to copy.
 - **There is named demand.** kagent (CNCF Sandbox) has an open issue asking for a memory service (#1256). HolmesGPT and k8sgpt show no memory across incidents.
@@ -2020,7 +2080,9 @@ The mechanism audit found recency hurts current-fact recall but guards against s
 
 **Non-goals until A6.** No multi-writer SQLite (LiteFS, Marmot and cr-sqlite have had no release for 17 to 24 months). No operator or CRD of our own. No hippo-run cluster, since hosting costs money.
 
-#### K1. Make the container honest [planned, first]
+<a id="k1-make-the-container-honest-planned-first"></a>
+
+#### K8.1. Make the container honest [planned, first]
 The code audit found gaps that break any pod today, some of which break `deploy/aml` already:
 - **The image has no local embeddings.** `@huggingface/transformers` is only in `peerDependenciesMeta` (`package.json:86-93`), so `npm ci` in `deploy/aml/Dockerfile` never installs it, despite the header comment. Install it pinned in the image and bake the model in with `scripts/fetch_embedding_model.mjs` at the `HIPPO_MODEL_CACHE` path.
 - **A missing model fails silently.** `src/embeddings.ts:219-227` returns null on a load failure, so a pod runs with embeddings quietly off. Log it and fail `/ready` instead.
@@ -2032,7 +2094,9 @@ The code audit found gaps that break any pod today, some of which break `deploy/
 
 **Success:** the image boots under `restricted`, embeds with no network, and `/ready` goes false when the volume is missing.
 
-#### K2. Single-replica Helm chart [planned, after K1]
+<a id="k2-single-replica-helm-chart-planned-after-k1"></a>
+
+#### K8.2. Single-replica Helm chart [planned, after K8.1]
 - **Chart shape:** a StatefulSet on a `ReadWriteOncePod` volume, `HIPPO_HOME` and the model cache on that volume, and `HIPPO_REQUIRE_AUTH=1` always paired with `--host 0.0.0.0` (the server refuses the bind otherwise, `src/server.ts:3354-3360`).
 - **Values and secrets:** `values.schema.json`, `existingSecret` for keys, optional NetworkPolicy.
 - **Security:** a `restricted` securityContext (non-root, `RuntimeDefault` seccomp, no privilege escalation, read-only root filesystem).
@@ -2041,29 +2105,39 @@ The code audit found gaps that break any pod today, some of which break `deploy/
 
 **Success:** `ct install` passes on a local kind cluster (kind runs Kubernetes inside Docker, free). The same check runs in CI once GitHub Actions billing is back.
 
-#### K3. Consolidation that cannot collide [planned, with K2]
+<a id="k3-consolidation-that-cannot-collide-planned-with-k2"></a>
+
+#### K8.3. Consolidation that cannot collide [planned, with K8.2]
 `/v1/sleep` is loopback-only (`src/server.ts:1247-1263`), and the `hippo sleep` CLI does not check for a live server on the same store (`src/cli.ts:3144-3177`). A separate CronJob pod would therefore open the same database as a second writer.
 - **Chart side:** run the schedule as an in-pod cron that calls `127.0.0.1/v1/sleep`, never as a separate CronJob pod.
 - **Code side:** give `hippo sleep` the same `detectServer` guard that `serve` has, and refuse to run while a server holds the store.
 - SSGM (arXiv 2603.11768) ties drift and leakage to consolidation that has no check before it writes. The sleep run keeps its audit-log row and goes through the conflict checks that already exist.
 
-#### K4. Backup and restore with Litestream [planned, after K2]
+<a id="k4-backup-and-restore-with-litestream-planned-after-k2"></a>
+
+#### K8.4. Backup and restore with Litestream [planned, after K8.2]
 Litestream (v0.5.17, Aug 2026) is the only maintained tool built for this shape. It runs as a native sidecar (GA since Kubernetes v1.33) that streams the WAL to any S3-compatible store, and an initContainer restores the database on first boot. It is an optional value, off by default. This is also EI10's missing backup and restore runbook.
 
 **Success:** delete the volume, reinstall, and the store comes back with the same memory count.
 
-#### K5. Sidecar recipe for one agent [planned, docs only]
+<a id="k5-sidecar-recipe-for-one-agent-planned-docs-only"></a>
+
+#### K8.5. Sidecar recipe for one agent [planned, docs only]
 A pod example with hippo as a native sidecar next to an agent, on its own volume, reached over localhost. It is for a single agent or a dev loop. Two limits go in the doc:
 - the sidecar still needs a key, because the loopback admin fallback (`src/server.ts:645-658`) would give every container in the pod admin rights;
-- fleets use K2's shared service, which is the governed shape the papers favour.
+- fleets use K8.2's shared service, which is the governed shape the papers favour.
 
-#### K6. MCP ecosystem listings [planned, near-zero code]
+<a id="k6-mcp-ecosystem-listings-planned-near-zero-code"></a>
+
+#### K8.6. MCP ecosystem listings [planned, near-zero code]
 - `deploy/toolhive/mcpserver.yaml` using ToolHive's `MCPServer` resource (`toolhive.stacklok.dev/v1beta1`, streamable-http transport).
 - A listing on the MCP registry (registry.modelcontextprotocol.io), which points at the npm package.
 
 Both are discovery, not new plumbing. The registry submission is outward-facing, so Keith approves it before it goes.
 
-#### K7. Incident memory for Kubernetes SRE agents [planned, after K2]
+<a id="k7-incident-memory-for-kubernetes-sre-agents-planned-after-k2"></a>
+
+#### K8.7. Incident memory for Kubernetes SRE agents [planned, after K8.2]
 A thin integration, not new plumbing:
 - the agent calls `hippo remember` when an incident is resolved (root cause, fix, affected resources, outcome);
 - it calls `hippo context` before a new investigation;
@@ -2075,12 +2149,14 @@ Write-time checks are required before any shared fleet. MINJA (2503.03704) poiso
 
 **Success:** a result on AIOpsLab (2501.06706) or ITBench (2502.05352), whose baseline agents resolve 13.8% of SRE scenarios. It uses hippo on against hippo off, the same prompt, and scenario hints stripped. That last part is the Graph Traversal Agent lesson (2606.08590), where a reported gain mostly vanished once the hints were removed. No accuracy claim ships before that ablation.
 
-#### K8. Size from measurement, then scale via A6 [planned, last]
+<a id="k8-size-from-measurement-then-scale-via-a6-planned-last"></a>
+
+#### K8.8. Size from measurement, then scale via A6 [planned, last]
 Resource requests come from profiling hippo's own write, recall and sleep phases (the harness shape in arXiv 2606.06448), not from guesses. Total Recall at What Cost (2608.11879) found serving cost could not be predicted from conversation length. Two limits apply:
 - the rate limiter is an in-memory map per process (`src/rate-limit.ts:40-42`), so N replicas would allow N times the configured rate;
 - more than one replica waits for A6 and EI10, with Postgres and shared rate-limit state.
 
-**Order:** K1, then K2 and K3 together, then K4, K5 and K6, then K7 and K8. K1 is worth doing even if no chart ever ships, because `deploy/aml` has the same gaps.
+**Order:** K8.1, then K8.2 and K8.3 together, then K8.4, K8.5 and K8.6, then K8.7 and K8.8. K8.1 is worth doing even if no chart ever ships, because `deploy/aml` has the same gaps.
 
 
 ---
@@ -2183,6 +2259,7 @@ Stages 1 onward spend plan usage and wait on the founder's go. A rough guess bef
   - these rows are kept for good: sleep, dedupe and merge never retire or delete them.
   - First check, before any code: a real compaction proves the summariser follows the instruction.
   - **PR 1 built, pending merge (2026-09-29, branch `feat/compaction-saves-memories`):** the instruction, the compaction record, the item memories, the keep rule and the own-session filter. Still unmeasured: a real compaction at 250k context, where a `no memories section` log line counts the misses.
+  - **Current implementation status (2026-10-02): merged on master.** The preceding branch note is the dated record. `src/capture.ts` now has `cmdPostCompact` and the real-database pre/post/replay/own-session compaction suites cover record, item and recovery behaviour. These distinguish a pre-compaction snapshot/record from post-compaction lesson extraction. This source check establishes neither universal host coverage nor the large-context live check/task benefit; those remain separate AZ4/AZ6/Z0 evidence requirements. Published-version provenance is recorded separately in [canonical product facts](docs/product-facts.md).
 
 **Workflow adoption [planned].** Use CAE5's `build-eval` workflow to review fresh development families, controls and executable grades around the existing runner. Preserve this locked registration and stage order. Component `hillclimb` runs on separate development data before independently registered task confirmation.
 
@@ -2499,7 +2576,7 @@ The [capability and packaging plan](docs/plans/2026-09-30-cross-platform-memory-
 
 **Native improvement follow-up [planned].** CAE8 evaluates Hippo-owned adapters over each client's supported interface, with actual scoped capture/delivery fixtures. ECC is an isolated research reference/comparator only; no ECC vault interchange or second product memory store is scheduled. Enterprise rollout uses the organisation's managed Hippo configuration.
 
-### AZ4. Automatic memory saves before compaction across platforms [planned; CS1/S6, AZ1/AZ3, CD1; added 2026-10-02]
+### AZ4. Automatic memory saves before compaction across platforms [planned; hard: AZ6 foundation, CS1/S6, CD1; conditional adapters: AZ1/AZ3 per mode; added 2026-10-02]
 
 **Goal.** After one-time installation, store/scope selection and required platform trust, Hippo automatically preserves supported lessons, decisions, corrections and working state before the host loses context. Users should not have to remember to run a save command, maintain a handoff file, watch a token threshold or approve each ordinary memory. Cover every available agent surface Hippo supports, not just ChatGPT and Cursor, through Hippo-owned adapters; record each exact runtime/mode/version separately. The complete named integration and MCP-client inventory below is required scope, with an extensible registration path for other compatible agents under AZ6. Preserve today's working Claude Code capture while extending coverage.
 
@@ -2541,7 +2618,7 @@ All available modes of these products remain in the coverage register. Missing c
 
 **Exit.** Every named current Hippo integration and documented MCP client has an individual implementation/verification entry in AZ6; none remains hidden in an unowned other-agents bucket. For every claimed automatic surface, versioned live evidence shows one-time setup followed by preservation and useful recovery, with no per-compaction command or routine memory review. Where a true pre-compaction hook is absent, state the tested incremental-checkpoint guarantee and its coverage/delay. Missing sources/events remain coverage blockers, and the all-agents goal is not marked complete while available named modes lack a validated route. Existing capture stays available; new adapters/behaviour follow their parent flags, default-freeze and quality gates.
 
-### AZ5. One-time setup and verifiable automatic-capture health [planned; AZ4, CD1, MSG6; added 2026-10-02]
+### AZ5. One-time setup and verifiable automatic-capture health [planned; hard: AZ6 foundation, relevant AZ4 mode, CD1; release gate: MSG6; added 2026-10-02]
 
 - Make the authorised `hippo init` / `hippo setup` or native plugin journey detect supported installed agents, select the store and wire the relevant adapters in one guided setup. Use AZ6's full inventory, including OpenCode/OpenClaw/Pi packages and named MCP clients; replace manual extension-copy/hook-edit journeys with supported one-time installers where possible. Explain package installation versus integration, local versus remote execution and required host trust once. Do not silently wrap binaries, bypass trust, deploy remote scripts or enable customer-data egress from npm postinstall. Discover newly installed agents through an actionable setup/doctor check rather than assuming their hooks are present.
 - Merge/update/uninstall only Hippo-owned configuration; preserve third-party handlers and avoid duplicates across user/project/plugin/imported configuration. Test executable discovery, Windows/macOS/Linux, supported Node/SQLite environments, version upgrades and explicit opt-out. Ordinary tasks and compactions need no repeated flags or save commands after setup.
@@ -2551,15 +2628,19 @@ All available modes of these products remain in the coverage register. Missing c
 
 **Exit.** A new user can complete the documented one-time setup and required trust, see an honest per-agent readiness result, then continue ordinary work without routine memory administration. An enterprise pilot demonstrates the managed route and total setup/recovery burden. Release checks catch any platform or install-only claim that outruns tested capture coverage.
 
-### AZ6. Complete agent inventory and shared capture conformance [planned; AZ1-AZ5, CAE6/CAE7, MSG6; added 2026-10-02]
+### AZ6. Complete agent inventory and shared capture conformance [planned; foundation first; completion: AZ4/AZ5 and applicable AZ1/AZ3 modes; release gates: CAE6/CAE7, MSG6; added 2026-10-02]
 
 **Scope.** Deliver automatic pre-loss memory preservation for all available Hippo-integrated agents and named compatible clients, with an extensible path for others. The dated AZ4 inventory is the starting backlog, not a permanent fixed list. Prioritise the six named framework integrations, named MCP clients and ChatGPT, then the remaining AZ targets; phasing does not remove them from required coverage.
+
+**Foundation milestone [next in the current execution index].** Publish the initial versioned inventory, named owners/next actions, shared S6/AZ4 input/receipt/checkpoint/progress contract and reusable conformance fixtures before new adapter/setup work. Derive it from existing integration source and claims; it does not wait for AZ1-AZ5 to be complete or for every CAE6/CAE7 release probe. AZ4 and AZ5 depend on this foundation slice, not AZ6's final all-agent completion. This milestone is still implementation work, not a claim the registry or automation ships from this wording amendment.
 
 - **One registry, no omitted integrations.** Maintain a versioned product/runtime/mode inventory derived from hook detection, plugin/extension packages, integration recipes, public SDK examples and current README/website/npm claims. For each entry record current integration type, owner, primary interface/version, actual input coverage, native pre/post-compaction versus incremental checkpoint route, before-trim/reset coverage, setup/trust/deployment, canonical store/scope, budgets/delay, tested save/restore evidence, status and next action. Separate shipped integration, planned automation, verified automation and blocked/unsupported modes; unknown is not pass.
 - **Common adapters and fixtures.** Normalize native payloads into the S6/AZ4 receipt/candidate/checkpoint/progress contract while preserving source identity and permission semantics. Reuse one conformance family for early lessons/corrections, automatic/manual repeated compaction, rolling truncation, crash/retry, missing input, offline/busy store, concurrency/forks, wrong tenant/project and resume/cross-agent retrieval. A shared model/provider is not a shared host lifecycle: test the harness that actually owns context.
 - **Live proof and timing.** For every enabled adapter, observe install/trust, real event/source capture, committed memory/checkpoint before loss and actual later delivery. Record asynchronous hook and deletion/pruning races and a maximum validated save delay. Keep fixture-only and live-host verdicts separate. Do not mark a pre-event enum, summary injection, event receipt or successful MCP response as a saved useful memory; test memory eligibility/support independently.
 - **Growing coverage.** Reconcile named support claims with the registry in CI/release review under MSG6, with human review for new product names/aliases and current interfaces. A new named integration automatically creates a preservation/setup verification requirement. Recheck supported client/plugin/SDK upgrades through CAE7. Missing upstream events/source access have an owner, an incremental-route investigation and a compatibility recheck; do not substitute routine manual saves or browser scraping and call the goal complete.
 - **Low-touch core and enterprise.** Use AZ5's one-time project/admin setup and truthful doctor/status results for every adapter, with bounded automatic recovery and exception-based reporting. Preserve shared MIT contracts/basic installers/health plus commercial identity/managed rollout/reporting ownership. Test deployed scripts, remote worker store access and required host trust per environment; after approved setup, users should not curate every memory or operate per-agent save commands.
+
+**Completion milestone.** Populate each foundation entry with the relevant AZ4 capture/recovery and AZ5 setup/health implementation plus live save/restore/delivery evidence. Conditional AZ1/AZ3 adapters apply only to their modes; CAE6/CAE7 and MSG6 gate affected compatibility/release claims. Report the full required inventory, achieved coverage and blocked/unknown entries separately. Missing upstream events or source access remain owned blockers with an incremental-route investigation; do not remove a mode from the denominator to claim universal completion. Preserve checkpoint-before-loss versus post-compaction extraction timing, registered delay/quality bounds, and separate configured, live-compatible and task-benefit status.
 
 **Exit.** The complete inventory agrees with all current support claims; each available claimed automatic mode passes its own save/recover/deliver and burden checks, and every remaining platform gap has an explicit owner/status. Track completion and release wording distinguish achieved coverage from the still-open all-agents goal. Optional rich UI, a particular model backend or a paying-customer request is not a prerequisite for implementing basic preservation on an already supported agent.
 
@@ -2568,6 +2649,8 @@ All available modes of these products remain in the coverage register. Missing c
 AZ4 and AZ6 now hold the explicit per-agent capture inventory, including OpenCode, OpenClaw, Pi, Windsurf/Cascade, Cline, VS Code/Copilot, Gemini CLI and the existing Devin/Grok/consumer targets. Implement native hooks where verified and durable incremental checkpoints where supported; retain actual source gaps as owned blockers. Existing MCP recipes remain useful for tool access while lifecycle automation is built. This supersedes the earlier Cline/VS Code demand-only adapter wording for basic automatic preservation; CD3's visual extension remains optional.
 
 ### Next 90 days: gated milestones
+
+**Supporting stage detail, not a second active queue.** These 2026-09-30 milestones retain the existing protocol and gates. The [current execution index](#current-execution-index) orders current work and the AZ6 foundation precedes AZ4/AZ5 delivery; calendar wording is not a result or refreshed capacity forecast.
 
 1. Extend Z10, test capture/recovery fixtures and prototype S0/S9 on development data while completing Z0 stage 0. Then smoke, calibration, freeze and the scored write-up under the existing plan-usage go. Publish whatever the verdict is; prototypes need not wait for that write-up, and the calendar is not a result.
 2. Prototype S0/S9 on the existing store, with equal-budget chunk controls, evidence scoring and the retrieval floor. Dogfood development data without spending held-out sets.
@@ -2935,7 +3018,9 @@ Primary implementation references: [CLEF announcement](https://blog.cloudflare.c
 
 **Exit.** A supported-surface matrix and end-to-end fixtures prove configured decisions reach the actual host, disabled paths preserve existing behaviour, permissions/tokens agree, and failure/capture gaps are observable.
 
-### CLF4. Query-conditioned ranking and evidence packing [planned; CLF0-CLF3, S1/S2, LC3]
+### CLF4. Query-conditioned ranking and evidence packing [planned; hard: CLF0/CLF1/CLF12 comparison slices; rollout gate: CLF3; baselines: S1/native/Jev, conditional S2/LC3]
+
+**Experiment versus rollout.** A development-only matched-input comparison can start with the shared schema/transport, quota/native-fallback and independent-eval slices of CLF0/CLF1/CLF12. It does not require full all-surface integration, an optional S2 dense stream or LC3's future training data. Complete the applicable CLF3 compatibility/delivery path and CLF12 confirmation before enabling a supported backend; retain Z0/default gates and the full CLF integration scope. S1's shipping/native baseline remains available without completing every ablation.
 
 - Start with the measured Jev request shape: query plus the same eligible top-40 pool and one relevance question per candidate, at matched content/input bounds. Compare native shipping order, available local cross-encoder, pinned Jev, CLEF-flash and CLEF in one runner; include the LC3 small learned baseline only when its data floor is met.
 - Measure ranking and the real rendered token-budget cut separately. Preserve original scores/order, deterministic tie fallback and all evidence/condition text needed for delivery. Smaller context must retain the sources needed for an answer; evaluate any-evidence and all-evidence coverage, multi-hop/temporal cases and per-category regressions.

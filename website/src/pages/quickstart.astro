@@ -2,11 +2,11 @@
 import Base from '../layouts/Base.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
-import { site } from '../content/site';
+import { getStarted, site } from '../content/site';
 
 const title = 'hippo quickstart: memory for Claude Code, Cursor and MCP';
 const description =
-  'Install hippo in two commands: persistent local memory for Claude Code, Codex, Cursor, OpenClaw, OpenCode and Pi, plus an MCP server for other clients.';
+  'Install hippo and initialise one project, then complete your agent’s setup and required trust. Automatic capture and compaction coverage depend on the integration.';
 
 // What hippo init patches per agent: README "Framework Integrations".
 const integrations = [
@@ -58,10 +58,11 @@ const howTo = {
           <p class="mt-5 max-w-2xl leading-relaxed text-zinc-400">
             hippo is an MIT-licensed npm package with zero runtime dependencies. Install it, run <code>hippo init</code> in a project, and it installs hooks for Claude Code and OpenCode, adds 2 hooks to Codex's <code>hooks.json</code> when Codex is installed, and adds instructions to an existing <code>AGENTS.md</code> for Codex, Cursor, OpenClaw and Pi.
           </p>
+          <p class="mt-4 max-w-2xl text-sm leading-relaxed text-zinc-400">{getStarted.notice} <a class="link" href="/faq/#does-installation-automatically-save-before-compaction">Automatic-save coverage</a></p>
         </div>
         <!-- Setup-at-a-glance card fills the hero's right side on wide viewports. -->
-        <aside class="hidden w-[19rem] shrink-0 rounded-2xl border border-white/8 bg-term-bg p-5 lg:block" aria-label="Setup at a glance: 3 steps, about 2 minutes">
-          <p class="border-b border-white/5 pb-3 font-mono text-xs uppercase tracking-wider text-acc-cyan">3 steps &middot; ~2 minutes</p>
+        <aside class="hidden w-[19rem] shrink-0 rounded-2xl border border-white/8 bg-term-bg p-5 lg:block" aria-label="Setup at a glance: install, initialise and try the memory loop">
+          <p class="border-b border-white/5 pb-3 font-mono text-xs uppercase tracking-wider text-acc-cyan">Install &middot; initialise &middot; try the loop</p>
           <ol class="mt-4 space-y-3.5">
             {heroSteps.map((step) => (
               <li class="grid grid-cols-[1.5rem_1fr] gap-x-2">

@@ -1,8 +1,8 @@
 # Hippo Brain Observatory — Roadmap
 
-## Next 90 days (2026-05-23 →) — priority queue
+## Operational follow-ups
 
-Cross-referenced from `ROADMAP-RESEARCH.md` §"Next 90 days". The full execution roadmap (Tracks A-I, sequencing, bets, non-goals) lives there. This file owns the operational post-ship tail.
+The governing priorities, readiness and dependency types live in [ROADMAP.md's current execution index](ROADMAP.md#current-execution-index). This file owns the operational post-ship tail. The May-August queues and dated issue notes below are retained history, not a competing active schedule. `ROADMAP-RESEARCH.md` is a compatibility pointer to the consolidated roadmap.
 
 ### Memory scope isolation (v39, merged dc7d3ba / PR #117) — post-ship tail
 

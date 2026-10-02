@@ -22,6 +22,8 @@ npm install -g hippo-memory && hippo init
 
 Setting up every git repo under a folder in one go is a second step. The [Quick start](#quick-start) says what it changes, then gives the command.
 
+Package installation alone does not enable automatic preservation on every agent. Complete the documented setup and required host trust; capture and compaction coverage depend on the integration. See [automatic-save coverage](#does-installation-automatically-save-before-compaction).
+
 Having an AI agent install it? Point it at [llms-install.md](llms-install.md): it installs, wires hippo into the agents it finds, and verifies with `hippo doctor`.
 
 ```
@@ -909,7 +911,7 @@ The rows from where the data lives to the graph were checked against each tool's
 | Feature | Hippo | [MemPalace](https://github.com/milla-jovovich/mempalace) | [Mem0](https://github.com/mem0ai/mem0) | [Basic Memory](https://github.com/basicmachines-co/basic-memory) | [gbrain](https://hermesatlas.com/projects/garrytan/gbrain) | [Zep](https://www.getzep.com/) | [Letta](https://github.com/letta-ai/letta-code) | [Cognee](https://www.cognee.ai/) | [Memoria](https://github.com/matrixorigin/Memoria) | [EverMind](https://evermind.ai/) |
 |---------|-------|-----------|------|-------------|--------|-----|-------|--------|---------|----------|
 | Where your data lives | Your machine or your server (SQLite) | Your machine (ChromaDB by default) | Where you run it, or Mem0's cloud | Your machine (Markdown files); cloud optional | Your machine (PGLite) or your Postgres | Zep's cloud (your own cloud on Enterprise) | Your machine; cloud backup with /login | Your machine by default; Cognee Cloud optional | Memoria Cloud, or self-hosted (Docker or embedded) | Your machine by default; EverOS Cloud optional |
-| Managed multi-user service | No (self-hosted, with tenants and API keys; the commercial edition adds hosted SaaS) | ? | Yes (hosted platform) | Yes (Teams) | ? (self-hosted server with OAuth) | Yes (Zep Cloud) | ? (cloud backup with /login) | Yes (Cognee Cloud) | ? (Memoria Cloud) | Yes (EverOS Cloud) |
+| Managed multi-user service | No (self-hosted, with tenants and API keys; hosted SaaS is planned for the commercial edition) | ? | Yes (hosted platform) | Yes (Teams) | ? (self-hosted server with OAuth) | Yes (Zep Cloud) | ? (cloud backup with /login) | Yes (Cognee Cloud) | ? (Memoria Cloud) | Yes (EverOS Cloud) |
 | Needs an account or model key | No | No (core path) | Yes (model key; account for the platform) | No (account for the cloud) | No (keyless mode) | Yes (Zep account; Graphiti needs a model key) | Yes (your own model keys) | No (local) | ? (account for Memoria Cloud) | Yes (an LLM key, OpenRouter) |
 | License | MIT | MIT | Apache-2.0 | AGPL-3.0 | MIT | Proprietary cloud (Graphiti: Apache-2.0) | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 (EverOS) + cloud |
 | Runtime | Node.js 22.16+, no runtime deps | Python 3.9+ (ChromaDB by default) | Python or Node.js (server: Postgres + pgvector) | Python (SQLite by default) | Bun (PGLite or Postgres + pgvector) | Managed service (Graphiti: Python + a graph database) | Node.js (npm) | Python (graph and vector stores, or Postgres) | A CLI binary + a MatrixOne database | Python (SQLite + LanceDB) |
@@ -1068,6 +1070,14 @@ Run `npm install -g hippo-memory`, then `hippo init` in the project. If the proj
 
 `hippo init` detects Claude Code, Codex, Cursor, OpenClaw, OpenCode and Pi. It installs hooks for Claude Code and OpenCode, adds 2 hooks to Codex's `hooks.json` when Codex is installed (Codex runs them once you trust them in `/hooks`), and adds instructions to an existing `AGENTS.md` for Codex, Cursor, OpenClaw and Pi. It only patches instruction files that already exist. Any MCP client can use the [MCP server](#mcp-server), and other tools can call the CLI or the HTTP API that `hippo serve` starts.
 
+### Does installation automatically save before compaction?
+
+Package installation alone does not enable automatic preservation on every agent. Complete the documented setup and required host trust; capture and compaction coverage depend on the integration.
+
+With the Claude Code hooks or native plugin configured, PreCompact saves a derivable working-state snapshot and a compaction record; PostCompact extracts the lessons listed in the compaction summary. A snapshot, a compaction record and a useful memory are different outputs, and post-compaction extraction is not a guarantee that every earlier lesson was saved before loss. Hippo's Codex hooks currently provide prompt delivery and post-compaction re-injection, with one-time trust in `/hooks`; they install no PreCompact save hook. Codex session-end capture requires the opt-in wrapper. MCP tool access and instruction files alone do not provide automatic lifecycle capture.
+
+Follow the [integration recipes](https://github.com/kitfunso/hippo-memory/tree/master/integrations) for the exact agent and mode. Automatic pre-loss preservation across all supported agents is planned under AZ4-AZ6 in the [roadmap](https://github.com/kitfunso/hippo-memory/blob/master/ROADMAP.md#current-execution-index); it is not a universal install-only capability today.
+
 ### Can I use hippo as an MCP memory server?
 
 Yes. `hippo mcp` runs the server over stdio, and `npx -y hippo-memory mcp` runs it without a global install. Add it to the MCP config of Claude Desktop, Cursor, Windsurf (now Devin Desktop), Cline or any other client (example [above](#mcp-server)); in Claude Code, run `claude mcp add hippo-memory -- hippo mcp`. The agent gets tools such as `hippo_recall`, `hippo_remember` and `hippo_outcome`.
@@ -1125,9 +1135,9 @@ The interesting problems:
 
 ## Open source and commercial
 
-Hippo is open core, and the line is drawn by who pays. Everything an individual developer or a self-hosted team needs is in this repository under MIT: the CLI, the MCP server, hooks, connectors, the dashboard, tenants, API keys, roles, per-key scope grants, the audit log and zero-touch memory. Code published here stays MIT and stays here.
+Hippo is open core. This repository provides the MIT core for individual developers and self-hosted teams: the CLI, the MCP server, supported hooks and adapters, connectors, the dashboard, tenants, API keys, admin/member roles, per-key scope grants and the audit log. Automatic capture and delivery depend on the configured integration; the all-agent low-touch acceptance work remains planned. Code published here stays MIT and stays here.
 
-A commercial edition for larger companies ships as a separate package under a commercial licence from KITFUNSO LTD. It adds SSO (OIDC and SAML sign-in), SCIM, an org admin view, the pilot report and telemetry join, SIEM export of the audit log, offline licence keys, hosted SaaS, and support with an SLA. Pull requests for those features belong there, not here; see [CONTRIBUTING.md](CONTRIBUTING.md).
+The commercial edition is planned; its private repository is a scaffold, not a released enterprise product. It is intended for larger companies as a separate package under a commercial licence from KITFUNSO LTD. Planned capabilities include SSO (OIDC and SAML sign-in), SCIM, organisation/team/project policy, an org admin view, the pilot report and telemetry join, SIEM export of the audit log, offline licence keys, hosted SaaS, and support with an SLA. Pull requests implementing those commercial features belong there; see [CONTRIBUTING.md](CONTRIBUTING.md). Release availability and independently verified benefit are separate milestones in the [roadmap](https://github.com/kitfunso/hippo-memory/blob/master/ROADMAP.md#current-execution-index).
 
 ## License
 

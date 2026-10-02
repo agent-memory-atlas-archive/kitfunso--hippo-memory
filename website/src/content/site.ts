@@ -10,15 +10,20 @@ import { REPO, readmeComparison, readmeFaq } from './readme';
 
 export { REPO };
 
+export const enterprise = {
+  status: 'Planned commercial edition',
+  availability: 'The commercial edition is planned; its private repository is a scaffold, not a released enterprise product.',
+} as const;
+
 export const site = {
   name: 'hippo',
   pkg: 'hippo-memory',
-  version: pkg.version, // npm-published hippo-memory version, imported at build time from the repo-root package.json
+  version: pkg.version, // Build-source version; publication is verified separately.
   positioning: 'memory for AI agents that learns what is wrong', // page title and hero eyebrow
   // Hero headline, split for accent emphasis: what works on day one leads.
   tagline: { lead: 'Local memory for', accent: 'the agents you already use.' },
   description:
-    "Hippo keeps your coding agents' memories in SQLite on your machine. Search needs no model or network call. hippo init installs hooks for Claude Code and OpenCode, adds 2 hooks to Codex's hooks.json when Codex is installed, and adds instructions to an existing AGENTS.md for Codex, Cursor, OpenClaw and Pi; any MCP client can connect too. Mark a memory wrong and it ranks lower; run hippo supersede and the old fact leaves recall.",
+    "Hippo keeps your coding agents' memories in SQLite on your machine. Search needs no model or network call. hippo init installs hooks for Claude Code and OpenCode, adds 2 hooks to Codex's hooks.json when Codex is installed (requiring one-time trust), and adds instructions to an existing AGENTS.md for Codex, Cursor, OpenClaw and Pi; any MCP client can connect too. Capture and compaction coverage depend on the integration. Mark a memory wrong and it ranks lower; run hippo supersede and the old fact leaves recall.",
   installCmd: 'npm install -g hippo-memory',
   initCmd: 'hippo init',
   // Every page that offers the scan states what it changes before the command.
@@ -181,6 +186,7 @@ export const getStarted = {
   kicker: 'Get started',
   heading: 'Start in one project.',
   body: 'Install it, then run init inside one repo. This is everything init changes on your machine.',
+  notice: 'Package installation alone does not enable automatic preservation on every agent. Complete the documented setup and required host trust; capture and compaction coverage depend on the integration.',
   steps: [site.installCmd, site.initCmd],
   changes: [
     'A .hippo/ store in the project. On the first run it learns from the last 30 days of git history.',
