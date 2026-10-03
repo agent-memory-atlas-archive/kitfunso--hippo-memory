@@ -9,7 +9,7 @@ import { runAll, planRuns, validateTasks, preflight, cacheTaskRepos } from '../s
 import { usageFromResult, isUsageLimit, transcriptWork } from '../scripts/token-eval/records.mjs';
 import { ARM_SEEDS } from '../scripts/token-eval/arms.mjs';
 import { ancestorInstructionFiles } from '../scripts/token-eval/homes.mjs';
-import { parseRuns, analyze } from '../scripts/token-eval/ab-analyze.mjs';
+import { validateCorpus, validateRecord } from './fixtures/z0-contract';
 import { loadAllEntries } from '../src/store.js';
 
 const FAKE = resolve(__dirname, 'fixtures', 'fake-claude.mjs');
@@ -26,6 +26,8 @@ afterEach(() => {
   }
   while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true });
 });
+// Long sync tests starve the worker's RPC; a macrotask turn between tests lets its replies through.
+afterEach(() => new Promise((r) => setTimeout(r, 0)));
 
 const tmp = (prefix: string): string => {
   const d = mkdtempSync(join(tmpdir(), prefix));
@@ -90,7 +92,7 @@ function makeCarryRepo(): FixtureRepo & { base2: string } {
   return { repo: r.repo, base, base2, fix: git('rev-parse', 'HEAD') };
 }
 
-const task = (r: FixtureRepo, id: string, prompt: string, extra: Record<string, string> = {}) => ({ id, baseRef: r.base, fixRef: r.fix, prompt, testFiles: ['test.js'], test: 'node test.js', ...extra });
+const task = (r: FixtureRepo, id: string, prompt: string, extra: Record<string, string> = {}) => ({ id, kind: 'no-lesson', baseRef: r.base, fixRef: r.fix, prompt, testFiles: ['test.js'], test: 'node test.js', ...extra });
 const readRecords = (out: string) => readFileSync(join(out, 'runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 /** Every record whose session never gave a result carries these, null rather than absent. */
 const NO_SESSION = { resolved: false, usage: null, costUsd: null, turns: null, toolCalls: null, fileReads: null, shellReads: null, repeatedErrors: null, sessionId: null, transcriptFound: false, hippo: null, limitRetries: 0 };
@@ -120,8 +122,8 @@ describe('Z0 runner plan and reads', () => {
   });
 
   it('plans lockstep steps, position-major, rotating the arm order over the active arms', () => {
-    const t = { id: 't' };
-    const spec = { sequences: [{ id: 's1', tasks: [t, t, t] }, { id: 's2', tasks: [t, t] }] };
+    const t = (id: string) => ({ id, kind: 'no-lesson' });
+    const spec = { sequences: [{ id: 's1', fixedOrder: true, tasks: [t('a'), t('b'), t('c')] }, { id: 's2', fixedOrder: true, tasks: [t('d'), t('e')] }] };
     const steps = planRuns(spec, ['A0', 'A1', 'A2', 'A5']);
     const keys = steps.map((s: { sequence: { id: string }; arm: string; seed: number; position: number }) => `${s.sequence.id}|${s.arm}|${s.seed}|${s.position}`);
     expect(new Set(keys).size).toBe(keys.length);
@@ -160,7 +162,7 @@ describe('Z0 runner plan and reads', () => {
     const dir = tmp('ab-run-reads-');
     const file = join(dir, 't.jsonl');
     writeFileSync(file, cases.map(([name, input], i) => JSON.stringify({ message: { content: [{ type: 'tool_use', id: `t${i}`, name, input }] } })).join('\n'));
-    const work = transcriptWork(file, new Set());
+    const work = transcriptWork([file], new Set());
     const shells = cases.filter(([n, , counted]) => counted && n !== 'Read' && n !== 'Grep').length;
     expect(work).toMatchObject({ toolCalls: cases.length, fileReads: cases.filter(([, , c]) => c).length, shellReads: shells });
   });
@@ -187,7 +189,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const dump = join(dumpDir, 'env.jsonl');
     writeFileSync(dumpJs, "require('fs').appendFileSync(process.argv[2], JSON.stringify(process.env) + '\\n');\n");
     const dumpCmd = `node "${dumpJs}" "${dump}"`;
-    const spec = validateTasks({ sequences: [{ id: 'seqA', cluster: 'repoA', repo: r.repo, tasks: [task(r, 'a1', 'FIX add in lib.js', { setup: dumpCmd, test: `${dumpCmd} && node test.js` }), task(r, 'a2', 'look around add in lib.js only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqA', cluster: 'repoA', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'FIX add in lib.js', { setup: dumpCmd, test: `${dumpCmd} && node test.js` }), task(r, 'a2', 'look around add in lib.js only')] }] });
     await run(spec, ['A0', 'A1', 'A2', 'A5'], out);
     const childEnvs = readFileSync(dump, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(childEnvs).toHaveLength(8);
@@ -260,8 +262,8 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     expect(ancestorInstructionFiles(join(out, 'runs', 'seqA', 'A2', 'seed1'), { stopAt: out })).toEqual([]);
     expect(JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8'))).toHaveLength(records.length);
 
-    const result = analyze(parseRuns(readFileSync(join(out, 'runs.jsonl'), 'utf8')), { control: 'A0' });
-    expect(result.comparisons.map((c: { arm: string }) => c.arm).sort()).toEqual(['A1', 'A2', 'A5']);
+    expect(validateCorpus(records, JSON.parse(readFileSync(join(out, 'plan.json'), 'utf8')))).toEqual([]);
+    for (const x of records) expect(x).toMatchObject({ schema: 'z0-record/1', tool: 'claude-code', set: 'N', kind: 'no-lesson', lessons: [], repo: r.repo });
   }, 240_000);
 
   it('carries instruction files the agent wrote to the next task, merged onto the new base', async () => {
@@ -269,7 +271,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const r = makeCarryRepo();
     const out = tmp('ab-run-carry-');
     const setup = `node -e "require('fs').writeFileSync('CLAUDE.local.md','from setup')"`;
-    const spec = validateTasks({ sequences: [{ id: 'seqC', cluster: 'c', repo: r.repo, tasks: [
+    const spec = validateTasks({ sequences: [{ id: 'seqC', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [
       task(r, 'c1', 'FIX CARRY', { setup }), task(r, 'c2', 'DELETE', { baseRef: r.base2 }), task(r, 'c3', 'look around only', { baseRef: r.base2 }),
     ] }] });
     await run(spec, ['A0', 'A1', 'A2', 'A5'], out);
@@ -321,9 +323,10 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-setup-fail-');
-    const spec = validateTasks({ sequences: [{ id: 'seqE', cluster: 'repoE', repo: r.repo, tasks: [task(r, 'e1', 'look around only'), task(r, 'e2', 'FIX add in lib.js', { setup: 'exit 1' })] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqE', cluster: 'repoE', repo: r.repo, fixedOrder: true, tasks: [task(r, 'e1', 'look around only'), task(r, 'e2', 'FIX add in lib.js', { setup: 'exit 1' })] }] });
     await run(spec, ['A1'], out);
     const e2 = readRecords(out).find((x) => x.taskId === 'e2');
+    validateRecord(e2);
     expect(e2).toMatchObject({ ...NO_SESSION, invalid: 'setup', leak: false, carryMerges: null, carryUnionMerges: null, carryDeleteKept: null, homesAtStart: null });
     expect(existsSync(join(out, 'raw', 'seqE', 'A1', 'seed1', 'e2.json'))).toBe(false);
     expect(existsSync(join(out, 'raw', 'seqE', 'A1', 'seed1', 'e2.setup.txt'))).toBe(true);
@@ -346,7 +349,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-crash-');
-    await run(validateTasks({ sequences: [{ id: 'seqR', cluster: 'c', repo: r.repo, tasks: [task(r, 'r1', 'look around only'), task(r, 'r2', 'CRASH')] }] }), ['A0'], out);
+    await run(validateTasks({ sequences: [{ id: 'seqR', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'r1', 'look around only'), task(r, 'r2', 'CRASH')] }] }), ['A0'], out);
     const r2 = readRecords(out).find((x) => x.taskId === 'r2');
     expect(r2).toMatchObject({ ...NO_SESSION, invalid: 'no-result', leak: false, carryMerges: 0 });
     expect(r2.agentError).toMatch(/claude exited 3/);
@@ -356,7 +359,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-notranscript-');
-    await run(validateTasks({ sequences: [{ id: 'seqT', cluster: 'c', repo: r.repo, tasks: [task(r, 't1', 'look around only'), task(r, 't2', 'FIX NOTRANSCRIPT')] }] }), ['A0'], out);
+    await run(validateTasks({ sequences: [{ id: 'seqT', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 't1', 'look around only'), task(r, 't2', 'FIX NOTRANSCRIPT')] }] }), ['A0'], out);
     const [t1, t2] = ['t1', 't2'].map((id) => readRecords(out).find((x) => x.taskId === id));
     expect(t2).toMatchObject({ ...NO_SESSION, sessionId: expect.any(String), invalid: 'no-transcript', leak: false });
     expect(t1.invalid).toBe(null);
@@ -368,23 +371,24 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const gold = '// add must return the sum of both of its arguments';
     const r = makeRepo(gold);
     const out = tmp('ab-run-leak-');
-    const spec = validateTasks({ sequences: [{ id: 'seqK', cluster: 'c', repo: r.repo, tasks: [task(r, 'k1', `look around PLANT:${gold}`), task(r, 'k2', 'FIX add in lib.js')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqK', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'k1', `look around PLANT:${gold}`), task(r, 'k2', 'FIX add in lib.js')] }] });
     await run(spec, ['A2'], out);
     expect(loadAllEntries(join(out, 'runs', 'seqK', 'A2', 'seed1', 'work', '.hippo')).some((e: { content: string }) => e.content.includes(gold))).toBe(true);
     const [k1, k2] = readRecords(out);
     expect(k1).toMatchObject({ taskId: 'k1', invalid: null, leak: false });
+    for (const x of [k1, k2]) validateRecord(x);
     expect(k2).toMatchObject({ ...NO_SESSION, taskId: 'k2', invalid: 'leak', leak: true, agentError: null, carryMerges: 0, carryUnionMerges: 0, carryDeleteKept: 0, homesAtStart: null });
     for (const f of ['k2.json', 'k2.test.txt']) expect(existsSync(join(out, 'raw', 'seqK', 'A2', 'seed1', f)), f).toBe(false);
   }, 60_000);
 
-  it('an instruction file the agent wrote above work/ voids the next session without running it, and the run goes on', async () => {
+  it('an instruction file the agent wrote above work/ voids its own cell, skips every later session, and the run goes on', async () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-ancestor-');
-    const spec = validateTasks({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, tasks: [task(r, 'a1', 'ESCAPE look around'), task(r, 'a2', 'FIX add in lib.js'), task(r, 'a3', 'look around only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'ESCAPE look around'), task(r, 'a2', 'FIX add in lib.js'), task(r, 'a3', 'look around only')] }] });
     await run(spec, ['A1'], out);
     const [a1, a2, a3] = readRecords(out);
-    expect(a1).toMatchObject({ taskId: 'a1', invalid: null });
+    expect(a1).toMatchObject({ taskId: 'a1', invalid: 'ancestor-instructions', resolved: false, usage: null, toolCalls: null });
     for (const x of [a2, a3]) expect(x).toMatchObject({ ...NO_SESSION, invalid: 'ancestor-instructions', leak: false, agentError: null });
     const raw = join(out, 'raw', 'seqA', 'A1', 'seed1');
     expect(existsSync(join(raw, 'a2.json'))).toBe(false);
@@ -396,21 +400,22 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const r = makeRepo();
     const out = tmp('ab-run-ancestor-limit-');
     process.env.FAKE_CLAUDE_LIMIT_ONCE = join(out, 'limit-hit');
-    const spec = validateTasks({ sequences: [{ id: 'seqB', cluster: 'c', repo: r.repo, tasks: [task(r, 'b1', 'look around only'), task(r, 'b2', 'LIMIT ESCAPE FIX add in lib.js')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqB', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'b1', 'look around only'), task(r, 'b2', 'LIMIT ESCAPE FIX add in lib.js')] }] });
     await run(spec, ['A0'], out, { limitWaitMs: 0 });
     const [b1, b2] = readRecords(out);
     expect(b1).toMatchObject({ invalid: null });
     expect(b2).toMatchObject({ taskId: 'b2', invalid: 'ancestor-instructions', limitRetries: 1, resolved: false, usage: null, toolCalls: null });
   }, 60_000);
 
-  it.skipIf(process.platform === 'win32')('an agent that deletes its own work dir is graded, not abandoned, and the run goes on', async () => {
+  it.skipIf(process.platform === 'win32')('an agent that deletes its own work dir voids that cell and the run goes on', async () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-rmwork-');
-    const spec = validateTasks({ sequences: [{ id: 'seqW', cluster: 'c', repo: r.repo, tasks: [task(r, 'w1', 'FIX RMWORK'), task(r, 'w2', 'FIX add in lib.js')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqW', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'w1', 'FIX RMWORK'), task(r, 'w2', 'FIX add in lib.js')] }] });
     await run(spec, ['A1'], out);
     const [w1, w2] = readRecords(out);
-    expect(w1).toMatchObject({ taskId: 'w1', invalid: null, resolved: false });
+    // Deleting work/ deletes its .git, so the runner's own git fails after the session (README reading 11).
+    expect(w1).toMatchObject({ taskId: 'w1', invalid: 'workspace', resolved: false, usage: null, costUsd: null, turns: null, toolCalls: null, fileReads: null, wallMs: null, acceptancePassed: null, lessons: [] });
     expect(w2).toMatchObject({ taskId: 'w2', invalid: null, resolved: true });
   }, 60_000);
 
@@ -418,7 +423,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-late-init-');
-    await run(validateTasks({ sequences: [{ id: 'seqN', cluster: 'c', repo: r.repo, tasks: [task(r, 'n1', 'look around only', { setup: 'exit 1' }), task(r, 'n2', 'look around only')] }] }), ['A2'], out);
+    await run(validateTasks({ sequences: [{ id: 'seqN', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'n1', 'look around only', { setup: 'exit 1' }), task(r, 'n2', 'look around only')] }] }), ['A2'], out);
     const [n1, n2] = readRecords(out);
     expect(n1).toMatchObject({ invalid: 'setup' });
     expect(n2).toMatchObject({ invalid: null, transcriptFound: true });
@@ -432,7 +437,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const r = makeRepo();
     const out = tmp('ab-run-limit-out-');
     process.env.FAKE_CLAUDE_LIMIT_ALWAYS = '1';
-    const spec = validateTasks({ sequences: [{ id: 'seqX', cluster: 'c', repo: r.repo, tasks: [task(r, 'x1', 'LIMIT FIX add in lib.js'), task(r, 'x2', 'look around only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqX', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'x1', 'LIMIT FIX add in lib.js'), task(r, 'x2', 'look around only')] }] });
     await expect(run(spec, ['A0'], out, { limitWaitMs: 0, limitMaxWaits: 0 })).rejects.toThrow(/seqX x1 A0 seed1: still at the plan limit after 0 waits/);
     expect(existsSync(join(out, 'runs.jsonl'))).toBe(false);
     expect(existsSync(join(out, 'raw', 'seqX', 'A0', 'seed1', 'x1.test.txt'))).toBe(false);
@@ -445,7 +450,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const once = join(out, 'setup-ran');
     process.env.FAKE_CLAUDE_LIMIT_ONCE = join(out, 'limit-hit');
     const setup = `node -e "const f=require('fs');if(f.existsSync(process.argv[1]))process.exit(1);f.writeFileSync(process.argv[1],'')" "${once}"`;
-    const spec = validateTasks({ sequences: [{ id: 'seqS', cluster: 'c', repo: r.repo, tasks: [task(r, 's1', 'LIMIT FIX add in lib.js', { setup }), task(r, 's2', 'look around only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqS', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 's1', 'LIMIT FIX add in lib.js', { setup }), task(r, 's2', 'look around only')] }] });
     await expect(run(spec, ['A0'], out, { limitWaitMs: 0 })).rejects.toThrow(/setup failed on the usage-limit rerun/);
     expect(existsSync(join(out, 'runs.jsonl'))).toBe(false);
   }, 60_000);
@@ -454,7 +459,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     isolate();
     const r = makeRepo();
     const out = tmp('ab-run-limit-');
-    const spec = validateTasks({ sequences: [{ id: 'seqL', cluster: 'repoL', repo: r.repo, tasks: [task(r, 'l1', 'LIMIT FIX add in lib.js'), task(r, 'l2', 'look around only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqL', cluster: 'repoL', repo: r.repo, fixedOrder: true, tasks: [task(r, 'l1', 'LIMIT FIX add in lib.js'), task(r, 'l2', 'look around only')] }] });
     process.env.FAKE_CLAUDE_LIMIT_ONCE = join(out, 'limit-hit');
     await run(spec, ['A0'], out, { limitWaitMs: 0 });
     const records = readRecords(out);
@@ -470,7 +475,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const r = makeCarryRepo();
     const carried = tmp('ab-run-limit-carry-');
     process.env.FAKE_CLAUDE_LIMIT_ONCE = join(carried, 'limit-hit');
-    const spec = (first: string, second: string) => validateTasks({ sequences: [{ id: 'seqL', cluster: 'c', repo: r.repo, tasks: [task(r, 'l1', first), task(r, 'l2', second, { baseRef: r.base2 })] }] });
+    const spec = (first: string, second: string) => validateTasks({ sequences: [{ id: 'seqL', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'l1', first), task(r, 'l2', second, { baseRef: r.base2 })] }] });
     await run(spec('CARRY', 'LIMIT look around'), ['A1'], carried, { limitWaitMs: 0 });
     expect(readRecords(carried)[1]).toMatchObject({ taskId: 'l2', limitRetries: 1 });
     const agents = rawResult(carried, 'seqL', 'A1', 'l2').files['AGENTS.md'];
@@ -494,7 +499,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const memDir = join(realHome, '.claude', 'projects', 'some-project', 'memory');
     mkdirSync(memDir, { recursive: true });
     writeFileSync(join(memDir, 'answer.md'), `---\nname: answer\ntype: project\n---\n${sentinel}\n`);
-    const spec = validateTasks({ sequences: [{ id: 'seqI', cluster: 'repoI', repo: r.repo, tasks: [task(r, 'i1', 'FIX add in lib.js'), task(r, 'i2', 'look around only')] }] });
+    const spec = validateTasks({ sequences: [{ id: 'seqI', cluster: 'repoI', repo: r.repo, fixedOrder: true, tasks: [task(r, 'i1', 'FIX add in lib.js'), task(r, 'i2', 'look around only')] }] });
     await run(spec, ['A2'], out);
     expect(existsSync(join(realHome, '.claude', 'settings.json'))).toBe(false);
     const store = join(out, 'runs', 'seqI', 'A2', 'seed1', 'work', '.hippo');
@@ -510,7 +515,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     for (const f of readdirSync(src)) writeFileSync(join(scriptsDir, f), readFileSync(join(src, f)));
     const r = makeRepo();
     const tasksFile = join(scratch, 'tasks.json');
-    writeFileSync(tasksFile, JSON.stringify(validateTasks({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] })));
+    writeFileSync(tasksFile, JSON.stringify(validateTasks({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] })));
     expect(existsSync(join(scratch, 'dist'))).toBe(false);
     const cli = (extra: string[], env: Record<string, string>) => spawnSync(process.execPath, [join(scriptsDir, 'ab-run.mjs'), '--tasks', tasksFile, '--out', join(scratch, 'out'), ...extra], { encoding: 'utf8', env: { ...process.env, ...env } });
     const dry = cli(['--dry-run'], { Z0_ANCESTOR_STOP: scratch });
@@ -539,7 +544,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const scratch = tmp('ab-run-flags-');
     const r = makeRepo();
     const tasksFile = join(scratch, 'tasks.json');
-    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
+    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
     const cli = (...extra: string[]) => spawnSync(process.execPath, [resolve(__dirname, '..', 'scripts', 'token-eval', 'ab-run.mjs'), '--tasks', tasksFile, '--out', join(scratch, 'out'), '--dry-run', ...extra], { encoding: 'utf8', env: { ...process.env, Z0_ANCESTOR_STOP: scratch } });
     for (const bad of ['0', 'abc', '1.5', '-2']) {
       const res = cli('--seeds', bad);
@@ -552,13 +557,19 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const ok = cli('--seeds', '2', '--arms', 'A0,A1');
     expect(ok.status, ok.stderr).toBe(0);
     expect(ok.stdout).toContain('seeds A0:2 A1:2');
+    const more = cli('--seeds', '5', '--arms', 'A0,A1,A4');
+    expect(more.status, more.stderr).toBe(0);
+    expect(more.stdout).toContain('seeds A0:2 A1:3 A4:2');
+    const cells: Array<{ arm: string; seed: number }> = JSON.parse(readFileSync(join(scratch, 'out', 'plan.json'), 'utf8'));
+    expect(Math.max(...cells.filter((c) => c.arm !== 'A1').map((c) => c.seed))).toBe(2);
+    expect(Math.max(...cells.map((c) => c.seed))).toBe(3);
   });
 
   it('a real run refuses an --out that already holds runs.jsonl and leaves it untouched', () => {
     const scratch = tmp('ab-run-reuse-');
     const r = makeRepo();
     const tasksFile = join(scratch, 'tasks.json');
-    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
+    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
     const out = join(scratch, 'out');
     mkdirSync(out);
     writeFileSync(join(out, 'runs.jsonl'), '{"earlier":true}\n');
@@ -575,7 +586,7 @@ describe('Z0 runner end to end (fake Claude Code)', () => {
     const scratch = tmp('ab-run-reuse-modes-');
     const r = makeRepo();
     const tasksFile = join(scratch, 'tasks.json');
-    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
+    writeFileSync(tasksFile, JSON.stringify({ sequences: [{ id: 'seqA', cluster: 'c', repo: r.repo, fixedOrder: true, tasks: [task(r, 'a1', 'x'), task(r, 'a2', 'y')] }] }));
     const out = join(scratch, 'out');
     mkdirSync(out);
     writeFileSync(join(out, 'runs.jsonl'), '{"earlier":true}\n');
