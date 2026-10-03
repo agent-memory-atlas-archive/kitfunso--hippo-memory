@@ -106,6 +106,9 @@ import {
   writeSessionEndHandoff,
   TaskSnapshot,
   SessionEvent,
+  memoriesBackingObjects,
+} from './store.js';
+import {
   createCard,
   loadCard,
   listCards,
@@ -117,8 +120,7 @@ import {
   completeCard,
   reclaimExpiredCards,
   addCardComment,
-  memoriesBackingObjects,
-} from './store.js';
+} from './store-cards.js';
 import { rejectValue, unrejectValue, listRejectionsForTenant } from './reject-flow.js';
 import { RejectedValueError } from './rejection.js';
 import { isHandoffOutcome, formatHandoffEvidenceLine, type SessionHandoff, type HandoffOutcome, type HandoffEvidence } from './handoff.js';
