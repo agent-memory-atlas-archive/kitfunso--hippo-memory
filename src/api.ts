@@ -147,6 +147,8 @@ export interface Actor {
   role: 'admin' | 'member';
   /** EI2: restricted scopes a member key may read (auth.ts grantScope). Unused for admin actors. */
   scopes?: readonly string[];
+  /** An auth resolver vouched for this caller, so its admin role stops at its own tenant. */
+  viaAuthResolver?: true;
 }
 
 export interface Context {
@@ -2285,16 +2287,19 @@ export interface AuthCreateResult {
  * `src/server.ts` POST /v1/auth/keys mirrors this: it ignores any body
  * `tenantId` and uses the resolved Bearer's tenant exclusively.
  *
- * Only an admin actor can mint (ForbiddenError otherwise), so a member key
- * can never create a key, least of all an admin one.
+ * Only an admin actor can mint (ForbiddenError otherwise), and a key never
+ * outranks its minter: a resolver admin is tenant-only, so it mints members.
  */
 export function authCreate(ctx: Context, opts: AuthCreateOpts): AuthCreateResult {
   if (ctx.actor.role !== 'admin') {
     throw new ForbiddenError('Only an admin key can create API keys');
   }
+  if (ctx.actor.viaAuthResolver && opts.role === 'admin') {
+    throw new ForbiddenError('A key minted through the auth resolver can only be a member key');
+  }
   const db = openHippoDb(ctx.hippoRoot);
   try {
-    const role = opts.role ?? 'admin';
+    const role = opts.role ?? (ctx.actor.viaAuthResolver ? 'member' : 'admin');
     const result = createApiKey(db, { tenantId: ctx.tenantId, label: opts.label, role });
     // v1.12.4: audit emit (closes the gap v1.12.3 CHANGELOG flagged as deferred).
     // Mirrors the auth_revoke pattern at authRevoke — same try/catch so audit
@@ -2365,12 +2370,12 @@ export function authRevoke(
   }
   const db = openHippoDb(ctx.hippoRoot);
   try {
-    // SAFETY: row's shape matches the three columns named in the SELECT
+    // SAFETY: row's shape matches the four columns named in the SELECT
     // above.
     const row = db
-      .prepare(`SELECT key_id, tenant_id, revoked_at FROM api_keys WHERE key_id = ?`)
+      .prepare(`SELECT key_id, tenant_id, revoked_at, role FROM api_keys WHERE key_id = ?`)
       .get(keyId) as
-      | { key_id: string; tenant_id: string; revoked_at: string | null }
+      | { key_id: string; tenant_id: string; revoked_at: string | null; role: string }
       | undefined;
     if (!row) {
       throw new Error(`Unknown key_id: ${keyId}`);
@@ -2378,6 +2383,9 @@ export function authRevoke(
     // Cross-tenant access denied: same message as missing key, no info leak.
     if (row.tenant_id !== ctx.tenantId) {
       throw new Error(`Unknown key_id: ${keyId}`);
+    }
+    if (ctx.actor.viaAuthResolver && row.role === 'admin') {
+      throw new ForbiddenError('An auth resolver admin cannot revoke an admin key, which outranks it');
     }
 
     let revokedAt: string;
