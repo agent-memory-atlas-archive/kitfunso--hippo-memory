@@ -21,6 +21,8 @@
 >
 > **2026-10-02 accepted Computer integration direction:** Part XXII, Track CW adds an optional durable workspace/evidence adapter for externally hosted agents: scoped sources, bounded read capabilities, explicit outcome receipts and verified pull-mode handoffs first; corpus/RLM processing, procedural lessons and CLEF advice remain separately evaluated research. Carry AZ4-AZ6 capture/readiness and low-touch requirements through the adapter. Z0 priority, frozen defaults, locked registrations, the local route and the no-dispatch boundary remain. Planned integration is not shipped support or measured task benefit.
 >
+> **2026-10-04 the #1 answer:** Part XXIII, Track HG aims to make hippo the answer to "the most effective and performant memory architecture for agents (validated in production) that understands temporality and supports dreaming." It scores hippo on outcome benchmarks (DreamBench-SWE, MemoryArena, Evo-Memory, MemoryAgentBench conflict resolution), never on retrieval QA, and adds HG1 dreaming that improves outcomes, HG2 event time, HG3 the outcome-benchmark runs with cost per solved task, and HG4 a production evidence ledger. A claim gate page must exist before anyone names hippo in reply. Z0 priority and frozen defaults remain.
+>
 > `PLAN.md` remains the architecture and CLS-principles document. `RESEARCH.md` remains the research lineage and seven-mechanisms backgrounder.
 
 ## Current execution index
@@ -33,11 +35,11 @@
 |---|---|---|---|---|
 | Now, 1 | Z0 stage 0; Z10 development instrumentation | Establish whether Hippo adds useful value beyond built-in memory and identify capture/retrieval/delivery/application failures | Complete isolated arms, teaching, sham/control, Codex and blind-analysis prerequisites; instrument without changing selected IDs or rendered context. Then the existing smoke, calibration, freeze and scored protocol. Z10 does not amend Z0's locked endpoints. | Maintainer; Keith for resource/run decisions |
 | Now, 2 | AZ6 foundation; S6 capture/recovery fixtures; AZ4/AZ5 per supported mode | Preserve useful lessons before loss and recover without routine save commands | Inventory every named runtime/mode; establish shared contracts and fixtures, then verify native hooks or supported incremental checkpoints on real hosts. Record source/trust gaps, gold capture precision/coverage, delay, restore and actual delivery separately. No CLEF or new claims schema prerequisite. | Integration maintainer |
-| Next, 3 | One diagnosed S0/S9, Z1d or Z3b component; CAE5; Z12 | Reduce wrong/stale context, repeated mistakes and supervision | Select the bottleneck from Z10 evidence. Isolate representation, admission or correction on fresh development labels; freeze before independent task confirmation. Deterministic permissions/version writes and sealed cases stay outside hillclimb. | Memory/evaluation maintainer |
+| Next, 3 | One diagnosed S0/S9, Z1d or Z3b component (HG1/HG2 if Z10 names profiles or dates); CAE5; Z12 | Reduce wrong/stale context, repeated mistakes and supervision | Select the bottleneck from Z10 evidence. Isolate representation, admission or correction on fresh development labels; freeze before independent task confirmation. Deterministic permissions/version writes and sealed cases stay outside hillclimb. | Memory/evaluation maintainer |
 | Next, 4 | EI2/EI10/EV1/EI11/EV6-EV9; required source adapters; EI15/CD11-CD14 | Deliver governed, low-touch memory and customer-defined value in an enterprise pilot | Scope one partner, required sources, identity provider and deployment. Close applicable access/derivation/revocation gates; configure one objective/metric contract and join permitted outcomes through Z10/Z2b. Include developer and administrator burden. Computer is not a prerequisite. | Keith; enterprise maintainer; customer administrator |
 | Next, 5; bounded development can accompany Now | CLF0/CLF1/CLF4/CLF12; CAE0-CAE4 | Improve a specific memory decision without unpredictable costs or recurring backend management | First compare one role at matched eligible candidates/input bounds against native and applicable Jev/local baselines, with quota controls and native fallback. Complete supported-surface conformance and independent task confirmation before adoption; extend all accepted CLEF roles one at a time. | Decision-layer/evaluation maintainer |
-| Alongside all priorities | MSG1-MSG6; canonical product facts; CAE6/CAE7 | Give users consistent capability, setup, edition and evidence information | Correct current source copy, check roadmap IDs/references and affected tool contracts, then verify the tagged package, actual npm listing and deployed website through their release processes. A source commit is not publication evidence. | Product/release maintainer |
-| Later or separately gated research | Wider CLF rollout/private serving; CAE9; optional CW; S2/S8 where justified; LC4/Track G and grant research | Retain optional capabilities only when they improve useful outcomes or total burden against simpler baselines | Keep required runtime coverage visible; register role-specific comparisons, data floors, deployment/permission checks and retain/reject decisions. No provider, learning system or agent dispatcher becomes required for ordinary memory. | Relevant track maintainer; Keith |
+| Alongside all priorities | MSG1-MSG6; canonical product facts; CAE6/CAE7; HG4 maintainer row; K8.6/CD10 registry submission (needs Keith's yes) | Give users consistent capability, setup, edition and evidence information | Correct current source copy, check roadmap IDs/references and affected tool contracts, then verify the tagged package, actual npm listing and deployed website through their release processes. A source commit is not publication evidence. | Product/release maintainer |
+| Later or separately gated research | Wider CLF rollout/private serving; CAE9; optional CW; S2/S8 where justified; HG3 outcome-benchmark runs after Z0 stage 0, then the HG claim gate; LC4/Track G and grant research | Retain optional capabilities only when they improve useful outcomes or total burden against simpler baselines | Keep required runtime coverage visible; register role-specific comparisons, data floors, deployment/permission checks and retain/reject decisions. No provider, learning system or agent dispatcher becomes required for ordinary memory. | Relevant track maintainer; Keith |
 
 **Operating rule.** Prefer one complete memory loop and a small number of bounded experiments over opening every track simultaneously. Engineering fixtures and development prototypes can proceed alongside Z0 prerequisites; task-benefit/default claims retain their independent gates. Measure repeat mistakes, quality, correction/supervision burden, total cost and latency. Simulated intervention counts are proxies; active human time needs its own registered pilot. Historical benchmark scores do not establish these outcomes.
 
@@ -3241,3 +3243,96 @@ Exit: a scoped retain/reject verdict, failure matrix, operational burden and sup
 First deliver CW0-CW3 against read-only JavaScript and a separate Hippo service; register CW8 before scored work. Then test CW4 continuity and one narrow CW5 task family. Consider CW6/CW7 separately only after an observed bottleneck and appropriate parent gates. Package wider deployment only on demand and verified benefit.
 
 Stop or narrow the adapter if local files/Docker plus Hippo's existing service achieves the same result with less total burden. Defer a native Durable Object memory-store port and live SQLite-through-FUSE operation until a separately approved storage design and consistency/recovery evaluation justify them. Keep provider-independent evidence/receipt improvements even if the Cloudflare adapter is rejected.
+
+---
+
+## Part XXIII - 2026-10-04 update: the #1 answer to "the most effective and performant memory architecture" (Track HG)
+
+### The question this track answers
+
+On 2026-10-03 Siqi Chen asked on X: "what is the most effective and performant memory architecture for agents (validated in production) that understands temporality and supports dreaming?" ([post](https://x.com/blader/status/2106457796728545678)). **Goal: hippo becomes the answer a neutral judge, a person or an LLM, gives to that question.**
+
+### Measure what hippo is, not what rivals post
+
+Hippo is memory that learns what is wrong and stops repeating it: outcome feedback ranks wrong memories down, corrections supersede old facts, and used memories get stronger. Its success is an agent that makes fewer repeated mistakes and finishes more multi-session work at lower cost and supervision. **Retrieval and chat-QA benchmarks (LongMemEval, LoCoMo) do not measure that.** They score whether the right passage of a static chat log is found, so they stay only as the S1 release floor, never a success measure or a public claim for this track. MemoryArena's authors found that systems with near-perfect LoCoMo scores "perform poorly in our agentic setting" ([arXiv 2602.16313](https://arxiv.org/abs/2602.16313)).
+
+The track uses public benchmarks that score outcomes over a sequence of sessions, all checked on 2026-10-04:
+
+| Benchmark | What it scores | Why it fits hippo | Published reference rows |
+|---|---|---|---|
+| DreamBench-SWE ([arXiv 2608.20664](https://arxiv.org/abs/2608.20664)) | Pass rate on multi-session software tasks whose later sessions depend on evidence from earlier ones that cannot be inferred; built as a memory-hygiene benchmark | Coding agents are hippo's home surface; it scores dreaming/hygiene by task outcome | No memory 21/180 (11.67%), verbatim event memory 82/180 (45.56%), hosted Mem0 97/180 (53.89%) |
+| MemoryArena ([arXiv 2602.16313](https://arxiv.org/abs/2602.16313), ICML 2026, [site](https://memoryarena.github.io/)) | Task completion on interdependent multi-session tasks (web shopping, travel planning, progressive search, formal reasoning) where early mistakes break later subtasks | Tests whether memory carries what was learned, including mistakes, into later sessions | Paper rows to be read before the prereg locks |
+| Evo-Memory ([arXiv 2511.20857](https://arxiv.org/abs/2511.20857)) | Success rate and step efficiency over streams of tasks, across 10 datasets and 10+ memory modules, with the ExpRAG experience-retrieval baseline | Directly tests test-time learning: does the agent get better and cheaper as the stream goes on | Paper rows to be read before the prereg locks |
+| MemoryAgentBench, Conflict Resolution ([repo](https://github.com/HUST-AI-HYZ/MemoryAgentBench), MIT, ICLR 2026) | FactConsolidation single-hop and multi-hop: later evidence contradicts earlier facts | Tests supersession and "learns what is wrong" on facts; the repo already ships Mem0, Letta and Cognee adapters | Rows to be read from the paper |
+
+Hippo's own instruments stay: Z0 (task benefit against the memory Claude Code and Codex already have, the governing gate), the E1 marked-wrong trap metric, and the CD11 holdout in real use.
+
+### The six tests, scored on those benchmarks
+
+| Test | What makes hippo #1 | Hippo today |
+|---|---|---|
+| (a) Most effective | Highest pass or completion rate on DreamBench-SWE and MemoryArena among systems run with the same agent and model, and a repeat-mistake rate that falls across an Evo-Memory stream | Not run on any of the four. Z0 unscored; TE5 pilot null |
+| (b) Performant | Lowest cost and steps per solved task on the same runs, with p95 recall latency. The independent cost study found Hindsight often never breaks even against resending the transcript ([arXiv 2608.11879](https://arxiv.org/html/2608.11879)); hippo makes no model call on write or default recall | Recall 0.58 s, per-prompt hook 0.28 s (Part X measured table). No cost-per-solve number on a public benchmark |
+| (c) Validated in production | Deployments with a measured holdout outcome, published | 770 stars, no named deployment. CD11 holdout arm shipped; CD12 report unbuilt |
+| (d) Understands temporality | Top score on MemoryAgentBench conflict resolution, and correct behaviour when facts change mid-stream in the session benchmarks | `valid_from`, supersession and `--as-of` shipped (S3). No event interval, no ordering queries |
+| (e) Supports dreaming | A background pass whose on-vs-off effect on task outcomes is published. Anthropic Dreams (research preview) rewrites a store into a new reviewable one ([docs](https://platform.claude.com/docs/en/managed-agents/dreams)); Letta's sleep-time compute has the one published ablation, on reasoning tasks ([arXiv 2504.13171](https://arxiv.org/abs/2504.13171)) | `hippo sleep` is hygiene: "It has not been shown to improve recall" (README.md:500) |
+| (f) Gets named | Appears on the leaderboards and comparison pages people and LLMs answer from, with outcome numbers | Only our own README table; in no MCP registry |
+
+**Win condition, stated before the work:** best task outcome per dollar on the outcome benchmarks with matched agent and model, falling repeat-mistake rate over a stream, and published dream and temporal ablations, including the negative ones. Where hippo loses a test, the result says so.
+
+### HG1. Dreaming that improves outcomes: subject profiles rebuilt at sleep [planned; serves (e); hard: S0 subject/attribute units, Z9 update-or-create; conditional: CLF6 drafting arm; optional producer: E3.1, SI2; rollout gate: S1, S4 prereg arm, Z0; added 2026-10-04]
+
+For each subject with three or more in-force claims (a project, repo, person, tool or service), sleep rebuilds one profile row. The row groups claims by attribute, orders them by `valid_from`, and gives each line a confidence computed from independent sources, outcome feedback and supersession history. The default path is zero-LLM structured aggregation. The opt-in CLF6 free-first profile may draft prose over the same lines. Like Anthropic Dreams, the output is a new derived artifact the user can review and discard (Track L rule 2); the claims stay the record. `hippo explain` on a profile line names its claims and the outcome events that moved its confidence. When a task names the subject, recall packs the profile as one S9 unit.
+
+Evaluation, as the added S4 prereg arm (`docs/evals/2026-09-30-s4-sleep-hygiene-prereg.md`): DreamBench-SWE pass rate with sleep off, hygiene-only sleep, and profile-building sleep, same agent and model; plus the E1 trap metric for wrong or stale memories reaching the top five. Pass: profile sleep beats sleep off on pass rate by more than the paired noise bar, with no rise in the trap rate. Kill: no pass-rate gain on two seed batches. A negative result is published as the dream ablation. A person profile in a company deployment needs EI2 access controls before it can be switched on.
+
+### HG2. Temporality: event time, ordering and date-window recall [planned; serves (d); hard: FE5 date resolver, S3 validity/recorded-time spec; conditional: CLF6 extraction arm; rollout gate: S1, Z0; added 2026-10-04]
+
+Add two nullable columns, `event_start` and `event_end`, filled by the deterministic date-phrase resolver FE5 already needs. It handles absolute dates, "last Tuesday" and "March to May", resolved against the session clock. They stay separate from `valid_from`, so "I learned on Friday that the outage was Monday" stores both; with S3's validity and recorded time, a claim then carries all three times. Recall gains `--between`, `--before <id|date>` and `--after`, plus a relative resolver that reads an anchor memory's event time for "two weeks before the launch". Ordering answers sort admitted claims by `event_start`. Ranking does not change by default. The schema change follows the cross-track migration order and needs its own decision record.
+
+Evaluation: MemoryAgentBench conflict resolution (FactConsolidation single-hop and multi-hop) with hippo's supersession on vs off and HG2 on vs off, beside the repo's Mem0, Letta and Cognee adapters run with the same model; and resolver precision on 200 hand-labelled date spans from the organic capture archive. Pass: hippo's conflict-resolution score above every matched-model adapter, HG2 adding more than the noise bar on the multi-hop set, and resolver precision 0.9 or better. Kill: precision under 0.8 after two rounds, or HG2's gain sits inside the noise bar (supersession alone then carries the claim).
+
+### HG3. Effective and performant on public outcome benchmarks, published whatever they show [planned; serves (a), (b), (f); hard: Z0 isolated-arm runner (stage 0), S9 packing; conditional: CLF free-first profile; optional baseline: TE3, TE10, TE11; added 2026-10-04]
+
+Adapters that run hippo inside DreamBench-SWE, MemoryArena and Evo-Memory, reusing the Z0 isolated-arm runner so no arm sees another arm's memory, files or transcripts. Arms, fixed before running, all with the same agent and model: no memory (floor); the agent's built-in memory (Claude Code or Codex, the Z0 comparator); the benchmark's own baseline (verbatim event memory on DreamBench-SWE, ExpRAG on Evo-Memory); hippo shipping defaults; Mem0 OSS through the same harness where an adapter exists; and an oracle arm handed the needed earlier-session evidence (ceiling and positive control).
+
+Metrics per run: pass or success rate; repeat-mistake rate (the same failure recurring after the session that taught its fix); steps, tokens and list-price dollars per solved task; p95 recall and hook latency. Inference runs free only (plan quota through `claude -p`, or a local model). A published row with a different model is context, not a comparison.
+
+Publish paired intervals per benchmark. Claims allowed, each only if the data shows it: "highest pass rate among matched-model arms", "lowest cost per solved task", "repeat-mistake rate falls across the stream". HG3 does not replace Z0: Z0 stays the gate for default changes and the task-benefit claim. Kill or narrow: if free inference cannot cover a full benchmark, run a labelled, preregistered subset; if hippo is not ahead of the built-in-memory arm on any benchmark, the result says so and the claim gate stays closed.
+
+### HG4. Production evidence ledger [planned; serves (c); hard: CD11 core holdout arm, Z10 ledger slice 1; conditional: CD12 for any partner row; release gate: MSG6; added 2026-10-04]
+
+One page, `docs/production-evidence.md`, regenerated by one command from ledger data. It has one row per consenting deployment: store size, sessions per week, hippo version, and the CD11 holdout result (repeat-mistake rate and task outcome, memory on vs held out) with its interval, or "no holdout yet". Row one is the maintainer's own daily store, read from the Z10 ledger, so the page exists before any partner does. Partner rows come only from CD11/CD12 outputs, and no row carries a savings figure without a measured interval (non-goal 16).
+
+Evaluation: a test regenerates the page from a fixture ledger and checks it against the expected rows. Pass: the first partner row with a holdout interval. Kill: if no partner consents within two release cycles after CD12 ships, keep the maintainer row and stop. Naming a partner and publishing the page are Keith's decisions.
+
+### Existing items that carry the rest
+
+- (a) as the governing task claim: Z0, which HG3 shares a runner with but does not replace.
+- (f): K8.6 and CD10 registry submissions, and submitting HG3 results to each benchmark's leaderboard where one exists. All are outward-facing and need Keith's yes. MSG6 owns the README comparison table and all public wording.
+- (d): S3 and FE5 stay the base HG2 builds on.
+
+### The claim gate
+
+Nobody replies to the post naming hippo until one page, `docs/evals/<date>-hg-claim-gate.md`, is linked from the README benchmark section and shows:
+
+1. HG3 on DreamBench-SWE, MemoryArena and Evo-Memory: pass rate, repeat-mistake rate and cost per solved task for every arm, with intervals.
+2. The HG1 dream ablation on DreamBench-SWE, positive or negative.
+3. The HG2 conflict-resolution result on MemoryAgentBench.
+4. HG4's ledger with at least the maintainer row, and the current Z0 stage.
+
+The reply may claim only what the page shows. Posting it is Keith's decision.
+
+### Rejected ideas
+
+- LongMemEval or LoCoMo answer accuracy as a success measure or headline: they score static retrieval, not learning from outcomes; S1 floor only.
+- Rerunning the arXiv 2608.11879 cost protocol: it scores cost on LoCoMo QA; cost per solved task on the outcome benchmarks answers (b) for what hippo does.
+- A `hippo dream` alias for sleep: a rename is not a capability, and Part XVI's boundary bars new verbs.
+- LLM-written dreaming or extraction on every write by default: breaks free-by-default and the zero-LLM write path; the A1 replay recovered 1 of 18 lessons by extraction.
+- Hindsight-style decaying temporal graph links over raw text: Track L non-goal 2; S8 is deferred.
+- Pulling Postgres forward to look production-ready: A6 stays for shared deployment.
+- Replying now with retrieval numbers: they measure the wrong thing, and a judge would set them against rivals' QA numbers.
+
+### Sequence and stop rules
+
+HG3's adapters build on Z0 stage 0's isolated-arm runner, so they follow it and share its fixes. HG4's maintainer row can start now. HG1's S4 arm and HG2 enter active work through the execution index's "one diagnosed component" slot when Z10 or HG3 evidence names stale facts, changed facts or missing synthesis as the bottleneck. If the claim gate shows hippo behind on every test, the honest answer to the post is "not yet", and the gate page says so.
