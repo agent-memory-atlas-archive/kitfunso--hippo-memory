@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { initStore, writeEntry } from '../src/store.js';
-import { createMemory } from '../src/memory.js';
+import { createMemory, DEFAULT_HALF_LIFE_DAYS } from '../src/memory.js';
 import { runDoctor, formatDoctor } from '../src/doctor.js';
 import { startCompaction } from '../src/compaction-record.js';
 import { repairUserGlobalMerges } from '../src/project-merge.js';
@@ -50,7 +50,7 @@ describe('hippo doctor', () => {
     const cwd = tmp('doctor-ok-');
     process.env.HIPPO_HOME = join(cwd, 'global');
     initStore(join(cwd, '.hippo'));
-    writeEntry(join(cwd, '.hippo'), createMemory('the staging deploy needs the VPN to reach the health check'));
+    writeEntry(join(cwd, '.hippo'), createMemory('the staging deploy needs the VPN to reach the health check', { baseHalfLifeDays: DEFAULT_HALF_LIFE_DAYS }));
     mkdirSync(join(cwd, '.claude'));
     writeFileSync(join(cwd, '.claude', 'settings.json'), JSON.stringify({ hooks: {
       UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'hippo context --pinned-only --include-recent 5 --format additional-context' }] }],
@@ -201,9 +201,9 @@ describe('hippo doctor', () => {
     const global = join(cwd, 'global');
     process.env.HIPPO_HOME = global;
     initStore(global);
-    const parent = { ...createMemory('the proj-b deploy needs the staging VPN'), origin_project: 'proj-b' };
+    const parent = { ...createMemory('the proj-b deploy needs the staging VPN', { baseHalfLifeDays: DEFAULT_HALF_LIFE_DAYS }), origin_project: 'proj-b' };
     writeEntry(global, parent);
-    writeEntry(global, { ...createMemory('merged: the proj-b deploy needs the VPN'), source: 'consolidation', parents: [parent.id], origin_project: '' });
+    writeEntry(global, { ...createMemory('merged: the proj-b deploy needs the VPN', { baseHalfLifeDays: DEFAULT_HALF_LIFE_DAYS }), source: 'consolidation', parents: [parent.id], origin_project: '' });
 
     expect(runDoctor({ cwd, home: cwd, version: 'test' }).checks.find((c) => c.id === 'projects'))
       .toMatchObject({ status: 'warn', fix: expect.stringContaining('hippo projects repair --global') });
