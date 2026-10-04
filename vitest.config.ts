@@ -46,6 +46,7 @@ export default defineConfig({
       ...Object.fromEntries(PROVIDER_ENV_KEYS.map((k) => [k, ''])),
     },
     globalSetup: ['tests/_real-store-guard.ts'],
+    server: { deps: { external: [/tests[\\/]_coverage-provider\.ts$/] } },
     // 55 of 384 files spawn git/hippo/nested-vitest children, so one fork per
     // core oversubscribes a big box. Detail: CHANGELOG 1.38.3.
     maxWorkers: 6,
@@ -54,11 +55,14 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
     coverage: {
-      provider: 'v8',
-      // Without include, vitest reports only files some test loads, so untested src files would not count.
-      include: ['src/**/*.ts'],
+      provider: 'custom',
+      customProviderModule: './tests/_coverage-provider.ts',
+      // Without include, untested src files would not count; dist/ lets spawned-CLI results through to remap.
+      include: ['src/**/*.ts', 'dist/**/*.js'],
+      autoAttachSubprocess: true,
+      excludeAfterRemap: true,
       reporter: ['text-summary', 'json-summary'],
-      thresholds: { lines: 67, branches: 60, functions: 80, statements: 67 },
+      thresholds: { lines: 90, branches: 82, functions: 95, statements: 89 },
     },
   },
 });
