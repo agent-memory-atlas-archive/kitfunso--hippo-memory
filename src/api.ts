@@ -20,6 +20,7 @@ import {
   deleteEntry,
   loadSearchEntries,
   loadRecallSearchEntries,
+  recallScopeFilter,
   loadEntriesByIds,
   loadChildrenOf,
   loadFreshRawMemories,
@@ -107,7 +108,7 @@ import {
   type ApiKeyListItem,
 } from './auth.js';
 import { applyGoalStackBoost } from './goals.js';
-import { estimateTokens, hybridSearch, physicsSearch, churnStaleFactor, type RerankStep, type SearchResult } from './search.js';
+import { estimateTokens, hybridSearch, physicsSearch, churnStaleFactor, type HybridVectorCandidates, type RerankStep, type SearchResult } from './search.js';
 import { compareEntryIdentity, compareScoredResults } from './compare.js';
 import { dropHeldCopies, duplicateKey, storedTextKeys } from './same-text.js';
 import { scopeMatch } from './scope.js';
@@ -269,20 +270,27 @@ export function ambientSecretAdmit(e: MemoryEntry, currentProjectName: string): 
 /** Most rows per store a no-query context reads; past it, ranking and ambientState see the strongest by decay. */
 export const CONTEXT_CANDIDATE_CAP = 2000;
 
+/** A local-only query reads its FTS window; the search's vector arm adds the nearest rows. */
+interface ContextQueryWindow {
+  query: string;
+  exactScope: string | undefined;
+}
+
 // The pinned-only branch needs pins and recent-N candidates, not the corpus; `recall` applies there only.
-// Without `window` the whole store loads: a local-only query searches every local row.
 function loadAmbientEntries(
   hippoRoot: string,
   tenantId: string,
   pinnedOnly: boolean,
   includeRecent: number,
   admit: (e: MemoryEntry) => boolean,
+  window: ContextCandidateFilter | ContextQueryWindow,
   recall?: AmbientRecallRequest,
   onQualityDrop?: (e: MemoryEntry) => void,
-  window?: ContextCandidateFilter,
 ): AmbientLoadResult {
   if (!pinnedOnly) {
-    const rows = window ? loadContextCandidates(hippoRoot, tenantId, window) : loadAllEntries(hippoRoot, tenantId);
+    const rows = 'query' in window
+      ? loadRecallSearchEntries(hippoRoot, window.query, CONTEXT_CANDIDATE_CAP, tenantId, window.exactScope, 'exact', false)
+      : loadContextCandidates(hippoRoot, tenantId, window);
     return { entries: rows.filter(admit) };
   }
   // DF3's quality floor runs on the recent-N slice AFTER this load, so the load
@@ -830,7 +838,7 @@ export async function retrieve(ctx: Context, opts: RecallOpts): Promise<RecallRe
   if (opts.showRanked) return retrieveFromStore(ctx, opts, windowSize, opts.showRanked);
   let candidates = loadRecallSearchEntries(ctx.hippoRoot, opts.query, windowSize, ctx.tenantId, opts.scope, 'exact', false);
   if (opts.mode === 'hybrid' || opts.mode === 'physics') {
-    const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot, scope: opts.scope ?? null };
+    const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot, scope: opts.scope ?? null, vectorCandidates: recallVectorSpec(ctx, opts) };
     const ranked = opts.mode === 'physics'
       ? await physicsSearch(opts.query, candidates, { ...searchOpts, physicsConfig: loadConfig(ctx.hippoRoot).physics })
       : await hybridSearch(opts.query, candidates, searchOpts);
@@ -842,17 +850,32 @@ export async function retrieve(ctx: Context, opts: RecallOpts): Promise<RecallRe
   return result;
 }
 
-/** `retrieve` under `showRanked`: physics when `mode` says so, hybrid otherwise, over every admitted row. */
+/** api.retrieve's vector arm: the recall load's exact-scope rule, current rows only. */
+function recallVectorSpec(ctx: Context, opts: RecallOpts): HybridVectorCandidates {
+  return {
+    tenantId: ctx.tenantId,
+    scope: recallScopeFilter(opts.scope, 'exact'),
+    includeSuperseded: false,
+    admit: (e) => passesScopeFilterForRecall(e.scope ?? null, opts.scope),
+  };
+}
+
+// Tag, pin and recency boosts can lift a row from deep in the BM25 order, so MCP ranks a wide lexical window.
+const SHOW_RANKED_LEXICAL_WINDOW = 1000;
+
+/** `retrieve` under `showRanked`: physics when `mode` says so, hybrid otherwise, over a wide lexical window plus the nearest vectors. */
 async function retrieveFromStore(
   ctx: Context,
   opts: RecallOpts,
   windowSize: number,
   show: NonNullable<RecallOpts['showRanked']>,
 ): Promise<RecallResult> {
-  const store = loadAllEntries(ctx.hippoRoot, ctx.tenantId);
-  const pool = store.filter((e) => passesScopeFilterForRecall(e.scope ?? null, opts.scope));
+  const loaded = loadRecallSearchEntries(
+    ctx.hippoRoot, opts.query, Math.max(windowSize, SHOW_RANKED_LEXICAL_WINDOW), ctx.tenantId, opts.scope, 'exact', false,
+  );
+  const pool = loaded.filter((e) => passesScopeFilterForRecall(e.scope ?? null, opts.scope));
   // No scope option: the scope boost follows HIPPO_SCOPE and the skill env, as MCP recall always ranked.
-  const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot };
+  const searchOpts = { budget: Infinity, hippoRoot: ctx.hippoRoot, vectorCandidates: recallVectorSpec(ctx, opts) };
   let ranked = opts.mode === 'physics'
     ? await physicsSearch(opts.query, pool, { ...searchOpts, physicsConfig: loadConfig(ctx.hippoRoot).physics })
     : await hybridSearch(opts.query, pool, searchOpts);
@@ -866,7 +889,10 @@ async function retrieveFromStore(
   }
   const window = ranked.slice(0, windowSize).map((r) => r.entry);
   const result = recallFrom(ctx, { ...opts, suppressRecallTrace: true }, windowSize, window);
-  const shown = show({ ranked, pool, droppedByScope: store.length - pool.length }, result);
+  // Rows the vector arm added count as candidates too.
+  const inPool = new Set(pool.map((e) => e.id));
+  const candidates = [...pool, ...ranked.map((r) => r.entry).filter((e) => !inPool.has(e.id))];
+  const shown = show({ ranked, pool: candidates, droppedByScope: loaded.length - pool.length }, result);
   strengthenRetrieved(ctx.hippoRoot, shown, ctx.tenantId);
   if (!opts.suppressRecallTrace) {
     const scores = new Map(ranked.map((r) => [r.entry.id, r.score]));
@@ -2819,8 +2845,8 @@ export async function getContext(
 
   // The window's predicates are ones admit applies anyway, so below the cap the admitted rows are unchanged.
   const searchesLocalRows = query !== '*' && !(hasGlobal && !primaryIsGlobal);
-  const window: ContextCandidateFilter | undefined = pinnedOnly || searchesLocalRows
-    ? undefined
+  const window: ContextCandidateFilter | ContextQueryWindow = searchesLocalRows && !pinnedOnly
+    ? { query, exactScope }
     : {
         exactScope,
         project: includeCrossProject || currentProjectName === '' ? undefined : currentProjectName,
@@ -2829,10 +2855,10 @@ export async function getContext(
       };
   // Tenant-scoped loads (v1.11.1 lesson: NEVER resolveTenantId({}) here).
   const localLoad: AmbientLoadResult = hasLocal
-    ? loadAmbientEntries(ctx.hippoRoot, ctx.tenantId, pinnedOnly, includeRecent, loadAdmit, recallRequest, qualityDrop(primaryIsGlobal), window)
+    ? loadAmbientEntries(ctx.hippoRoot, ctx.tenantId, pinnedOnly, includeRecent, loadAdmit, window, recallRequest, qualityDrop(primaryIsGlobal))
     : { entries: [] };
   const globalLoad: AmbientLoadResult = hasGlobal && !primaryIsGlobal
-    ? loadAmbientEntries(globalRoot, ctx.tenantId, pinnedOnly, includeRecent, loadAdmit, recallRequest, qualityDrop(true), window)
+    ? loadAmbientEntries(globalRoot, ctx.tenantId, pinnedOnly, includeRecent, loadAdmit, window, recallRequest, qualityDrop(true))
     : { entries: [] };
   let localEntries = localLoad.entries;
   let globalEntries = globalLoad.entries;
@@ -3116,6 +3142,9 @@ export async function getContext(
       const ctxConfig = loadConfig(ctx.hippoRoot);
       const usePhysicsCtx = ctxConfig.physics?.enabled !== false;
       const localCost = cost && ((r: SearchResult) => price(r.entry, primaryIsGlobal));
+      const vectorCandidates: HybridVectorCandidates = {
+        tenantId: ctx.tenantId, scope: recallScopeFilter(exactScope, 'exact'), includeSuperseded: false, admit,
+      };
       const ctxResults = usePhysicsCtx
         ? await physicsSearch(query, localEntries, {
             budget: left,
@@ -3124,6 +3153,7 @@ export async function getContext(
             hippoRoot: ctx.hippoRoot,
             physicsConfig: ctxConfig.physics,
             scope: activeScope,
+            vectorCandidates,
           })
         : await hybridSearch(query, localEntries, {
             budget: left,
@@ -3131,6 +3161,7 @@ export async function getContext(
             cost: localCost,
             hippoRoot: ctx.hippoRoot,
             scope: activeScope,
+            vectorCandidates,
           });
       results = ctxResults.map((r) => ({
         entry: r.entry,
