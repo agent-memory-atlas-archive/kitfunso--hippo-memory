@@ -3,12 +3,9 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
-import {
-  defaultSleepLogPath,
-  resolveCodexSessionTranscript,
-  resolveCodexWrapperPaths,
-  type CodexWrapperMetadata,
-} from '../hooks.js';
+import { defaultSleepLogPath } from '../hooks/shared.js';
+import { resolveCodexSessionTranscript } from '../hooks/codex-session.js';
+import { resolveCodexWrapperPaths, type CodexWrapperMetadata } from '../hooks/codex-wrapper.js';
 import { SessionEvent } from '../store/rows.js';
 import { isInitialized } from '../store/open.js';
 import {
@@ -34,14 +31,9 @@ import { currentMachine, importAtCompaction } from '../agent-memories/sync.js';
 import { summaryLine } from '../agent-memories/report.js';
 import { deriveOriginProject } from '../project-identity.js';
 import { getGlobalRoot } from '../shared.js';
-import {
-  cmdCapture,
-  CaptureOptions,
-  cmdPreCompact,
-  cmdPostCompact,
-  resolveLastSessionTranscript,
-  transcriptWorkingState,
-} from '../capture.js';
+import { cmdCapture, CaptureOptions } from '../capture/command.js';
+import { cmdPreCompact, cmdPostCompact, transcriptWorkingState } from '../capture/compact.js';
+import { resolveLastSessionTranscript } from '../capture/transcript.js';
 import { truncateCodePointSafe } from '../transcript-tail.js';
 import { COMPACTION_DB_WAIT_MS } from '../compaction-record.js';
 import { readStdinBounded } from '../stdin.js';

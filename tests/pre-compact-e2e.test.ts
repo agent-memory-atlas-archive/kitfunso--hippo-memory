@@ -8,12 +8,8 @@ import { getHippoRoot } from '../src/store/open.js';
 import { loadAllEntries } from '../src/store/entry-reads.js';
 import { loadActiveTaskSnapshot, saveActiveTaskSnapshot, appendSessionEvent } from '../src/store/sessions.js';
 import { writeSessionEndHandoff } from '../src/store/handoffs.js';
-import { defaultSleepLogPath } from '../src/hooks.js';
-import {
-  PRE_COMPACT_TASK_CAP,
-  PRE_COMPACT_SUMMARY_CAP,
-  PRE_COMPACT_NEXT_STEP_CAP,
-} from '../src/capture.js';
+import { defaultSleepLogPath } from '../src/hooks/shared.js';
+import { PRE_COMPACT_TASK_CAP, PRE_COMPACT_SUMMARY_CAP, PRE_COMPACT_NEXT_STEP_CAP } from '../src/capture/compact.js';
 import { openHippoDb, closeHippoDb } from '../src/db.js';
 
 // Always run against the local built CLI so we're testing our source, not a

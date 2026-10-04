@@ -65,7 +65,8 @@ export {
 export { SessionHandoff, HandoffOutcome, HandoffEvidence, isHandoffOutcome } from './handoff.js';
 // W2a: work-queue cards
 export { Card, CardStatus, CardRun, CardComment, CardTransitions, isCardStatus, CARD_TRANSITIONS, CARD_LEASE_MS } from './card.js';
-export { consolidate, ConsolidationResult } from './consolidate.js';
+export { consolidate } from './consolidate/sleep.js';
+export { ConsolidationResult } from './consolidate/run.js';
 // Announced public in CHANGELOG 1.26.3 but never re-exported; the rest of dedupe.js stays internal.
 export { strengthBucket } from './dedupe.js';
 
@@ -120,12 +121,10 @@ export {
   importClaude,
   importCursor,
   importGenericFile,
-  importMarkdown,
-  importVault,
-  importEntries,
-  ImportResult,
-  ImportOptions,
-} from './importers.js';
+} from './importers/sources.js';
+export { importMarkdown } from './importers/markdown.js';
+export { importVault } from './importers/vault.js';
+export { importEntries, ImportResult, ImportOptions } from './importers/core.js';
 
 // Feature eval suite
 export {

@@ -4,7 +4,8 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { execFileSync, execSync } from 'child_process';
-import { installJsonHooks, CODEX_TRUST_LINE } from '../hooks.js';
+import { installJsonHooks } from '../hooks/json-hooks.js';
+import { CODEX_TRUST_LINE } from '../hooks/shared.js';
 import { confidenceLabel, computeSchemaFit, createMemory, Layer } from '../memory.js';
 import { TaskSnapshot, SessionEvent } from '../store/rows.js';
 import { isInitialized } from '../store/open.js';
@@ -29,7 +30,7 @@ import { resolveProjectIdentity } from '../project-identity.js';
 import { extractPathTags } from '../path-context.js';
 import { getGlobalRoot, initGlobal } from '../shared.js';
 import { DAILY_TASK_NAME, buildDailyRunnerCommand, buildSchtasksCreateArgs, buildWindowsTaskRun } from '../scheduler.js';
-import { sanitizeLogMessage } from '../capture.js';
+import { sanitizeLogMessage } from '../capture/compact.js';
 import { type AuditOp, appendAuditEvent, reportAuditWriteFailure } from '../audit.js';
 import * as client from '../client.js';
 import { type ServerInfo, detectServer, removePidfileIfOwned } from '../server-detect.js';
