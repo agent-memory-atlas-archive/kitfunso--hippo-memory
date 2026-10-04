@@ -19,7 +19,7 @@ import { calculateStrength, markRetrieved, type MemoryEntry, COMPACTION_MEMORY_T
 import { appendAuditEvent, auditQueryFields, isContentWorthStoring } from '../audit.js';
 import { getGlobalRoot, searchBothHybrid } from '../shared.js';
 import { writeRecallTraceAtRoot } from '../recall-trace.js';
-import { evalNow } from '../ablation.js';
+import { evalNow, isRecallBoostAblated } from '../ablation.js';
 import { hybridSearch } from '../search/hybrid.js';
 import { physicsSearch } from '../search/physics-search.js';
 import type { HybridVectorCandidates } from '../search/vector.js';
@@ -717,8 +717,8 @@ export async function getContext(
     const updatedEntries = markRetrieved(toUpdate);
     const localIndex = loadIndex(ctx.hippoRoot);
     const retrievedIds = updatedEntries.map((u) => u.id);
-    const strengthenedHere = strengthenRetrieved(ctx.hippoRoot, retrievedIds);
-    if (hasGlobal) strengthenRetrieved(globalRoot, retrievedIds.filter((id) => !strengthenedHere.has(id)));
+    const strengthenedHere = strengthenRetrieved(ctx.hippoRoot, retrievedIds, { recallBoostAblated: isRecallBoostAblated() });
+    if (hasGlobal) strengthenRetrieved(globalRoot, retrievedIds.filter((id) => !strengthenedHere.has(id)), { recallBoostAblated: isRecallBoostAblated() });
 
     localIndex.last_retrieval_ids = retrievedIds;
 
