@@ -4,13 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   getGlobalRoot,
-  initGlobal,
   promoteToGlobal,
   searchBoth,
   syncGlobalToLocal,
 } from '../src/shared.js';
 import { initStore, writeEntry, loadAllEntries } from '../src/store.js';
-import { createMemory } from '../src/memory.js';
+import { createMemory } from './_helpers/default-half-life-memory.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
