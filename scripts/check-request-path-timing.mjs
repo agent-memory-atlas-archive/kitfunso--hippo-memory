@@ -27,6 +27,7 @@ process.chdir(tmp);
 const load = (rel) => import(pathToFileURL(path.join(REPO, 'dist', rel)).href);
 const { createMemory } = await load('memory.js');
 const { initStore, writeEntryDbOnly } = await load('store.js');
+const { loadAmbientTallies } = await load('ambient-store.js');
 const { openHippoDb, closeHippoDb } = await load('db.js');
 const { getContext, adminActor } = await load('api.js');
 const { handleMcpRequest } = await load('mcp/server.js');
@@ -87,6 +88,9 @@ const cases = [
   ['getContext, query', () => getContext(ctx, { q: 'kafka redis', currentProject: 'proj' })],
   ['getContext, pinned only', () => getContext(ctx, { pinnedOnly: true, includeRecent: 5, currentProject: 'proj' })],
   ['getContext, local query', withoutGlobal(() => getContext(ctx, { q: 'kafka redis', currentProject: 'proj' }))],
+  ['ambient tallies, 2 stores', () => {
+    for (const root of [localRoot, globalRoot]) loadAmbientTallies(root, 'default', { project: 'proj', currentProject: 'proj', now: new Date() });
+  }],
   ['mcp hippo_context', tool('hippo_context')],
   ['mcp hippo_recall', tool('hippo_recall', { query: 'kafka redis' })],
   ['mcp hippo_status', tool('hippo_status')],
