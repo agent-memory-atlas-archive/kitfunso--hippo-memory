@@ -23,7 +23,7 @@ export const site = {
   // Hero headline, split for accent emphasis. The per-agent install detail lives in Get started.
   tagline: { lead: 'Stop re‑teaching', accent: 'your agent.' }, // non-breaking hyphen keeps the word whole
   description:
-    "The mistake your agent made on Monday is a memory by Tuesday. Hippo plugs into Claude Code, Codex, Cursor and any MCP client, keeps what worked, drops what turned out to be wrong, and replaces facts that changed.",
+    "Make your agent's memory work like a brain. Hippo is long-term memory for coding agents.",
   installCmd: 'npm install -g hippo-memory',
   initCmd: 'hippo init --scan ~',
   // A floor stays true as the suite grows; check-readme-sync.mjs holds README and llms.txt to it.
