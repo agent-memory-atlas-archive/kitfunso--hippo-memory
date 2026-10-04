@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'node:crypto';
 import { INTERNAL_ERROR_MESSAGE, mapApiError } from '../http-util.js';
-import { log } from '../log.js';
+import { errorFields, log } from '../log.js';
 import {
   createMemory,
   computeSchemaFit,
@@ -57,7 +57,7 @@ const sessionRecallHistoryMcp = new Map<string, RingBuffer>();
 export function __resetSessionRecallHistoryMcp(): void {
   sessionRecallHistoryMcp.clear();
 }
-import { openHippoDb, closeHippoDb } from '../db.js';
+import { openHippoDb, closeHippoDb, isSqliteBusy, STORE_BUSY_MESSAGE } from '../db.js';
 import { recordTokenUse, type TokenSurface } from '../token-ledger.js';
 import { PACKAGE_VERSION } from '../version.js';
 import { validateToolArgs, type ToolInputSchema } from './tool-args.js';
@@ -88,13 +88,15 @@ interface McpRequest {
 
 interface McpResponse {
   jsonrpc: '2.0';
-  id: number | string;
+  // JSON-RPC answers a frame it could not parse with id null.
+  id: number | string | null;
   result?: unknown;
   error?: { code: number; message: string; data?: { requestId: string } };
 }
 
 /** JSON-RPC reply for a request that threw: typed API errors keep their text; anything else is logged and answered generically. */
 export function mcpErrorResponse<E>(id: McpResponse['id'], err: E, requestId: string = randomUUID()): McpResponse {
+  if (isSqliteBusy(err)) return { jsonrpc: '2.0', id, error: { code: -32603, message: STORE_BUSY_MESSAGE } };
   const { status, message } = mapApiError(err);
   if (status !== 500) return { jsonrpc: '2.0', id, error: { code: -32603, message } };
   log.error(`mcp request failed: ${err instanceof Error ? err.message : String(err)}`, { requestId });
@@ -677,8 +679,8 @@ function recordMcpTokens(toolName: string, output: string, ctx?: McpContext): vo
     } finally {
       closeHippoDb(db);
     }
-  } catch {
-    // Ledger is best-effort.
+  } catch (err) {
+    log.warnThenDebug('mcp-token-ledger', `token ledger write failed; the tool reply is unaffected: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -1330,19 +1332,23 @@ import { parseFrame } from './framing.js';
 
 let buffer: Buffer = Buffer.alloc(0);
 
+// Only method is checked: handleMcpRequest narrows params where it reads them, as the HTTP transport does.
+function isRoutableRequest(v: JsonValue): v is JsonValue & McpRequest {
+  return isJsonObjectRecord(v) && isJsonString(v.method);
+}
+
 function dispatch(body: string): void {
-  let req: McpRequest;
+  let parsed: JsonValue;
   try {
-    // SAFETY: malformed JSON is caught below and the frame is skipped; the
-    // JSON-RPC shape itself is validated field-by-field next (req.method
-    // truthiness check), matching the src/server.ts HTTP transport's own
-    // `JSON.parse(raw) as McpRequest` boundary cast.
-    req = JSON.parse(body) as McpRequest;
+    parsed = JSON.parse(body);
   } catch {
-    log.debug('mcp: skipped a frame that is not valid JSON');
+    log.debug('mcp: answered a frame that is not valid JSON with a parse error');
+    send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
     return;
   }
-  if (!req.method) return;
+  // A frame without a string method cannot be routed; dropping it keeps a stray value from crashing the process.
+  if (!isRoutableRequest(parsed)) return;
+  const req = parsed;
   if (req.method.startsWith('notifications/')) {
     handleMcpRequest(req).catch((err) => {
       log.error(`mcp notification ${req.method} failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1373,12 +1379,23 @@ export function startStdioLoop(): void {
 
   process.stdin.on('end', () => process.exit(0));
 
-  process.on('uncaughtException', (err) => {
-    log.error(`mcp uncaught: ${err instanceof Error ? err.message : String(err)}`);
-  });
-  process.on('unhandledRejection', (err) => {
-    log.error(`mcp unhandled: ${err instanceof Error ? err.message : String(err)}`);
-  });
+  // After an uncaught throw the process state is unknown, so log the cause and exit for the client to restart the server.
+  const crash = <E>(kind: string, err: E): void => {
+    log.error(`mcp ${kind}: ${err instanceof Error ? err.message : String(err)}`, errorFields(err));
+    exitAfterFlush(1);
+  };
+  process.on('uncaughtException', (err) => crash('uncaught exception', err));
+  process.on('unhandledRejection', (err) => crash('unhandled rejection', err));
+}
+
+/** Exit once stdout and stderr have drained, so the last reply and the crash log reach the client; capped at 1 s. */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  let pending = 2;
+  const done = (): void => { if (--pending === 0) process.exit(code); };
+  process.stdout.write('', done);
+  process.stderr.write('', done);
+  setTimeout(() => process.exit(code), 1000).unref();
 }
 
 // Auto-start when invoked as the main module (node dist/mcp/server.js or via

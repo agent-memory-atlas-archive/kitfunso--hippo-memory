@@ -17,6 +17,7 @@ import {
   isFtsAvailable,
   pruneConsolidationRuns,
   getHippoDbPath,
+  isSqliteBusy,
   type DatabaseSyncLike,
 } from './db.js';
 import { SessionHandoff, SessionHandoffRow, rowToSessionHandoff, HandoffEvidence, HandoffOutcome, isHandoffOutcome } from './handoff.js';
@@ -824,6 +825,8 @@ export function recallScopeFilter(requestedScope: string | undefined, mode: 'exa
   return mode === 'additive' ? { mode: 'default-deny-or-exact', value: requestedScope } : { mode: 'exact', value: requestedScope };
 }
 
+const FTS_QUERY_SYNTAX_RE = /fts5: syntax error|unterminated string/i;
+
 function loadSearchRows(
   db: ReturnType<typeof openHippoDb>,
   query: string,
@@ -909,8 +912,10 @@ function loadSearchRows(
       `).all(ftsQuery, ...tenantParams, ...scopeParams, limit) as MemoryRow[];
 
       if (rows.length > 0) return rows;
-    } catch {
-      // Fall back to LIKE matching below.
+    } catch (err) {
+      // A query FTS5 cannot parse is expected input; anything else means the index itself is broken.
+      const message = err instanceof Error ? err.message : String(err);
+      if (!FTS_QUERY_SYNTAX_RE.test(message)) log.once('fts-match-fallback', 'warn', `FTS search failed, using the slower LIKE match: ${message}`);
     }
   }
 
@@ -1334,8 +1339,9 @@ function syncFtsRow(db: ReturnType<typeof openHippoDb>, entry: MemoryEntry, isNe
       entry.content,
       entry.tags.join(' ')
     );
-  } catch {
-    // Best effort only. SQLite store is still authoritative even if FTS is unavailable.
+  } catch (err) {
+    // The memories table stays authoritative; a stale FTS row only costs recall quality, so the write goes on.
+    log.warnThenDebug('fts-sync', `FTS index update failed for ${entry.id}; keyword recall may miss it: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -1343,8 +1349,8 @@ function deleteFtsRow(db: ReturnType<typeof openHippoDb>, id: string): void {
   if (!isFtsAvailable(db)) return;
   try {
     db.prepare(`DELETE FROM memories_fts WHERE id = ?`).run(id);
-  } catch {
-    // Best effort.
+  } catch (err) {
+    log.warnThenDebug('fts-delete', `FTS index delete failed for ${id}; recall may return a stale hit: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -2017,7 +2023,15 @@ export function deleteEntry(
 ): boolean {
   const db = openStore(hippoRoot);
   try {
-    const result = deleteEntryCore(db, id, opts);
+    db.exec('BEGIN IMMEDIATE');
+    let result: ReturnType<typeof deleteEntryCore>;
+    try {
+      result = deleteEntryCore(db, id, opts);
+      db.exec('COMMIT');
+    } catch (err) {
+      if (db.isTransaction !== false) db.exec('ROLLBACK');
+      throw err;
+    }
     if (!result) return false;
 
     purgeMirrorBestEffort(hippoRoot, id, false, 'deleteEntry');
@@ -2690,6 +2704,15 @@ export function updateStats(
     writeStatsMirror(hippoRoot, buildStatsFromDb(db));
   } finally {
     closeHippoDb(db);
+  }
+}
+
+export function updateStatsUnlessBusy(hippoRoot: string, delta: Parameters<typeof updateStats>[1], committed: string): void {
+  try {
+    updateStats(hippoRoot, delta);
+  } catch (err) {
+    if (!isSqliteBusy(err)) throw err;
+    log.warnThenDebug('stats-busy', `${committed}, but the store was busy, so the stats counters were not updated`);
   }
 }
 
