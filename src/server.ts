@@ -139,8 +139,10 @@ import {
   HttpError,
   JSON_HEADERS,
   BodyTooLargeError,
+  isCrossSite,
   isHeaderString,
   isJsonObjectRecord,
+  LOOPBACK_HOST_HEADER,
   mapApiError,
   readBody,
   sendJson,
@@ -150,6 +152,8 @@ import { ForbiddenError, NotFoundError } from './api-errors.js';
 
 // Add-on packages revoke keys through these without importing the whole api surface.
 export { authRevoke, ForbiddenError, type Context, type Actor };
+// Published on the hippo-memory/server subpath before they moved to http-util.ts, so they stay exported here.
+export { isCrossSite, LOOPBACK_HOST_HEADER } from './http-util.js';
 
 // Review patch #2: explicit allow-list for unauthenticated /v1/* routes.
 // New unauth routes MUST be added here AND get a corresponding entry in
@@ -422,17 +426,6 @@ export function isLoopback(remoteAddress: string | undefined): boolean {
   if (remoteAddress === '::1') return true;
   if (remoteAddress === '::ffff:127.0.0.1') return true;
   return false;
-}
-
-// Any other Host on a loopback socket is DNS rebinding: a hostile page resolved to 127.0.0.1.
-export const LOOPBACK_HOST_HEADER = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-
-/** A browser request sent by another site. Non-browser clients send neither header and pass. */
-export function isCrossSite(req: IncomingMessage): boolean {
-  const site = req.headers['sec-fetch-site'];
-  if (site !== undefined && site !== 'same-origin' && site !== 'none') return true;
-  const origin = req.headers.origin;
-  return origin !== undefined && origin !== `http://${req.headers.host}`;
 }
 
 // A proxy on this host (nginx, Caddy, cloudflared) connects from loopback, so these headers mean the caller is not local.

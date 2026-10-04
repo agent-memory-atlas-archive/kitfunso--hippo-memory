@@ -115,9 +115,9 @@ import {
   embedAll,
   embedMemory,
   loadEmbeddingIndex,
-  resolveEmbeddingModel,
   embeddingModelRequiresReindex,
 } from './embeddings.js';
+import { resolveEmbeddingModel } from './local-embedding.js';
 import { resolveEmbeddingProvider } from './embedding-provider.js';
 import { loadPhysicsState, resetAllPhysicsState } from './physics-state.js';
 import { computeSystemEnergy, vecNorm } from './physics.js';
@@ -177,7 +177,8 @@ import {
   importVault,
   ImportOptions,
 } from './importers.js';
-import { cmdCapture, CaptureOptions, cmdPreCompact, cmdPostCompact, resolveLastSessionTranscript, truncateCodePointSafe, transcriptWorkingState } from './capture.js';
+import { cmdCapture, CaptureOptions, cmdPreCompact, cmdPostCompact, resolveLastSessionTranscript, transcriptWorkingState } from './capture.js';
+import { truncateCodePointSafe } from './transcript-tail.js';
 import { COMPACTION_DB_WAIT_MS, replayCompactionsAt } from './compaction-record.js';
 import { readStdinBounded } from './stdin.js';
 import {
