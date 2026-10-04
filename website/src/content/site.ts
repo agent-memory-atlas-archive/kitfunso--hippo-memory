@@ -19,11 +19,13 @@ export const site = {
   name: 'hippo',
   pkg: 'hippo-memory',
   version: pkg.version, // Build-source version; publication is verified separately.
-  positioning: 'memory for AI agents that learns what is wrong', // page title and hero eyebrow
-  // Hero headline, split for accent emphasis. The per-agent install detail lives in Get started.
-  tagline: { lead: 'Stop re‑teaching', accent: 'your agent.' }, // non-breaking hyphen keeps the word whole
-  description:
-    "Make your agent's memory work like a brain. Hippo is long-term memory for coding agents.",
+  positioning: pkg.description,
+  tagline: {
+    lead: "Make your agent's memory",
+    accent: 'work like a brain.',
+    summary: 'Hippo is long-term memory for coding agents.',
+  },
+  description: pkg.description,
   installCmd: 'npm install -g hippo-memory',
   initCmd: 'hippo init --scan ~',
   // A floor stays true as the suite grows; check-readme-sync.mjs holds README and llms.txt to it.
