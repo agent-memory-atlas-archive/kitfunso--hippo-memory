@@ -2,6 +2,7 @@ import { envAnthropicApiKey, envDagRebuildCap } from '../env.js';
 import { Layer } from '../memory.js';
 import { log } from '../log.js';
 import { keptAsWritten, type SleepRun } from './run.js';
+import { certainDefect } from '../automatic-memory-quality.js';
 
 /** The key, model options and once-per-line error reporter every LLM phase shares. */
 function sleepLlm(run: SleepRun, fetcher: typeof fetch | undefined) {
@@ -30,7 +31,8 @@ export async function llmPasses(run: SleepRun, fetcher: typeof fetch | undefined
     run.survivors.filter((e) => e.extracted_from).map((e) => e.extracted_from!),
   );
   const extractionCandidates = run.survivors.filter(
-    (e) => e.layer === Layer.Episodic && !e.superseded_by && !extractedFromIds.has(e.id) && !keptAsWritten(e),
+    (e) => e.layer === Layer.Episodic && !e.superseded_by && !extractedFromIds.has(e.id) && !keptAsWritten(e)
+      && e.trace_outcome === null && e.source !== 'auto-promote' && certainDefect(e.content) === null,
   );
   run.result.extractionCandidates = extractionCandidates.length;
 
@@ -43,8 +45,7 @@ export async function llmPasses(run: SleepRun, fetcher: typeof fetch | undefined
       try {
         const facts = await extractFacts(candidate.content, { ...llm.llmOpts, onError: llm.llmError('extraction') });
         if (facts.length > 0) {
-          storeExtractedFacts(run.hippoRoot, candidate, facts);
-          extractedCount += facts.length;
+          extractedCount += storeExtractedFacts(run.hippoRoot, candidate, facts).length;
         }
       } catch (err) {
         llm.llmError('extraction')(String(err));
@@ -65,7 +66,7 @@ export async function llmPasses(run: SleepRun, fetcher: typeof fetch | undefined
 // -------------------------------------------------------------------------
 async function dagBuildPass(run: SleepRun, { apiKey, llmError, llmOpts }: SleepLlm): Promise<void> {
   const extractedFacts = run.survivors.filter(
-    (e) => e.tags.includes('extracted') && e.dag_level === 1 && !e.superseded_by,
+    (e) => e.tags.includes('extracted') && e.dag_level === 1 && !e.superseded_by && certainDefect(e.content) === null,
   );
   if (!(apiKey && extractedFacts.length >= 3 && !run.dryRun)) return;
   try {
