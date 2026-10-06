@@ -133,6 +133,12 @@ member key an admin mints never does, so it keeps working after the user leaves 
 provider until someone revokes it.
 _Avoid_: auth plugin, identity provider
 
+**Public JSON path**:
+A fixed GET `/v1/` path that `serve()`'s caller pairs with a JSON value (`publicJson`). Anyone can read it, with no key and
+under any store, so it must hold nothing secret. The value is serialized once at boot and may be at most 64 KiB; a path a
+core GET route already serves is refused at boot.
+_Avoid_: public route (`PUBLIC_ROUTES` holds the signed connector webhooks), open endpoint, metadata route
+
 **Key owner**:
 The auth-resolver subject that minted a self-service API key for itself. A member signed in
 through the resolver lists and may revoke only the keys it owns; a key an admin or the CLI mints
