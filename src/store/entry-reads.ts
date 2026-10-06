@@ -4,6 +4,7 @@ import { MEMORY_SELECT_COLUMNS, type MemoryRow, rowToEntry, parseJsonArray } fro
 import { openStore } from './open.js';
 import { escapeLike } from '../escape.js';
 import { originInSql } from '../project-identity.js';
+import { scopeAdmitSql } from '../recall-scope.js';
 
 /**
  * Read a memory entry by ID.
@@ -167,8 +168,7 @@ export function loadSessionRawMemories(
  * An unscoped COUNT would let a no-scope caller infer private rows by comparing `totalRaw`
  * against `items.length`, so this SQL-encodes the default-deny rule `passesScopeFilterForRecall` applies in TS:
  *   - explicit scope passed: exact-match
- *   - no scope: rows where scope IS NULL, or scope is NOT a `<source>:private:*`
- *     pattern AND not the `unknown:legacy` quarantine bucket.
+ *   - no scope: `scopeAdmitSql`'s default deny, which admits `ownScope`, the caller's personal scope.
  *
  * `tenantId` is optional for back-compat. Pass `undefined` only when
  * intentionally counting cross-tenant; `assemble()` passes `ctx.tenantId`.
@@ -178,6 +178,7 @@ export function countSessionRawMemories(
   sessionId: string,
   tenantId?: string,
   scope?: string,
+  ownScope?: string,
 ): number {
   if (!sessionId) return 0;
   const db = openStore(hippoRoot);
@@ -193,9 +194,9 @@ export function countSessionRawMemories(
       sql += ' AND scope = ?';
       params.push(scope);
     } else {
-      // SQL-ify the TS default-deny: scope IS NULL OR (NOT LIKE '%:private:%'
-      // AND != 'unknown:legacy'). Mirrors api.passesScopeFilterForRecall.
-      sql += ` AND (scope IS NULL OR (scope NOT LIKE '%:private:%' AND scope != 'unknown:legacy'))`;
+      const admit = scopeAdmitSql('', ownScope);
+      sql += ` AND ${admit.sql}`;
+      params.push(...admit.params);
     }
     // SAFETY: row's shape matches the single `COUNT(*) AS c` column above.
     const row = db.prepare(sql).get(...params) as { c?: number } | undefined;
@@ -307,16 +308,17 @@ export function selectLiveEntriesBySourcePrefix(db: DatabaseSyncLike, tenantId: 
   return rows.map(rowToEntry).filter((entry) => entry.source.startsWith(prefix));
 }
 
-// Content of every tenant row tagged `tag`, without reading the rest of the store; `origins` keeps one project's rows and user-global ones.
-// `instr` is a substring prefilter over the raw JSON; `includes` below re-checks exactly.
+// Content of every team-visible tenant row tagged `tag`, without reading the rest of the store; `origins` keeps one project's rows and user-global ones.
+// No owner: a personal or connector-private row must never answer `duplicate` for, or stop, a team copy. `instr` prefilters; `includes` re-checks.
 export function loadContentsWithTag(hippoRoot: string, tenantId: string, tag: string, origins?: readonly string[]): string[] {
   const db = openStore(hippoRoot);
   try {
     const inProject = origins === undefined ? '' : ` AND (origin_project = '' OR ${originInSql(origins)})`;
+    const admit = scopeAdmitSql('');
     /** SAFETY: rows' shape matches the two columns named in the SELECT below. */
     const rows = db.prepare(
-      `SELECT content, tags_json FROM memories WHERE tenant_id = ? AND instr(tags_json, ?) > 0${inProject}`,
-    ).all(tenantId, JSON.stringify(tag), ...(origins ?? [])) as Array<{ content: string; tags_json: string }>;
+      `SELECT content, tags_json FROM memories WHERE tenant_id = ? AND instr(tags_json, ?) > 0${inProject} AND ${admit.sql}`,
+    ).all(tenantId, JSON.stringify(tag), ...(origins ?? []), ...admit.params) as Array<{ content: string; tags_json: string }>;
     return rows.filter((r) => parseJsonArray(r.tags_json).includes(tag)).map((r) => r.content);
   } finally {
     closeHippoDb(db);
