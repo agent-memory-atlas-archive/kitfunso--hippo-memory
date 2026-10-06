@@ -18,6 +18,10 @@ export function isHeaderString(value: string | string[] | undefined): value is s
 // almost certainly a misconfigured client or a deliberate memory-blowup attempt.
 const MAX_BODY_BYTES = 1024 * 1024;
 
+function sizeLabel(bytes: number): string {
+  return bytes % (1024 * 1024) === 0 ? `${bytes / (1024 * 1024)}MB` : `${Math.ceil(bytes / 1024)}KB`;
+}
+
 // How long a refused upload is still read and discarded after its reply, so a client that never stops cannot hold the socket.
 const REFUSED_UPLOAD_LINGER_MS = 2000;
 
@@ -36,6 +40,9 @@ export class HttpError extends Error {
 
 export class BodyTooLargeError extends Error {}
 
+/** The body did not arrive in time. Its own class so mapApiError answers 408 and the server drops the socket. */
+export class BodyTimeoutError extends Error {}
+
 /** The status and client-facing message for one failed request. */
 export interface ApiErrorReply {
   status: number;
@@ -52,6 +59,7 @@ export function mapApiError<E>(err: E): ApiErrorReply {
   }
   if (err instanceof HttpError || err instanceof ApiError) return { status: err.status, message: err.message };
   if (err instanceof BodyTooLargeError) return { status: 413, message: err.message };
+  if (err instanceof BodyTimeoutError) return { status: 408, message: err.message };
   return { status: 500, message: INTERNAL_ERROR_MESSAGE };
 }
 
@@ -63,29 +71,46 @@ export function sendJson<T>(res: ServerResponse, status: number, body: T): void 
   res.end(text);
 }
 
-/**
- * Read the entire request body into a Buffer. Caps at MAX_BODY_BYTES to keep
- * a malicious or buggy client from exhausting memory. The cap is enforced
- * mid-stream so we don't wait for an attacker to finish before erroring out.
- */
-export function readBody(req: IncomingMessage): Promise<string> {
+export interface ReadBodyOpts {
+  /** Defaults to 1 MB. */
+  maxBytes?: number;
+  /** Fails with BodyTimeoutError when the whole body has not arrived by then; unset waits for as long as the socket stays open. */
+  deadlineMs?: number;
+}
+
+/** The body as text, refused mid-stream past maxBytes and past deadlineMs, so an oversized or slow sender cannot tie up the server. */
+export function readBody(req: IncomingMessage, { maxBytes = MAX_BODY_BYTES, deadlineMs }: ReadBodyOpts = {}): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let timer: NodeJS.Timeout | undefined;
+    const refuse = (err: Error): void => {
+      clearTimeout(timer);
+      req.off('data', onData);
+      chunks.length = 0;
+      reject(err);
+    };
     // Not for-await: leaving that loop early destroys the request, so the socket stops reading and the 413 caller cannot close it cleanly.
     const onData = (chunk: Buffer): void => {
       total += chunk.length;
-      if (total <= MAX_BODY_BYTES) {
+      if (total <= maxBytes) {
         chunks.push(chunk);
         return;
       }
-      req.off('data', onData);
-      chunks.length = 0;
-      reject(new BodyTooLargeError('request body exceeds 1MB'));
+      refuse(new BodyTooLargeError(`request body exceeds ${sizeLabel(maxBytes)}`));
     };
+    if (deadlineMs !== undefined) {
+      timer = setTimeout(() => refuse(new BodyTimeoutError(`request body not received within ${deadlineMs} ms`)), deadlineMs);
+    }
     req.on('data', onData);
-    req.once('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
+    req.once('end', () => {
+      clearTimeout(timer);
+      resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+    req.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
