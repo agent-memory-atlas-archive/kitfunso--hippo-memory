@@ -133,6 +133,16 @@ describe('promptHookContext', () => {
     expect(await promptHookContext(ctx, { sessionId: 'parity-recent', project, payload: noPrompt })).toEqual({ arm: null, stdout: expected[1], staticHash });
   });
 
+  it('prints the task state when no pin or memory is there to pick, as the local hook does', async () => {
+    const dir = path.join(tmp, 'p');
+    const store = makeProject(dir);
+    saveActiveTaskSnapshot(store, 'default', { task: 'ship', summary: 'half done', next_step: 'run tests', session_id: 'state-only' });
+    const payload: HookPayload = { session_id: 'state-only', hook_event_name: 'UserPromptSubmit' };
+    const out = await promptHookContext(ctxFor(store), { sessionId: 'state-only', project: PROJECT_P, payload });
+    expect(out.stdout).toContain('Active Task Snapshot');
+    expect(localHook(dir, { ...payload, session_id: 'state-only-cli' })).toContain('Active Task Snapshot');
+  });
+
   it('rate 10000: books a holdout arm row and prints nothing, as the local holdout does', async () => {
     const store = makeProject(path.join(tmp, 'p'), 10000);
     pin(store, 'PINNED: always check the rollback plan', 'p');
@@ -317,15 +327,16 @@ describe('promptHookContext on a shared store', () => {
     expect(shared.stdout).not.toContain('personal note');
   });
 
-  it('shows task state only to the session that saved it', async () => {
+  it('shows task state only to the owner that saved it, in any of its sessions', async () => {
     const store = makeProject(path.join(tmp, 'p'));
     pin(store, 'PINNED: always check the rollback plan', 'p');
-    saveActiveTaskSnapshot(store, 'default', { task: 'ship', summary: 'half done', next_step: 'run tests', session_id: 'owner' });
+    saveActiveTaskSnapshot(store, 'default', { task: 'ship', summary: 'half done', next_step: 'run tests', session_id: 'owner' }, { owner: 'prompt-hook-test', project: ['p'] });
     expect((await ask(store, 'someone-else', false)).stdout).toContain('Active Task Snapshot');
-    const other = await ask(store, 'someone-else-shared', true);
+    const otherCtx: Context = { ...ctxFor(store), actor: { subject: 'api_key:hk_other', role: 'member' } };
+    const other = await promptHookContext(otherCtx, { sessionId: 'someone-else-shared', project: PROJECT_P }, SHARED);
     expect(other.stdout).toContain('rollback plan');
     expect(other.stdout).not.toContain('Active Task Snapshot');
-    expect((await ask(store, 'owner', true)).stdout).toContain('Active Task Snapshot');
+    expect((await ask(store, 'owner-next-session', true)).stdout).toContain('Active Task Snapshot');
   });
 
   it('records nothing and books no arm when the served root has no store, never falling back to the global one', async () => {
@@ -357,6 +368,15 @@ describe('subpath exports resolve', () => {
     ['hippo-memory/session-text', 'collectSessionTurns', 'function'],
     ['hippo-memory/session-text', 'sessionTail', 'function'],
     ['hippo-memory/session-text', 'scrubForSharing', 'function'],
+    ['hippo-memory/session-text', 'transcriptWorkingState', 'function'],
+    ['hippo-memory/session-text', 'WORKING_STATE_CAPS', 'object'],
+    ['hippo-memory/session-text', 'lessonFromFailure', 'function'],
+    ['hippo-memory/session-text', 'failureReport', 'function'],
+    ['hippo-memory/session-text', 'collectHandoffEvidence', 'function'],
+    ['hippo-memory/session-text', 'compactSummaryBody', 'function'],
+    ['hippo-memory/session-text', 'parseCompactionItems', 'function'],
+    ['hippo-memory/session-text', 'COMPACTION_ITEM_MAX_CHARS', 'number'],
+    ['hippo-memory/session-text', 'COMPACTION_ITEM_ROW_CAP', 'number'],
     ['hippo-memory/session-text', 'summariseTranscript', 'undefined'],
   ])('%s: typeof %s is %s in the build', (specifier, name, type) => {
     const script = `const m = await import('${specifier}'); console.log(typeof m.${name});`;
