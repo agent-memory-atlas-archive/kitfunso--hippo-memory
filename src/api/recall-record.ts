@@ -1,5 +1,5 @@
 // The recall session rings and the recall audit rows, in one place for the CLI, MCP and HTTP surfaces.
-import { appendAuditEvent, auditQueryFields, reportAuditWriteFailure, type AuditOp } from '../audit.js';
+import { appendAuditEvent, auditQueryFields, reportAuditWriteFailure, type AppendAuditOpts, type AuditOp } from '../audit.js';
 import type { AvailabilityHint } from '../availability.js';
 import { closeHippoDb, openHippoDb } from '../db.js';
 import {
@@ -52,21 +52,32 @@ export interface RecallAuditor {
   readonly bestEffort?: boolean;
 }
 
+/** Whom a recall audit row names; a surface that writes through the store port needs no root. */
+export type RecallAuditCaller = Pick<RecallAuditor, 'tenantId' | 'actor'>;
+
 type RecallAuditMetadata = Readonly<Record<string, string | number | null>>;
 
-/** One audit row on its own short-lived handle. */
-export function appendRecallAudit(who: RecallAuditor, op: AuditOp, targetId?: string, metadata?: RecallAuditMetadata): void {
+export function recallAuditRow(who: RecallAuditCaller, op: AuditOp, targetId?: string, metadata?: RecallAuditMetadata): AppendAuditOpts {
+  return { tenantId: who.tenantId, actor: who.actor, op, targetId, metadata };
+}
+
+function writeRecallAudit(who: RecallAuditor, row: AppendAuditOpts): void {
   try {
     const db = openHippoDb(who.hippoRoot);
     try {
-      appendAuditEvent(db, { tenantId: who.tenantId, actor: who.actor, op, targetId, metadata });
+      appendAuditEvent(db, row);
     } finally {
       closeHippoDb(db);
     }
   } catch (err) {
     if (!who.bestEffort) throw err;
-    reportAuditWriteFailure(op, String(err), targetId);
+    reportAuditWriteFailure(row.op, String(err), row.targetId);
   }
+}
+
+/** One audit row on its own short-lived handle. */
+export function appendRecallAudit(who: RecallAuditor, op: AuditOp, targetId?: string, metadata?: RecallAuditMetadata): void {
+  writeRecallAudit(who, recallAuditRow(who, op, targetId, metadata));
 }
 
 // The row stores a hash of the query, never its text, so an archived memory's words cannot persist there.
@@ -75,28 +86,31 @@ export function recallAuditMetadata(query: string, results: number) {
 }
 
 /** No session means no ring; the row hashes with SHA-256/16, since hashQueryText is FNV-1a and easy to reverse on short queries. */
-export function auditAnchorSkipped(who: RecallAuditor, query: string): void {
-  if (biasHintEnabled('anchoring')) appendRecallAudit(who, 'recall_anchor_skipped_no_session', undefined, auditQueryFields(query));
+export function anchorSkippedRows(who: RecallAuditCaller, query: string): AppendAuditOpts[] {
+  if (!biasHintEnabled('anchoring')) return [];
+  return [recallAuditRow(who, 'recall_anchor_skipped_no_session', undefined, auditQueryFields(query))];
 }
 
-export function auditAnchoring(who: RecallAuditor, hint: AnchoringHint | null): void {
+export function anchoringRows(who: RecallAuditCaller, hint: AnchoringHint | null): AppendAuditOpts[] {
   if (hint?.reason === 'memory_dominance') {
-    appendRecallAudit(who, 'recall_anchor_detected_memory_dominance', hint.memoryId, {
+    return [recallAuditRow(who, 'recall_anchor_detected_memory_dominance', hint.memoryId, {
       memory_id: hint.memoryId,
       query_count: hint.queryCount ?? null,
-    });
-  } else if (hint?.reason === 'query_repeat') {
-    appendRecallAudit(who, 'recall_anchor_detected_query_repeat', hint.memoryId, { memory_id: hint.memoryId });
+    })];
   }
+  if (hint?.reason === 'query_repeat') {
+    return [recallAuditRow(who, 'recall_anchor_detected_query_repeat', hint.memoryId, { memory_id: hint.memoryId })];
+  }
+  return [];
 }
 
-export function auditAvailability(who: RecallAuditor, hint: AvailabilityHint | null): void {
-  if (!hint) return;
-  appendRecallAudit(who, 'recall_availability_detected', undefined, {
+export function availabilityRows(who: RecallAuditCaller, hint: AvailabilityHint | null): AppendAuditOpts[] {
+  if (!hint) return [];
+  return [recallAuditRow(who, 'recall_availability_detected', undefined, {
     recent_fraction: hint.recentFraction,
     older_passed_over: hint.olderCandidatesPassedOver,
     returned_count: hint.returnedCount,
-  });
+  })];
 }
 
 export interface ShownRecall {
@@ -107,10 +121,17 @@ export interface ShownRecall {
   readonly availability: AvailabilityHint | null;
 }
 
+/** The hint rows for a list a surface showed, so a surface on the store port can hand them to the recall's one write. */
+export function shownRecallRows(who: RecallAuditCaller, shown: ShownRecall): AppendAuditOpts[] {
+  return [
+    ...(shown.ring ? [] : anchorSkippedRows(who, shown.query)),
+    ...anchoringRows(who, shown.anchoring),
+    ...availabilityRows(who, shown.availability),
+  ];
+}
+
 /** For a surface that computes its hints over the list it shows: feeds the ring after the final detect, then audits the hints. */
 export function recordShownRecall(who: RecallAuditor, shown: ShownRecall): void {
   if (shown.ring) noteRecall(shown.ring, shown.query, shown.topId, shown.anchoring?.memoryId);
-  else auditAnchorSkipped(who, shown.query);
-  auditAnchoring(who, shown.anchoring);
-  auditAvailability(who, shown.availability);
+  for (const row of shownRecallRows(who, shown)) writeRecallAudit(who, row);
 }

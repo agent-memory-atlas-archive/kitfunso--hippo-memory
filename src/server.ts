@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { detectServer, removePidfileIfOwned, writePidfile } from './server-detect.js';
 import { closeHippoDb, type DatabaseSyncLike, getHippoDbPath, isStoreBusy, openHippoDb, outsideRequestStores, runWithRequestStores, SERVER_DB_WAIT_MS, withSqliteBlocked } from './db.js';
 import { sqliteStore, type HippoStore } from './store-port.js';
+import { markSharedStore } from './config.js';
 import { auditWriteFailureCount } from './audit.js';
 import { PACKAGE_VERSION } from './version.js';
 import { errorFields, log } from './log.js';
@@ -11,7 +12,7 @@ import { createRateLimiter, type RateLimiter } from './rate-limit.js';
 import { type Actor, authCreateSelf, type AuthCreateSelfOpts, type AuthCreateSelfResult, authRevoke, type Context, RecallContractError } from './api.js';
 import { handleSlackEventsWebhook } from './connectors/slack/webhook.js';
 import { handleGitHubEventsWebhook } from './connectors/github/webhook.js';
-import { BodyTimeoutError, BodyTooLargeError, closeAfterReply, HttpError, JSON_HEADERS, sendJson } from './http-util.js';
+import { BodyTimeoutError, BodyTooLargeError, closeAfterReply, HttpError, JSON_HEADERS, sendJson, STORE_NOT_PORTED_MESSAGE } from './http-util.js';
 import { ForbiddenError } from './api-errors.js';
 import { buildContextWithAuth, isLoopback, LIMITER_MAX_KEYS, requireAuth } from './server/auth.js';
 import { enforceRateLimit } from './server/client-ip.js';
@@ -50,8 +51,20 @@ export type { JsonValue } from './json.js';
 // A session-end route stores the turns its caller read from a transcript on the caller's own machine.
 export { captureSessionTexts, type SessionCaptureRequest, type SessionCaptureResult } from './capture/session-texts.js';
 // An add-on serves from another database by passing serve() its own HippoStore.
-export { sqliteStore, type HippoStore } from './store-port.js';
+export { sqliteStore, type HippoStore, type RecallSearchArgs, type RecallWrites } from './store-port.js';
 export type { ApiKeyRecord } from './auth.js';
+// The types HippoStore's recall methods take and return, so an add-on store can implement them from this subpath.
+export type { AppendAuditOpts } from './audit.js';
+export type { ContinuityBlock } from './api/recall-types.js';
+export type { ActiveGoals, GetActiveGoalsOpts, Goal, GoalRecallLogRow, RetrievalPolicy } from './goals.js';
+export type { MemoryEntry } from './memory.js';
+export type { ClassResolution, PlanningFallacyEvidence } from './predictions/planning-fallacy.js';
+export type { PredictionBaserate } from './predictions/store.js';
+export type { RecallTraceInput } from './recall-trace.js';
+export type { StrengthenOptions } from './store/entry-writes.js';
+export type { OriginFilter } from './store/search-rows.js';
+export type { ContinuityKey } from './store/sessions.js';
+export type { TokenUse } from './token-ledger.js';
 export { StoreBusyError } from './db.js';
 // An add-on's install step mints the first admin key into a store folder it names, which `hippo auth create` cannot reach.
 export { authCreate, type AuthCreateOpts, type AuthCreateResult } from './api.js';
@@ -108,7 +121,7 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const V1_ROUTES: readonly Route[] = [
   { method: 'POST', path: '/v1/memories', handler: handleCreateMemory },
   { method: 'GET', path: '/v1/graph', handler: handleGetGraph },
-  { method: 'GET', path: '/v1/memories', handler: handleRecallMemories },
+  { method: 'GET', path: '/v1/memories', storeReady: true, handler: handleRecallMemories },
   { method: 'GET', pattern: '/v1/sessions/:id/assemble', handler: handleAssembleSession },
   { method: 'GET', pattern: '/v1/recall/drill/:id', handler: handleDrillRecall },
   { method: 'POST', pattern: '/v1/memories/:id/archive', handler: handleArchiveMemory },
@@ -253,10 +266,8 @@ function dispatchPublicJson({ res, opts }: RouteRequest, method: string, path: s
   return true;
 }
 
-const NOT_ON_STORE_MESSAGE = 'not available on this store';
-
 function assertSqliteStore(opts: ResolvedServeOpts): void {
-  if (opts.store.kind !== 'sqlite') throw new HttpError(501, NOT_ON_STORE_MESSAGE);
+  if (opts.store.kind !== 'sqlite') throw new HttpError(501, STORE_NOT_PORTED_MESSAGE);
 }
 
 /** Under another store, a route not yet ported answers 501 without running; the caller is checked first, so a bad key is still a 401. */
@@ -329,8 +340,8 @@ async function dispatchScopedRoute(r: RouteRequest, method: string, path: string
     return true;
   }
 
+  // Store-ready: under another store the MCP layer lists and runs only the tools ported to the port.
   if (method === 'POST' && path === '/mcp') {
-    await refuseUnportedRoute(req, opts);
     await handleMcpPost(req, res, opts);
     return true;
   }
@@ -573,6 +584,8 @@ export async function serve(opts: ServeOpts): Promise<ServerHandle> {
     ...opts, routes, publicJsonBodies, store: opts.store ?? sqliteStore(opts.hippoRoot), callerLimiter, failedAuthLimiter,
   };
   const { kind } = served.store;
+  // A store other than hippo.db is a team's central server, so its folder's config.json must not decide shared-ness.
+  if (kind !== 'sqlite') markSharedStore(opts.hippoRoot);
   const holder = createStoreHolder(opts.hippoRoot, served.store);
 
   const inflight = new Set<ServerResponse>();

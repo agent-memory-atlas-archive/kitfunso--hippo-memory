@@ -8,6 +8,7 @@ import { retrieve as apiRetrieve, drillDown as apiDrillDown, assemble as apiAsse
 import { autoDetectContext } from '../context-auto.js';
 import { resolveProjectIdentity, type ProjectIdentity } from '../project-identity.js';
 import { isSharedStore } from '../config.js';
+import type { AppendAuditOpts } from '../audit.js';
 import { detectAnchoring, hashQueryText, biasHintEnabled, snapshotRing, type RingBuffer } from '../recall-history.js';
 import { detectAvailabilityBias } from '../availability.js';
 import { estimateTokens } from '../token-ledger.js';
@@ -30,7 +31,7 @@ import {
 } from './format.js';
 import { isJsonString } from '../json.js';
 import { parseContextRequest, parseRecallRequest, toolParams } from '../api/recall-request.js';
-import { recordShownRecall, sessionRing } from '../api/recall-record.js';
+import { noteRecall, sessionRing, shownRecallRows } from '../api/recall-record.js';
 
 // Named shapes for the optional fields each api.* call only wants to pass
 // when the caller actually supplied them. Built via `const extra: T = {};
@@ -49,13 +50,14 @@ interface DrillDownExtraOpts {
   depth?: number;
 }
 
-/** Builds the showRanked callback that renders the list MCP shows and parks the render in `out`. */
+/** Builds the showRanked callback that renders the list MCP shows, parks the render in `out` and hands back its hint rows. */
 function recallPresenter(
   budget: number,
   includeContinuity: boolean,
   anchorRing: RingBuffer | null,
   queryHash: number,
   out: RenderSlot,
+  hintRows: (rendered: RenderedRecall) => AppendAuditOpts[],
 ): NonNullable<RecallOpts['showRanked']> {
   return ({ ranked, pool, droppedByScope }, apiResult) => {
     // Sections are paid in print order, ahead of the memories and after the heading; one that does not fit is dropped whole.
@@ -121,7 +123,7 @@ function recallPresenter(
       rendered = render(results);
     }
     out.rendered = rendered;
-    return rendered.list.map((r) => r.entry.id);
+    return { ids: rendered.list.map((r) => r.entry.id), audit: hintRows(rendered) };
   };
 }
 
@@ -138,6 +140,7 @@ export async function runRecallTool(call: ToolCall): Promise<string> {
     store: ctx?.store,
   };
   const anchorRing = sessionRing('mcp', tenantId, sessionId);
+  const who = { tenantId, actor: ctx?.actor ?? 'mcp' };
   const queryHash = hashQueryText(query);
   const out: RenderSlot = {};
   // RecallContractError throws reach the MCP caller raw, as mcp-recall-fresh-tail-policy.test.ts pins.
@@ -149,14 +152,16 @@ export async function runRecallTool(call: ToolCall): Promise<string> {
     suppressAvailabilityHint: true,
     keepHeldCopies: true,
     project: ctx?.project,
-    showRanked: recallPresenter(budget, includeContinuity, anchorRing, queryHash, out),
+    showRanked: recallPresenter(budget, includeContinuity, anchorRing, queryHash, out, ({ list, anchoring, availability }) => shownRecallRows(who, {
+      query, ring: anchorRing, topId: list[0]?.entry.id ?? null, anchoring, availability,
+    })),
   });
-  if (!out.rendered) throw new Error('hippo_recall: api.retrieve returned without calling showRanked');
-  lastRecalledIds.set(resolveClientKey(ctx), out.rendered.list.map((r) => r.entry.id));
-  const { anchoring, availability, list } = out.rendered;
-  const who = { hippoRoot, tenantId, actor: ctx?.actor ?? 'mcp' };
-  recordShownRecall(who, { query, ring: anchorRing, topId: list[0]?.entry.id ?? null, anchoring, availability });
-  return out.rendered.text;
+  const { rendered } = out;
+  if (!rendered) throw new Error('hippo_recall: api.retrieve returned without calling showRanked');
+  lastRecalledIds.set(resolveClientKey(ctx), rendered.list.map((r) => r.entry.id));
+  // Fed once the recall's rows are written, after the final detect: anchoredOn feeds the cooldown for the next recall on this session.
+  if (anchorRing) noteRecall(anchorRing, query, rendered.list[0]?.entry.id ?? null, rendered.anchoring?.memoryId);
+  return rendered.text;
 }
 
 export function runAssembleTool({ args, ctx, hippoRoot, tenantId }: ToolCall): string {

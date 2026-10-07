@@ -5,6 +5,7 @@ import { tableExists } from './tables.js';
 import { assertBinaryCompatible } from './migrate.js';
 import { connectHippoDb, getHippoDbPath } from './connect.js';
 import { currentRequestStores, isScopedHandle, runWithRequestStores } from './request-stores.js';
+import { SqliteBlockedError } from './sqlite-blocked.js';
 
 export { getHippoDbPath };
 
@@ -34,19 +35,21 @@ export function scopedBusyWait(): number | undefined {
   return currentRequestStores()?.busyWaitMs;
 }
 
-/** Thrown by a hippo.db open inside a request served from another store: the code path is not ported to the store port yet. */
-export class SqliteBlockedError extends Error {
-  constructor(readonly storeKind: string) {
-    super(`hippo.db is not opened while the '${storeKind}' store serves this request; this code path is not ported to the store yet`);
-    this.name = 'SqliteBlockedError';
-  }
-}
-
 const sqliteBlockedBy = new AsyncLocalStorage<string>();
 
 /** Runs `fn` so that every hippo.db open inside it, across awaits, throws; otherwise a missed port would create and write a hippo.db nobody reads. */
 export function withSqliteBlocked<T>(storeKind: string, fn: () => T): T {
   return sqliteBlockedBy.run(storeKind, fn);
+}
+
+/** Runs `fn` with hippo.db opens allowed again, for a store whose own methods are backed by hippo.db. */
+export function withSqliteAllowed<T>(fn: () => T): T {
+  return sqliteBlockedBy.exit(fn);
+}
+
+/** First line of a best-effort catch around a hippo.db open: an unported path must fail closed, not fall back silently. */
+export function rethrowIfSqliteBlocked<E>(err: E): void {
+  if (err instanceof SqliteBlockedError) throw err;
 }
 
 function assertSqliteAllowed(): void {

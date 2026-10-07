@@ -150,7 +150,7 @@ describe('API key expiry', () => {
     const { expiresAt: _dropped, ...rest } = withDb((db) => readApiKeyRecord(db, key.keyId))!;
     // SAFETY: a store written against the port before expiresAt existed returns exactly this shape.
     const record = rest as ApiKeyRecord;
-    const store: HippoStore = { kind: 'test', findApiKey: async () => record, close: async () => {} };
+    const store: HippoStore = { ...sqliteStore(home), kind: 'test', findApiKey: async () => record };
     expect(await verifyApiKeyCached(home, key.plaintext, store)).toBeNull();
   });
 

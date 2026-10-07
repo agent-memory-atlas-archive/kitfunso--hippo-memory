@@ -1,11 +1,13 @@
 // Transport-agnostic request handling: tool dispatch table, tool execution and the JSON-RPC method switch.
 
 import { log } from '../log.js';
+import { STORE_NOT_PORTED_MESSAGE } from '../http-util.js';
 import { getGlobalRoot, initGlobal } from '../shared.js';
 import { loadConfig } from '../config.js';
 import { resolveTenantId } from '../tenant.js';
-import { openHippoDb, closeHippoDb, runWithRequestStores } from '../db.js';
-import { estimateTokens, recordTokenUse, type TokenSurface } from '../token-ledger.js';
+import { rethrowIfSqliteBlocked, runWithRequestStores } from '../db.js';
+import { storeFor } from '../store-port.js';
+import { estimateTokens, type TokenSurface } from '../token-ledger.js';
 import { PACKAGE_VERSION } from '../version.js';
 import { validateToolArgs } from './tool-args.js';
 import { RecallRequestError } from '../api/recall-request.js';
@@ -41,46 +43,59 @@ const MCP_TOKEN_SURFACES = new Map<string, TokenSurface>([
  * Record the memory text a recall or context tool returned. Best-effort: a
  * ledger failure never fails the tool call. Other tools are not recorded.
  */
-function recordMcpTokens(toolName: string, output: string, ctx?: McpContext): void {
+export async function recordMcpTokens(toolName: string, output: string, ctx?: McpContext): Promise<void> {
   const surface = MCP_TOKEN_SURFACES.get(toolName);
   if (!surface || !output) return;
   try {
     const hippoRoot = ctx?.hippoRoot ?? findHippoRoot();
     if (!hippoRoot) return;
-    const db = openHippoDb(hippoRoot);
-    try {
-      recordTokenUse(db, {
-        tenantId: ctx?.tenantId ?? resolveTenantId({}),
-        surface,
-        event: 'inject',
-        items: 0,
-        tokens: estimateTokens(output),
-      });
-    } finally {
-      closeHippoDb(db);
-    }
+    await storeFor({ hippoRoot, store: ctx?.store }).recordTokens({
+      tenantId: ctx?.tenantId ?? resolveTenantId({}),
+      surface,
+      event: 'inject',
+      items: 0,
+      tokens: estimateTokens(output),
+    });
   } catch (err) {
+    rethrowIfSqliteBlocked(err);
     log.warnThenDebug('mcp-token-ledger', `token ledger write failed; the tool reply is unaffected: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
 // ── Tool execution ──
 
-const TOOL_HANDLERS: ReadonlyMap<string, ToolHandler> = new Map<string, ToolHandler>([
-  ['hippo_recall', runRecallTool],
-  ['hippo_assemble', runAssembleTool],
-  ['hippo_drill', runDrillTool],
-  ['hippo_predict_baserate', runPredictBaserateTool],
-  ['hippo_remember', runRememberTool],
-  ['hippo_outcome', runOutcomeTool],
-  ['hippo_context', runContextTool],
-  ['hippo_status', runStatusTool],
-  ['hippo_learn', runLearnTool],
-  ['hippo_conflicts', runConflictsTool],
-  ['hippo_resolve', runResolveTool],
-  ['hippo_share', runShareTool],
-  ['hippo_peers', runPeersTool],
+interface ToolEntry {
+  readonly handler: ToolHandler;
+  /** Reaches its store only through the port, so it runs under a store other than hippo.db. */
+  readonly storeReady?: true;
+}
+
+const TOOL_HANDLERS: ReadonlyMap<string, ToolEntry> = new Map<string, ToolEntry>([
+  ['hippo_recall', { handler: runRecallTool, storeReady: true }],
+  ['hippo_assemble', { handler: runAssembleTool }],
+  ['hippo_drill', { handler: runDrillTool }],
+  ['hippo_predict_baserate', { handler: runPredictBaserateTool }],
+  ['hippo_remember', { handler: runRememberTool }],
+  ['hippo_outcome', { handler: runOutcomeTool }],
+  ['hippo_context', { handler: runContextTool }],
+  ['hippo_status', { handler: runStatusTool }],
+  ['hippo_learn', { handler: runLearnTool }],
+  ['hippo_conflicts', { handler: runConflictsTool }],
+  ['hippo_resolve', { handler: runResolveTool }],
+  ['hippo_share', { handler: runShareTool }],
+  ['hippo_peers', { handler: runPeersTool }],
 ]);
+
+/** The tools listed and run under a store other than hippo.db. */
+export const STORE_READY_TOOLS: ReadonlySet<string> = new Set(
+  [...TOOL_HANDLERS].filter(([, entry]) => entry.storeReady).map(([name]) => name),
+);
+
+/** The served store's kind when it is not hippo.db, else null. */
+function otherStoreKind(ctx?: McpContext): string | null {
+  const kind = ctx?.store?.kind;
+  return kind !== undefined && kind !== 'sqlite' ? kind : null;
+}
 
 async function executeTool(
   name: string,
@@ -100,7 +115,7 @@ async function executeTool(
   // ctx.tenantId so an HTTP Bearer for tenant B doesn't drop to HIPPO_TENANT.
   const tenantId = ctx?.tenantId ?? resolveTenantId({});
 
-  const handler = TOOL_HANDLERS.get(name);
+  const handler = TOOL_HANDLERS.get(name)?.handler;
   // handleMcpRequest rejects names missing from TOOLS, so reaching here means TOOLS and this table drifted apart.
   if (!handler) throw new Error(`hippo-mcp: tool ${name} is declared but has no handler`);
   return handler({ args, ctx, hippoRoot, config, tenantId });
@@ -146,7 +161,7 @@ export async function handleMcpRequest(
       return null;
 
     case 'tools/list':
-      return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
+      return { jsonrpc: '2.0', id, result: { tools: otherStoreKind(ctx) ? TOOLS.filter((t) => STORE_READY_TOOLS.has(t.name)) : TOOLS } };
 
     case 'tools/call': {
       const nameValue = params?.name;
@@ -154,6 +169,10 @@ export async function handleMcpRequest(
       const tool = TOOLS_BY_NAME.get(toolName);
       if (!tool) {
         return { jsonrpc: '2.0', id, error: { code: -32602, message: `Unknown tool: ${toolName.slice(0, 128)}` } };
+      }
+      // The same refusal a ported tool gives when it reaches hippo.db, so a client handles one shape.
+      if (otherStoreKind(ctx) && !STORE_READY_TOOLS.has(toolName)) {
+        return { jsonrpc: '2.0', id, error: { code: -32603, message: STORE_NOT_PORTED_MESSAGE } };
       }
       const refusal = sharedStoreRefusal(toolName, ctx);
       if (refusal !== undefined) return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: refusal }], isError: true } };
@@ -169,7 +188,7 @@ export async function handleMcpRequest(
         // One handle per store for the tool and its ledger row; stdio interleaves calls, so each gets its own scope.
         output = await runWithRequestStores(async () => {
           const text = await executeTool(toolName, toolArgs, ctx);
-          recordMcpTokens(toolName, text, ctx);
+          await recordMcpTokens(toolName, text, ctx);
           return text;
         });
       } catch (err) {

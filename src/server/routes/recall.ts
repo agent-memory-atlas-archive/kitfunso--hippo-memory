@@ -3,11 +3,11 @@ import { dirname, resolve } from 'node:path';
 import { assertCallerProject, resolveProjectIdentity, type ProjectRef } from '../../project-identity.js';
 import { isSharedStore } from '../../config.js';
 import { assembleCost, contextCost, drillCost } from '../../context-render.js';
-import { updateStats } from '../../store/index-and-stats.js';
+import { storeFor } from '../../store-port.js';
 import { biasHintEnabled, type RecallHistorySnapshot } from '../../recall-history.js';
 import { assemble, type AssembleOpts, type Context, drillDown, type DrillDownOpts, getContext, recordTokens, retrieve } from '../../api.js';
 import { httpParams, parseContextRequest, parseRecallRequest } from '../../api/recall-request.js';
-import { auditAnchorSkipped, noteRecall, peekSessionRing, resetSessionRings, sessionRing } from '../../api/recall-record.js';
+import { anchorSkippedRows, noteRecall, peekSessionRing, resetSessionRings, sessionRing } from '../../api/recall-record.js';
 import { HttpError, sendJson } from '../../http-util.js';
 import { buildContextWithAuth } from '../auth.js';
 import type { RouteRequest } from '../types.js';
@@ -19,10 +19,10 @@ export function __resetSessionRecallHistoryHttp(): void {
 }
 
 // HTTP threads the ring through opts.recallHistory, so the hint retrieve() returns is the one the caller sees.
-function recallHistoryFor(ctx: Context, hippoRoot: string, q: string, sessionId: string | undefined): RecallHistorySnapshot | undefined {
+async function recallHistoryFor(ctx: Context, q: string, sessionId: string | undefined): Promise<RecallHistorySnapshot | undefined> {
   if (!biasHintEnabled('anchoring')) return undefined;
   if (sessionId) return peekSessionRing('http', ctx.tenantId, sessionId);
-  auditAnchorSkipped({ hippoRoot, tenantId: ctx.tenantId, actor: ctx.actor.subject }, q);
+  await storeFor(ctx).appendAuditEvents(anchorSkippedRows({ tenantId: ctx.tenantId, actor: ctx.actor.subject }, q));
   return undefined;
 }
 
@@ -32,7 +32,7 @@ export async function handleRecallMemories({ req, res, opts, query }: RouteReque
   const { query: q, includeContinuity, sessionId } = recallOpts;
   const ctx = await buildContextWithAuth(req, opts);
 
-  const recallHistory = recallHistoryFor(ctx, opts.hippoRoot, q, sessionId);
+  const recallHistory = await recallHistoryFor(ctx, q, sessionId);
   const result = await retrieve(ctx, { ...recallOpts, limit, mode, explain, recallHistory });
 
   // The ring is created only after recall succeeds, so a 400 cannot LRU-evict a live session.
@@ -41,14 +41,14 @@ export async function handleRecallMemories({ req, res, opts, query }: RouteReque
 
   // Each recall surface counts its own hits; api.recall is no chokepoint,
   // since the CLI never calls it and MCP shows the user a different band.
-  updateStats(opts.hippoRoot, { recalled: result.results.length });
+  await storeFor(ctx).bumpRecallStats(result.results.length);
 
   // Continuity payloads should never be cached. The caller is asking for
   // session-state-aware data; intermediaries must not reuse it across users.
   if (includeContinuity) {
     res.setHeader('Cache-Control', 'no-store');
   }
-  recordTokens(ctx, 'http_recall', { items: result.results.length, tokens: result.tokens + (result.continuityTokens ?? 0), sessionId: sessionId ?? null });
+  await recordTokens(ctx, 'http_recall', { items: result.results.length, tokens: result.tokens + (result.continuityTokens ?? 0), sessionId: sessionId ?? null });
   sendJson(res, 200, result);
   return;
 }
@@ -84,7 +84,7 @@ export async function handleAssembleSession({ req, res, opts, query }: RouteRequ
   if (summarizeOlder !== undefined) assembleExtra.summarizeOlder = summarizeOlder;
   if (scope !== undefined) assembleExtra.scope = scope;
   const result = assemble(ctx, assembleMatch.id!, { ...assembleExtra, cost: assembleCost(assembleMatch.id!) });
-  recordTokens(ctx, 'http_assemble', { items: result.items.length, tokens: result.tokens, sessionId: assembleMatch.id! });
+  await recordTokens(ctx, 'http_assemble', { items: result.items.length, tokens: result.tokens, sessionId: assembleMatch.id! });
   sendJson(res, 200, result);
   return;
 }
@@ -159,7 +159,7 @@ export async function handleGetContext({ req, res, opts, query }: RouteRequest):
     currentProject: contextReader(opts.hippoRoot, query),
     cost: contextCost('markdown', 'observe'), // clients render; the budget prices the block `hippo context` would print
   });
-  recordTokens(ctx, 'http_context', { items: result.entries.length, tokens: result.tokens });
+  await recordTokens(ctx, 'http_context', { items: result.entries.length, tokens: result.tokens });
   sendJson(res, 200, result);
   return;
 }

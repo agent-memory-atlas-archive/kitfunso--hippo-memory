@@ -5,27 +5,30 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openHippoDb, SqliteBlockedError, STORE_BUSY_MESSAGE } from '../src/db.js';
+import { closeHippoDb, openHippoDb, SqliteBlockedError, STORE_BUSY_MESSAGE } from '../src/db.js';
 import { VERIFIED_KEY_TTL_MS } from '../src/auth.js';
-import { mcpErrorResponse } from '../src/mcp/server.js';
+import { STORE_NOT_PORTED_MESSAGE } from '../src/http-util.js';
+import { mcpErrorResponse, type McpRequest } from '../src/mcp/server.js';
 import { initStore } from '../src/store/open.js';
-import { serve, sqliteStore, StoreBusyError, type ApiKeyRecord, type HippoStore, type ServerHandle } from '../src/server.js';
+import { serve, sqliteStore, StoreBusyError, type ApiKeyRecord, type ContinuityKey, type HippoStore, type ServerHandle } from '../src/server.js';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const serverSource = readFileSync(join(repoRoot, 'src/server.ts'), 'utf8');
 
-/** 'METHOD /path' for every V1_ROUTES entry, each :param and (\d+) slot filled with 1. */
-function v1Routes(): string[] {
+/** 'METHOD /path' for every V1_ROUTES entry not marked storeReady, each :param and (\d+) slot filled with 1. */
+function unportedV1Routes(): string[] {
   const table = serverSource.slice(serverSource.indexOf('const V1_ROUTES'), serverSource.indexOf('async function dispatchV1Route'));
   const routes: string[] = [];
-  for (const m of table.matchAll(/\{ method: '([A-Z]+)', (?:path|pattern): '([^']+)'/g)) {
-    routes.push(`${m[1]} ${m[2]!.replace(/:\w+/g, '1')}`);
+  for (const m of table.matchAll(/\{ method: '([A-Z]+)', (?:path|pattern): '([^']+)'(, storeReady: true)?/g)) {
+    if (!m[3]) routes.push(`${m[1]} ${m[2]!.replace(/:\w+/g, '1')}`);
   }
-  for (const m of table.matchAll(/\{ method: '([A-Z]+)', regex: \/\^(.+?)\$\//g)) {
-    routes.push(`${m[1]} ${m[2]!.replace(/\\\//g, '/').replace(/\(\\d\+\)/g, '1')}`);
+  for (const m of table.matchAll(/\{ method: '([A-Z]+)', regex: \/\^(.+?)\$\/(, storeReady: true)?/g)) {
+    if (!m[3]) routes.push(`${m[1]} ${m[2]!.replace(/\\\//g, '/').replace(/\(\\d\+\)/g, '1')}`);
   }
   return routes;
 }
+
+const rpc = (method: string, params?: McpRequest['params']): string => JSON.stringify({ jsonrpc: '2.0', id: 1, method, params });
 
 const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567';
 const base32 = (n: number): string => Array.from(randomBytes(n), (b) => BASE32[b % 32]).join('');
@@ -52,9 +55,15 @@ describe('serve() under a store that is not hippo.db', () => {
   const valid = newKey();
   const busy = newKey();
   const probe = newKey();
+  const leaky = newKey();
   const records = new Map([[valid.keyId, valid.record]]);
   const blocked: Error[] = [];
   const lookups = new Map<string, number>();
+  // Stands in for a store method that still opens hippo.db, so a store-ready route reaching it must answer 501.
+  const unported = async (): Promise<never> => {
+    closeHippoDb(openHippoDb(root));
+    throw new Error('the stub store does not serve recall');
+  };
   let addonRuns = 0;
   const store: HippoStore = {
     kind: 'stub',
@@ -69,8 +78,20 @@ describe('serve() under a store that is not hippo.db', () => {
         }
         return null;
       }
+      // Stands in for any unported path: nothing between this open and the reply catches the error.
+      if (keyId === leaky.keyId) closeHippoDb(openHippoDb(root));
       return records.get(keyId) ?? null;
     },
+    searchRecallEntries: unported,
+    entriesByIds: unported,
+    activeGoals: unported,
+    freshRawEntries: unported,
+    continuity: unported,
+    planningFallacyEvidence: unported,
+    appendAuditEvents: unported,
+    finishRecall: unported,
+    bumpRecallStats: unported,
+    recordTokens: unported,
     async close(): Promise<void> {},
   };
 
@@ -90,9 +111,9 @@ describe('serve() under a store that is not hippo.db', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('answers 501 on every /v1 route, POST /mcp and both connectors, and never runs the handler', async () => {
-    const routes = [...v1Routes(), 'POST /mcp', 'POST /v1/connectors/slack/events', 'POST /v1/connectors/github/events'];
-    expect(routes).toHaveLength(65);
+  it('answers 501 on every unported /v1 route and both connectors, and never runs the handler', async () => {
+    const routes = [...unportedV1Routes(), 'POST /v1/connectors/slack/events', 'POST /v1/connectors/github/events'];
+    expect(routes).toHaveLength(63);
     for (const route of routes) {
       const [method, path] = route.split(' ');
       const res = await fetch(`${handle.url}${path}`, {
@@ -103,7 +124,7 @@ describe('serve() under a store that is not hippo.db', () => {
       expect({ route, status: res.status, body: await res.json() }).toEqual({
         route,
         status: 501,
-        body: { error: 'not available on this store' },
+        body: { error: STORE_NOT_PORTED_MESSAGE },
       });
     }
   });
@@ -111,13 +132,14 @@ describe('serve() under a store that is not hippo.db', () => {
   it('answers 501 on an add-on route and never runs its handler; a bad key is still a 401', async () => {
     const send = async (key: TestKey) => fetch(`${handle.url}/v1/x-addon`, { method: 'POST', headers: { ...bearer(key), 'content-type': 'application/json' }, body: '{}' });
     const res = await send(valid);
-    expect({ status: res.status, body: await res.json() }).toEqual({ status: 501, body: { error: 'not available on this store' } });
+    expect({ status: res.status, body: await res.json() }).toEqual({ status: 501, body: { error: STORE_NOT_PORTED_MESSAGE } });
     expect((await send(newKey())).status).toBe(401);
     expect(addonRuns).toBe(0);
   });
 
-  it('checks the caller first, so a bad or missing key is still a 401', async () => {
-    const wrong = await fetch(`${handle.url}/v1/memories`, { headers: bearer(newKey()) });
+  it('a bad key on the store-ready /v1/memories and a missing key on /mcp are still a 401', async () => {
+    // /v1/memories parses its query before it checks the key, so q keeps a parse error from answering first.
+    const wrong = await fetch(`${handle.url}/v1/memories?q=deploy`, { headers: bearer(newKey()) });
     expect(wrong.status).toBe(401);
     vi.stubEnv('HIPPO_REQUIRE_AUTH', '1');
     const keyless = await fetch(`${handle.url}/mcp`, { method: 'POST', body: '{}' });
@@ -138,15 +160,52 @@ describe('serve() under a store that is not hippo.db', () => {
   });
 
   it('a hippo.db open inside a request throws instead of creating the file', async () => {
-    const res = await fetch(`${handle.url}/v1/memories`, { headers: bearer(probe) });
+    const res = await fetch(`${handle.url}/v1/memories?q=deploy`, { headers: bearer(probe) });
     expect(res.status).toBe(401);
     expect(blocked).toHaveLength(1);
     expect(blocked[0]).toBeInstanceOf(SqliteBlockedError);
     expect(blocked[0]!.message).toMatch(/'stub' store/);
   });
 
+  it('a hippo.db open nothing catches answers 501 store_not_ported on /v1 and on /mcp', async () => {
+    for (const [method, path] of [['GET', '/v1/memories?q=deploy'], ['POST', '/mcp']] as const) {
+      const res = await fetch(`${handle.url}${path}`, { method, headers: bearer(leaky), body: method === 'GET' ? undefined : '{}' });
+      expect({ path, status: res.status, body: await res.json() }).toEqual({ path, status: 501, body: { error: STORE_NOT_PORTED_MESSAGE } });
+    }
+  });
+
+  it('runs a store-ready route, and its hippo.db open answers 501 store_not_ported', async () => {
+    const res = await fetch(`${handle.url}/v1/memories?q=deploy`, { headers: bearer(valid) });
+    expect({ status: res.status, body: await res.json() }).toEqual({ status: 501, body: { error: STORE_NOT_PORTED_MESSAGE } });
+  });
+
+  it('POST /mcp lists only the store-ready tools and refuses the rest with store_not_ported', async () => {
+    const post = async (body: string): Promise<{ status: number; body: unknown }> => {
+      // Another store is shared, and a shared store refuses hippo_recall from a caller that names no project.
+      const headers = { ...bearer(valid), 'content-type': 'application/json', 'x-hippo-project': 'p' };
+      const res = await fetch(`${handle.url}/mcp`, { method: 'POST', headers, body });
+      return { status: res.status, body: await res.json() };
+    };
+    const list = await post(rpc('tools/list'));
+    expect(list.status).toBe(200);
+    // SAFETY: a tools/list result carries a tools array of named definitions.
+    expect((list.body as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)).toEqual(['hippo_recall']);
+    expect(await post(rpc('tools/call', { name: 'hippo_status', arguments: {} }))).toEqual({
+      status: 200,
+      body: { jsonrpc: '2.0', id: 1, error: { code: -32603, message: STORE_NOT_PORTED_MESSAGE } },
+    });
+    expect(await post(rpc('tools/call', { name: 'hippo_recall', arguments: { query: 'deploy' } }))).toEqual({
+      status: 200,
+      body: { jsonrpc: '2.0', id: 1, error: { code: -32603, message: STORE_NOT_PORTED_MESSAGE } },
+    });
+  });
+
+  it('a SqliteBlockedError inside an MCP tool call answers store_not_ported, not an internal error', () => {
+    expect(mcpErrorResponse(7, new SqliteBlockedError('stub'))).toEqual({ jsonrpc: '2.0', id: 7, error: { code: -32603, message: STORE_NOT_PORTED_MESSAGE } });
+  });
+
   it('a StoreBusyError from the store is a 503 with Retry-After on /v1 and on /mcp', async () => {
-    for (const [method, path] of [['GET', '/v1/memories'], ['POST', '/mcp']] as const) {
+    for (const [method, path] of [['GET', '/v1/memories?q=deploy'], ['POST', '/mcp']] as const) {
       const res = await fetch(`${handle.url}${path}`, { method, headers: bearer(busy), body: method === 'GET' ? undefined : '{}' });
       expect(res.status).toBe(503);
       expect(res.headers.get('retry-after')).toBe('1');
@@ -159,7 +218,7 @@ describe('serve() under a store that is not hippo.db', () => {
     records.set(key.keyId, key.record);
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-05T12:00:00Z'));
-    const statusOf = async (): Promise<number> => (await fetch(`${handle.url}/v1/memories`, { headers: bearer(key) })).status;
+    const statusOf = async (): Promise<number> => (await fetch(`${handle.url}/v1/audit`, { headers: bearer(key) })).status;
     expect([await statusOf(), await statusOf()]).toEqual([501, 501]);
     expect(lookups.get(key.keyId)).toBe(1);
     vi.setSystemTime(Date.now() + VERIFIED_KEY_TTL_MS - 1);
@@ -173,6 +232,67 @@ describe('serve() under a store that is not hippo.db', () => {
   it('leaves nothing under the served root but the pidfile: no hippo.db, no .hippo folder', () => {
     expect(readdirSync(root)).toEqual(['server.pid']);
     expect(existsSync(join(root, '.hippo'))).toBe(false);
+  });
+});
+
+describe('serve() under another store reads its folder as shared, though no config.json says so', () => {
+  let root: string;
+  let handle: ServerHandle;
+  const alice = newKey();
+  const keys: (ContinuityKey | null)[] = [];
+  const snapshot = {
+    id: 1, task: 'ship the eu cluster', summary: 'cutover planned', next_step: 'run the canary', status: 'active', source: 'cli',
+    session_id: 's1', scope: null, created_at: '2026-10-01T00:00:00.000Z', updated_at: '2026-10-01T00:00:00.000Z',
+  };
+  const notRead = async (): Promise<never> => {
+    throw new Error('this recall reads nothing else');
+  };
+  const store: HippoStore = {
+    kind: 'stub',
+    findApiKey: async (keyId) => (keyId === alice.keyId ? { ...alice.record, ownerSubject: 'alice' } : null),
+    searchRecallEntries: async () => [],
+    entriesByIds: notRead,
+    activeGoals: notRead,
+    freshRawEntries: notRead,
+    // As continuityWhere: null reads the tenant's newest, and a key missing its owner or project matches nothing.
+    continuity: async (_tenantId, _eventLimit, key) => {
+      keys.push(key);
+      const matches = key === null || (key.owner !== '' && key.project.length > 0);
+      return { activeSnapshot: matches ? snapshot : null, sessionHandoff: null, recentSessionEvents: [] };
+    },
+    planningFallacyEvidence: notRead,
+    appendAuditEvents: async () => {},
+    finishRecall: async () => {},
+    bumpRecallStats: async () => {},
+    recordTokens: async () => {},
+    async close(): Promise<void> {},
+  };
+
+  beforeAll(async () => {
+    vi.stubEnv('HIPPO_V1_RPS', '0');
+    root = mkdtempSync(join(tmpdir(), 'hippo-other-store-shared-'));
+    handle = await serve({ hippoRoot: root, port: 0, store });
+  });
+
+  afterAll(async () => {
+    await handle.stop();
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('keys an MCP recall\'s continuity to the caller\'s owner and project', async () => {
+    const headers = { ...bearer(alice), 'content-type': 'application/json', 'x-hippo-project': 'p' };
+    const body = rpc('tools/call', { name: 'hippo_recall', arguments: { query: 'deploy', include_continuity: true } });
+    const res = await fetch(`${handle.url}/mcp`, { method: 'POST', headers, body });
+    expect(JSON.stringify(await res.json())).toContain('ship the eu cluster');
+    expect(keys.at(-1)).toEqual({ owner: 'alice', project: ['p'] });
+  });
+
+  it('hands a REST recall, which names no project, a key that matches nothing, so its block is empty', async () => {
+    const res = await fetch(`${handle.url}/v1/memories?q=deploy&include_continuity=true`, { headers: bearer(alice) });
+    expect(res.status).toBe(200);
+    expect(keys.at(-1)).toEqual({ owner: 'alice', project: [] });
+    expect(await res.json()).toMatchObject({ continuity: { activeSnapshot: null, sessionHandoff: null, recentSessionEvents: [] } });
   });
 });
 

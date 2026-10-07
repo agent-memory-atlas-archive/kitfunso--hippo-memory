@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JsonValue } from '../src/json.js';
 import { initStore } from '../src/store/open.js';
-import { serve, type ApiKeyRecord, type HippoStore, type ServerHandle } from '../src/server.js';
+import { serve, sqliteStore, type ApiKeyRecord, type HippoStore, type ServerHandle } from '../src/server.js';
 
 const INFO = '/v1/x-info';
 const BODY = { providers: [{ tenant: 't1', scopes: ['api://x/.default'], redirectUris: ['http://localhost/cb'] }] };
@@ -109,16 +109,16 @@ describe('a publicJson path under a store that is not hippo.db', () => {
     const bare = mkdtempSync(join(tmpdir(), 'hippo-public-json-stub-'));
     let lookups = 0;
     const store: HippoStore = {
+      ...sqliteStore(bare),
       kind: 'stub',
       async findApiKey(): Promise<ApiKeyRecord | null> { lookups += 1; return null; },
-      async close(): Promise<void> {},
     };
     try {
       await start({ [INFO]: BODY }, bare, store);
       expect(await send('GET', INFO, `Bearer ${WELL_FORMED_KEY}`)).toEqual(served);
       expect(lookups).toBe(0);
       // The same key on a core route does reach the store, so the zero above is the public path skipping it.
-      expect((await send('GET', '/v1/memories', `Bearer ${WELL_FORMED_KEY}`)).status).toBe(401);
+      expect((await send('GET', '/v1/memories?q=x', `Bearer ${WELL_FORMED_KEY}`)).status).toBe(401);
       expect(lookups).toBe(1);
       expect(readdirSync(bare)).toEqual(['server.pid']);
     } finally {
