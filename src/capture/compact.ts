@@ -43,11 +43,16 @@ export function sanitizeLogMessage(message: string): string {
 function appendPreCompactLog(logFile: string, message: string): void {
   try {
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    const stat = fs.existsSync(logFile) ? fs.statSync(logFile) : null;
-    if (stat && stat.size > PRE_COMPACT_LOG_MAX_BYTES) {
-      fs.writeFileSync(logFile, '', 'utf8'); // start fresh — dumb cap, no rotation
+    // One handle, so the cap acts on the file it measured; two hooks writing in the same instant can overwrite one diagnostic line, which this log accepts.
+    const fd = fs.openSync(logFile, fs.constants.O_RDWR | fs.constants.O_CREAT);
+    try {
+      const size = fs.fstatSync(fd).size;
+      const startFresh = size > PRE_COMPACT_LOG_MAX_BYTES; // a dumb cap, no rotation
+      if (startFresh) fs.ftruncateSync(fd, 0);
+      fs.writeSync(fd, `[hippo] ${new Date().toISOString()} ${sanitizeLogMessage(message)}\n`, startFresh ? 0 : size, 'utf8');
+    } finally {
+      fs.closeSync(fd);
     }
-    fs.appendFileSync(logFile, `[hippo] ${new Date().toISOString()} ${sanitizeLogMessage(message)}\n`, 'utf8');
   } catch (err) {
     // Diagnostic-only; a log write failure must never affect the exit-0 contract.
     logger.debug(`pre-compact log not written: ${errorMessage(err)}`);
