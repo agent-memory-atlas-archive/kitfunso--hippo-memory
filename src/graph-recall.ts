@@ -39,7 +39,7 @@ import { loadEntriesByIds } from './store/entry-reads.js';
 import type { MemoryEntry } from './memory.js';
 import { DEFAULT_RECALL_BUDGET, type ResultCost, type SearchResult } from './core/search-types.js';
 import { estimateTokens } from './util/token-text.js';
-import { compareEntryIdentity } from './compare.js';
+import { compareEntryIdentity, compareScoresDesc } from './compare.js';
 import { loadEntitiesByMemoryId, loadEntitiesByIds, loadNeighborRelations } from './store/graph-reads.js';
 import type { Entity } from './store/graph-rows.js';
 import { passesCliRecallScopeFilter, passesScopeFilterForRecall } from './recall-scope.js';
@@ -321,7 +321,7 @@ function sortHitsWithinOrigin(hitsByOrigin: Map<string, GraphHit[]>): void {
     hits.sort((a, b) => {
       const byHops = a.graphVia.hops - b.graphVia.hops;
       if (byHops !== 0) return byHops;
-      const byScore = b.score - a.score;
+      const byScore = compareScoresDesc(a.score, b.score);
       return byScore !== 0 ? byScore : compareEntryIdentity(a.entry, b.entry);
     });
   }
@@ -347,7 +347,7 @@ function selectWithinBudget(baseResults: SearchResult[], allHits: GraphHit[], op
   let usedTokens = [...keep].reduce((s, r) => s + price(r), 0);
   // PLAIN stable score sort on purpose: both input lists are already deterministically
   // ordered, and a base-vs-graph-hit tie keeps the BASE result first (the concat order).
-  for (const r of [...baseResults.slice(protectedCount), ...allHits].sort((a, b) => b.score - a.score)) {
+  for (const r of [...baseResults.slice(protectedCount), ...allHits].sort((a, b) => compareScoresDesc(a.score, b.score))) {
     const tokens = price(r);
     if (usedTokens + tokens > budget) continue;
     usedTokens += tokens;
