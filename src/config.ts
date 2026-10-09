@@ -514,7 +514,7 @@ function sharedStoreKey(hippoRoot: string): string {
   try {
     real = fs.realpathSync.native(hippoRoot);
   } catch (err) {
-    log.debug(`sharedStore: realpath fell back to resolve for ${hippoRoot}: ${err instanceof Error ? err.message : String(err)}`);
+    log.debug(`sharedStore: realpath fell back to resolve for ${hippoRoot}: ${errorMessage(err)}`);
     real = path.resolve(hippoRoot);
   }
   return process.platform === 'win32' ? real.toLowerCase() : real;
