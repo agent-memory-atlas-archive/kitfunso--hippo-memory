@@ -19,7 +19,7 @@ import { handleGitHubEventsWebhook } from './connectors/github/webhook.js';
 import { BodyTimeoutError, BodyTooLargeError, closeAfterReply, HttpError, JSON_HEADERS, sendJson, STORE_NOT_PORTED_MESSAGE } from './http-util.js';
 import { ForbiddenError, NotFoundError } from './api-errors.js';
 import { buildContextWithAuth, isLoopback, LIMITER_MAX_KEYS, requireAuth } from './server/auth.js';
-import { enforceRateLimit } from './server/client-ip.js';
+import { enforceRateLimit, warnIfClientIpHeaderUnpinned } from './server/client-ip.js';
 import { drainAndClose } from './server/lifecycle.js';
 import { installCrashHandlers } from './util/crash-handlers.js';
 import { handleMcpPost, handleMcpStream } from './server/mcp-http.js';
@@ -466,6 +466,7 @@ function bootLimiters(rateLimits: ServeOpts['rateLimits']): BootedLimiters {
   if (perCaller !== undefined) assertRateLimitSpec('perCaller', perCaller);
   if (perAddress !== undefined && perAddress !== 'off') assertRateLimitSpec('perAddress', perAddress);
   assertRateLimitSpec('failedAuthPerAddress', failedAuthPerAddress);
+  warnIfClientIpHeaderUnpinned();
   return {
     perAddress: bootRateLimiter(perAddress),
     callerLimiter: perCaller === undefined ? undefined : limiterFor(perCaller),
@@ -602,7 +603,7 @@ function installSignalHandlers(stop: () => Promise<void>): void {
  * secrets and 404 when those secrets are unset, and any publicJson GET path. But the loopback
  * no-auth fallback inside buildContextWithAuth still admits unauthenticated
  * requests from a loopback remote address (unless they carry Forwarded,
- * X-Forwarded-For/-Host/-Proto, X-Real-IP, Cf-Connecting-Ip or True-Client-Ip, which mark a same-host proxy and get
+ * X-Forwarded-For/-Host/-Proto, X-Real-IP, Cf-Connecting-Ip, True-Client-Ip or Fly-Client-Ip, which mark a same-host proxy and get
  * a 401 like any keyless remote request), so binding to a non-loopback host
  * is only safe once that fallback is disabled with HIPPO_REQUIRE_AUTH=1,
  * which forces every request (loopback or not) through Bearer-token
