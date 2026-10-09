@@ -170,7 +170,7 @@ export async function handleListAudit({ req, res, opts, query }: RouteRequest): 
   const crossTenant = tenantOverride !== null && tenantOverride !== '' && tenantOverride !== ctx.tenantId;
   if (crossTenant) assertCrossTenantAdmin(ctx, '/v1/audit?tenant= for another tenant');
   const effectiveCtx = crossTenant ? { ...ctx, tenantId: tenantOverride } : ctx;
-  const page = pageOf(auditList(effectiveCtx, { op, since, limit: limit + 1, after }), limit, (e) => ({ key: e.ts, id: e.id }));
+  const page = pageOf(await auditList(effectiveCtx, { op, since, limit: limit + 1, after }), limit, (e) => ({ key: e.ts, id: e.id }));
   setNextCursorHeader(res, page.nextCursor);
   sendJson(res, 200, page.items);
   return;
