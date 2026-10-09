@@ -462,11 +462,11 @@ function printDormantRows(rows: ReturnType<typeof api.listDormant>, hasQuery: bo
 }
 
 /** `hippo quarantine [list] [--all] [--json] [--global]`, `quarantine approve <id>`, `quarantine reject <id>` (poisoning defence). */
-export function cmdQuarantine(
+export async function cmdQuarantine(
   hippoRoot: string,
   args: string[],
   flags: CliFlags,
-): void {
+): Promise<void> {
   const root = resolveAuthRoot(hippoRoot, flags);
   const ctx: api.Context = {
     hippoRoot: root,
@@ -483,10 +483,10 @@ export function cmdQuarantine(
     }
     try {
       if (sub === 'approve') {
-        api.quarantineApprove(ctx, id);
+        await api.quarantineApprove(ctx, id);
         console.log(`Approved ${id}: restored to its original scope.`);
       } else {
-        api.quarantineReject(ctx, id);
+        await api.quarantineReject(ctx, id);
         console.log(`Rejected ${id}: stays quarantined.`);
       }
     } catch (err) {
@@ -497,7 +497,7 @@ export function cmdQuarantine(
   }
 
   const status = flags['all'] ? 'all' : 'pending';
-  const rows = api.quarantineList(ctx, { status });
+  const rows = await api.quarantineList(ctx, { status });
 
   if (flags['json']) {
     console.log(JSON.stringify({ quarantine: rows }, null, 2));
