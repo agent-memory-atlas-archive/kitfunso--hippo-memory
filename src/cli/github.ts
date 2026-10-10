@@ -2,7 +2,7 @@
  * Implementation of `hippo github` CLI subcommands. Extracted from the main
  * cli.ts so unit tests can import these functions directly without triggering
  * the cli.ts main() side effects. The cli.ts dispatcher re-exports the
- * top-level handleGithub.
+ * top-level handleGitHub.
  *
  * Subcommands mirror the Slack connector shape (cli.ts §Slack subcommands):
  *   - hippo github backfill --repo <owner/name> [--since ISO] [--max <N>]
@@ -10,26 +10,25 @@
  *   - hippo github dlq replay <id> [--force]
  */
 
-import { envGithubToken, envGithubWebhookSecret, envGithubWebhookSecretPrevious } from '../../util/env.js';
-import { type Context, adminActor } from '../../api/index.js';
-import { seedCursors } from '../../store/connectors/github.js';
-import { resolveTenantId } from '../../store/tenant.js';
-import { backfillRepo } from './backfill.js';
-import { realGitHubFetcher, type GitHubFetcher } from './octokit-client.js';
-import { listDlq } from '../dlq.js';
-import { githubDlq, replayDlqEntry, type IngestHook } from './dlq.js';
-import { ingestEvent, type IngestEvent } from './ingest.js';
-import { handleCommentDeleted } from './deletion.js';
-import { computeDeletionKey } from './signature.js';
+import { envGitHubToken, envGitHubWebhookSecret, envGitHubWebhookSecretPrevious } from '../util/env.js';
+import { type Context, adminActor } from '../api/index.js';
+import { backfillRepo } from '../connectors/github/backfill.js';
+import { realGitHubFetcher, type GitHubFetcher } from '../connectors/github/octokit-client.js';
+import { listDlq } from '../connectors/dlq.js';
+import { githubDlq, replayDlqEntry, type IngestHook } from '../connectors/github/dlq.js';
+import { ingestEvent, type IngestEvent } from '../connectors/github/ingest.js';
+import { handleCommentDeleted } from '../connectors/github/deletion.js';
+import { computeDeletionKey } from '../connectors/github/signature.js';
 import {
   isGitHubIssueEvent,
   isGitHubIssueCommentEvent,
   isGitHubPullRequestEvent,
   isGitHubPullRequestReviewCommentEvent,
-} from './types.js';
-import type { JsonValue } from '../../util/json.js';
-import type { CommandContext } from '../../cli/flag-values.js';
-import { CliExit } from '../../cli/exit.js';
+} from '../connectors/github/types.js';
+import type { JsonValue } from '../util/json.js';
+import type { CommandContext } from './flag-values.js';
+import { CliExit } from './exit.js';
+import { errorMessage } from '../util/log.js';
 
 type FlagValue = string | boolean | string[];
 type Flags = Record<string, FlagValue>;
@@ -74,7 +73,7 @@ function parsedToIngestEvent(parsed: JsonValue, eventName: string): IngestEvent 
 }
 
 // Console lines below are the `hippo github` command's printed result and usage text, so they stay off the logger.
-export function printGithubBackfillUsage(): void {
+export function printGitHubBackfillUsage(): void {
   console.log('hippo github backfill --repo <owner/name> [--since ISO] [--max <N>]');
   console.log('  --repo   GitHub repository in owner/name format (required, e.g. acme/widgets)');
   console.log('  --since  Initial high-water-mark for first run (optional, ISO 8601)');
@@ -97,17 +96,18 @@ function maxPerStreamFlag(maxRaw: FlagValue): number | undefined {
  * `hippo github backfill`. The fetcher is injectable so tests can drive the
  * code path without hitting the network. Defaults to `realGitHubFetcher`.
  */
-export async function cmdGithubBackfill(
+export async function cmdGitHubBackfill(
   hippoRoot: string,
+  tenantId: string,
   flags: Flags,
   fetcher: GitHubFetcher = realGitHubFetcher,
 ): Promise<void> {
   const repo = flags['repo'];
   if (!isFlagString(repo) || !repo.includes('/')) {
-    printGithubBackfillUsage();
+    printGitHubBackfillUsage();
     throw new CliExit(2);
   }
-  const token = envGithubToken();
+  const token = envGitHubToken();
   if (!token) {
     console.error(
       'GITHUB_TOKEN is not set. Backfill requires a personal access token with repo read scope.',
@@ -117,13 +117,6 @@ export async function cmdGithubBackfill(
   const maxPerStream = maxPerStreamFlag(flags['max']);
   const sinceFlag = flags['since'];
   const sinceIso = isFlagString(sinceFlag) ? sinceFlag : undefined;
-  const tenantId = resolveTenantId({});
-
-  // Seed the github_cursors row so all 3 streams use --since on a fresh run.
-  // COALESCE preserves any existing HWM (subsequent runs ignore --since for
-  // streams that already drained at least once — same idempotency story as
-  // Slack's slack_cursors).
-  if (sinceIso) seedCursors(hippoRoot, tenantId, repo, sinceIso);
 
   const ctx: Context = {
     hippoRoot,
@@ -136,19 +129,17 @@ export async function cmdGithubBackfill(
       fetcher,
       token,
       maxPerStream,
+      sinceIso,
     });
     console.log(JSON.stringify(result, null, 2));
   } catch (e) {
-    // SAFETY: this is a best-effort error message only; property access on
-    // any JS value is safe (undefined if absent), preserving the existing
-    // lenient formatting even when something non-Error was thrown.
-    console.error('backfill failed:', (e as Error).message);
+    console.error('backfill failed:', errorMessage(e));
     throw new CliExit(3);
   }
 }
 
-export function cmdGithubDlqList(hippoRoot: string, _flags: Flags): void {
-  const items = listDlq(githubDlq, hippoRoot, { tenantId: resolveTenantId({}) });
+export function cmdGitHubDlqList(hippoRoot: string, tenantId: string, _flags: Flags): void {
+  const items = listDlq(githubDlq, hippoRoot, { tenantId });
   if (items.length === 0) {
     console.log('no entries');
     return;
@@ -196,8 +187,9 @@ const reingestParkedDelivery: IngestHook = async (innerCtx, args) => {
   return { memoryId: r.memoryId };
 };
 
-export async function cmdGithubDlqReplay(
+export async function cmdGitHubDlqReplay(
   hippoRoot: string,
+  tenantId: string,
   args: string[],
   flags: Flags,
 ): Promise<void> {
@@ -214,14 +206,14 @@ export async function cmdGithubDlqReplay(
   const force = flags['force'] === true;
   const ctx: Context = {
     hippoRoot,
-    tenantId: resolveTenantId({}),
+    tenantId,
     actor: adminActor('cli:github-dlq-replay'),
   };
   // Without an ingestHook replay only bumps retry_count while printing "replay ok"; the real hook re-runs ingest.
   const result = await replayDlqEntry(ctx, id, {
     force,
-    webhookSecret: envGithubWebhookSecret(),
-    previousSecret: envGithubWebhookSecretPrevious(),
+    webhookSecret: envGitHubWebhookSecret(),
+    previousSecret: envGitHubWebhookSecretPrevious(),
     ingestHook: reingestParkedDelivery,
   });
   if (!result.ok) {
@@ -237,18 +229,18 @@ export async function cmdGithubDlqReplay(
   );
 }
 
-export async function handleGithub({ hippoRoot, args, flags }: CommandContext): Promise<void> {
+export async function handleGitHub({ hippoRoot, tenantId, args, flags }: CommandContext): Promise<void> {
   const sub = args[0];
   if (sub === 'backfill') {
-    await cmdGithubBackfill(hippoRoot, flags);
+    await cmdGitHubBackfill(hippoRoot, tenantId, flags);
     return;
   }
   if (sub === 'dlq' && args[1] === 'list') {
-    cmdGithubDlqList(hippoRoot, flags);
+    cmdGitHubDlqList(hippoRoot, tenantId, flags);
     return;
   }
   if (sub === 'dlq' && args[1] === 'replay') {
-    await cmdGithubDlqReplay(hippoRoot, args.slice(2), flags);
+    await cmdGitHubDlqReplay(hippoRoot, tenantId, args.slice(2), flags);
     return;
   }
   console.error('Usage: hippo github <backfill|dlq list|dlq replay <id> [--force]> [...]');
