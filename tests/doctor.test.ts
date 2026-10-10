@@ -13,7 +13,7 @@ import { initStore } from '../src/store/open.js';
 import { writeEntry } from '../src/store/entry-writes.js';
 import { createMemory, DEFAULT_HALF_LIFE_DAYS } from '../src/core/memory.js';
 import { runDoctor, formatDoctor } from '../src/doctor.js';
-import { startCompaction } from '../src/capture/compaction-record.js';
+import { startCompaction } from '../src/store/compactions-record.js';
 import { _setSpoolFsForTests } from '../src/capture/compaction-spool.js';
 import { repairProjects } from '../src/sharing/project-merge.js';
 import { openHippoDb, openHippoDbReadOnly, closeHippoDb, getSchemaVersion, getCurrentSchemaVersion, setMeta } from '../src/db/index.js';

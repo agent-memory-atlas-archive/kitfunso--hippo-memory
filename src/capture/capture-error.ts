@@ -5,8 +5,8 @@ import { createMemory } from '../core/memory.js';
 import { writeEntry } from '../store/entry-writes.js';
 import { loadContentsWithTag } from '../store/entry-reads.js';
 import { loadConfig } from '../core/config.js';
-import { closeHippoDb, openHippoDb } from '../db/index.js';
-import { recordFailure, type CaptureErrorOutcome, type FailureOutcome } from '../store/failure-log.js';
+import { recordFailureAt } from '../store/failure-log-at.js';
+import type { CaptureErrorOutcome, FailureOutcome } from '../store/failure-log.js';
 import {
   failureHash,
   failureSignature,
@@ -30,20 +30,15 @@ export function captureToolFailure(hippoRoot: string, tenantId: string, payload:
 
 function logFailure(hippoRoot: string, tenantId: string, payload: JsonValue, lesson: FailureReading, outcome: FailureOutcome): void {
   const hash = (s: string | null): string | null => (s === null ? null : failureHash(s));
-  const db = openHippoDb(hippoRoot);
-  try {
-    recordFailure(db, {
-      tenantId,
-      sessionId: payloadString(payload, 'session_id'),
-      tool: payloadString(payload, 'tool_name'),
-      outcome,
-      rule: 'rule' in lesson ? lesson.rule : null,
-      sigHash: hash(lesson.text),
-      detailHash: hash(lesson.detail),
-    });
-  } finally {
-    closeHippoDb(db);
-  }
+  recordFailureAt(hippoRoot, {
+    tenantId,
+    sessionId: payloadString(payload, 'session_id'),
+    tool: payloadString(payload, 'tool_name'),
+    outcome,
+    rule: 'rule' in lesson ? lesson.rule : null,
+    sigHash: hash(lesson.text),
+    detailHash: hash(lesson.detail),
+  });
 }
 
 /** Who sent a failure from another machine: the audit actor and the project its lesson and repeat check belong to. */
