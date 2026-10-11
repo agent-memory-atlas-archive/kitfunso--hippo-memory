@@ -16,8 +16,9 @@ import { passesCliRecallScopeFilter } from '../core/recall-scope.js';
 import type { RerankerFn } from '../rerankers/types.js';
 import { currentEntries } from '../search/as-of.js';
 import { STRENGTH_RANK_FLOOR, STRENGTH_RANK_SPAN } from '../search/boosts.js';
-import { hybridSearch } from '../search/hybrid.js';
-import { physicsSearch } from '../search/physics-search.js';
+import { hybridSearch, vectorSourceOf } from '../search/hybrid.js';
+import { searchByEngine } from '../search/engine.js';
+import type { VectorSource } from '../search/vector.js';
 import type { RerankStep, ResultCost, SearchResult } from '../core/search-types.js';
 import { rankBothStores } from '../sharing/search-both.js';
 import { loadRecallSearchEntries, recallScopeFilter } from '../store/search-rows.js';
@@ -209,13 +210,6 @@ async function searchPool(ctx: RankRecallCtx, opts: RankRecallOpts, pool: Recall
     includeSuperseded: includeSuperseded || Boolean(asOf),
     admit: (e: MemoryEntry) => passesCliRecallScopeFilter(e.scope ?? null, requested),
   };
-  if (search.usePhysics && !globalRoot) {
-    // Explain leaves minResults and includeSuperseded out to hold its output steady; asOf must reach physics or later rows leak.
-    const temporal = explain ? { asOf } : { minResults, includeSuperseded, asOf };
-    return physicsSearch(query, pool.local, {
-      budget, cost, hippoRoot: ctx.hippoRoot, physicsConfig: search.physicsConfig, scope, explain, vectorCandidates, ...temporal
-    });
-  }
   if (globalRoot) {
     // The pool already holds searchBothHybrid's additive-scope load for each store, so rank it rather than read both stores again.
     return rankBothStores(query, { local: ctx.hippoRoot, global: globalRoot }, { local: pool.local, global: pool.global }, vectorCandidates, {
@@ -223,9 +217,17 @@ async function searchPool(ctx: RankRecallCtx, opts: RankRecallOpts, pool: Recall
       includeSuperseded, asOf,
     });
   }
-  return hybridSearch(query, pool.local, {
-    budget, cost, hippoRoot: ctx.hippoRoot, explain, mmr, mmrLambda, minResults, scope, includeSuperseded, asOf, vectorCandidates
-  });
+  const physics = search.usePhysics ? search.physicsConfig : null;
+  // Physics takes no MMR; explain drops minResults and includeSuperseded to hold its output steady; asOf must reach physics or later rows leak.
+  const tuning = !physics ? { mmr, mmrLambda, minResults, includeSuperseded, asOf } : explain ? { asOf } : { minResults, includeSuperseded, asOf };
+  return searchByEngine(hippoDbSource(ctx.hippoRoot), query, pool.local, physics, { budget, cost, scope, explain, vectorCandidates, ...tuning });
+}
+
+/** The CLI core holds no store: it ranks on hippo.db under its root, as its loads above do. */
+function hippoDbSource(hippoRoot: string): VectorSource {
+  const source = vectorSourceOf({ hippoRoot });
+  if (!source) throw new Error('The CLI ranking core needs a hippo root to rank on');
+  return source;
 }
 
 /** Adds memories reached by walking the entity graph out from the lexical seeds. */
