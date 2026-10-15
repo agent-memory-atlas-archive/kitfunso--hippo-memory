@@ -37,8 +37,8 @@ import { auditingRefusal } from './entry-writes-group.js';
 import { type ColumnValue, insertSpec, rowSpec, type RowByKind } from './object-rows.js';
 import { placeholders } from '../../util/sql.js';
 
-/** The group with each answer as its value; spelled out because `Sync<Objects>` would widen each method's kind to every
- * kind. */
+/** The group with each answer as its value; spelled out because
+ * `Sync<Objects>` would widen each method's kind to every kind. */
 export interface SyncObjects {
   listObjects<K extends ObjectKind>(tenantId: string, kind: K, query: ObjectListQuery<K>): ObjectByKind[K][];
   objectById<K extends ObjectKind>(tenantId: string, kind: K, id: number): ObjectByKind[K] | null;
@@ -54,7 +54,12 @@ export interface SyncObjects {
   policiesInForce(tenantId: string, query: PoliciesInForceQuery): Policy[];
   activeSkillsByName(tenantId: string, limit: number): Skill[];
   briefReceipts(tenantId: string, tag: string, limit: number): BriefReceipt[];
-  objectIdByMemory<K extends ObjectKind>(tenantId: string, kind: K, status: ObjectByKind[K]['status'], memoryId: string): number | null;
+  objectIdByMemory<K extends ObjectKind>(
+    tenantId: string,
+    kind: K,
+    status: ObjectByKind[K]['status'],
+    memoryId: string,
+  ): number | null;
 }
 
 export function sqliteObjects(hippoRoot: string): SyncObjects {
@@ -71,7 +76,8 @@ export function sqliteObjects(hippoRoot: string): SyncObjects {
     policiesInForce: (tenantId, query) => onHandle(hippoRoot, (db) => policiesInForce(db, tenantId, query)),
     activeSkillsByName: (tenantId, limit) => onHandle(hippoRoot, (db) => activeSkillsByName(db, tenantId, limit)),
     briefReceipts: (tenantId, tag, limit) => onHandle(hippoRoot, (db) => briefReceipts(db, tenantId, tag, limit)),
-    objectIdByMemory: (tenantId, kind, status, memoryId) => onHandle(hippoRoot, (db) => idByMemory(db, tenantId, kind, status, memoryId)),
+    objectIdByMemory: (tenantId, kind, status, memoryId) =>
+      onHandle(hippoRoot, (db) => idByMemory(db, tenantId, kind, status, memoryId)),
   };
 }
 
@@ -88,7 +94,8 @@ export function servedObjects(sync: SyncObjects): Objects {
     policiesInForce: async (tenantId, query) => sync.policiesInForce(tenantId, query),
     activeSkillsByName: async (tenantId, limit) => sync.activeSkillsByName(tenantId, limit),
     briefReceipts: async (tenantId, tag, limit) => sync.briefReceipts(tenantId, tag, limit),
-    objectIdByMemory: async (tenantId, kind, status, memoryId) => sync.objectIdByMemory(tenantId, kind, status, memoryId),
+    objectIdByMemory: async (tenantId, kind, status, memoryId) =>
+      sync.objectIdByMemory(tenantId, kind, status, memoryId),
   };
 }
 
@@ -256,8 +263,8 @@ function insertRow<K extends SavableKind>(db: DatabaseSyncLike, row: NewRow<K>):
   return Number(result.lastInsertRowid ?? 0);
 }
 
-/** The status guard sits in the UPDATE, so a row another writer retired since the preflight fails the whole save; false
- * says so. */
+/** The status guard sits in the UPDATE, so a row another writer
+ * retired since the preflight fails the whole save; false says so. */
 function supersedeRow<K extends SavableKind>(
   db: DatabaseSyncLike,
   row: NewRow<K>,
@@ -475,8 +482,8 @@ function resolveRow(
   });
 }
 
-/** The successor is joined in so a superseded version is kept only while the row that replaced it is not yet in
- * force. */
+/** The successor is joined in so a superseded version is kept
+ * only while the row that replaced it is not yet in force. */
 function policiesInForce(db: DatabaseSyncLike, tenantId: string, query: PoliciesInForceQuery): Policy[] {
   const { asOf, name } = query;
   const nameClause = name !== undefined ? 'AND p.policy_name = ?' : '';
