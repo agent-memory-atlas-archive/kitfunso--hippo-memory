@@ -54,6 +54,7 @@ export interface SyncObjects {
   policiesInForce(tenantId: string, query: PoliciesInForceQuery): Policy[];
   activeSkillsByName(tenantId: string, limit: number): Skill[];
   briefReceipts(tenantId: string, tag: string, limit: number): BriefReceipt[];
+  objectIdByMemory<K extends ObjectKind>(tenantId: string, kind: K, status: ObjectByKind[K]['status'], memoryId: string): number | null;
 }
 
 export function sqliteObjects(hippoRoot: string): SyncObjects {
@@ -70,6 +71,7 @@ export function sqliteObjects(hippoRoot: string): SyncObjects {
     policiesInForce: (tenantId, query) => onHandle(hippoRoot, (db) => policiesInForce(db, tenantId, query)),
     activeSkillsByName: (tenantId, limit) => onHandle(hippoRoot, (db) => activeSkillsByName(db, tenantId, limit)),
     briefReceipts: (tenantId, tag, limit) => onHandle(hippoRoot, (db) => briefReceipts(db, tenantId, tag, limit)),
+    objectIdByMemory: (tenantId, kind, status, memoryId) => onHandle(hippoRoot, (db) => idByMemory(db, tenantId, kind, status, memoryId)),
   };
 }
 
@@ -86,26 +88,25 @@ export function servedObjects(sync: SyncObjects): Objects {
     policiesInForce: async (tenantId, query) => sync.policiesInForce(tenantId, query),
     activeSkillsByName: async (tenantId, limit) => sync.activeSkillsByName(tenantId, limit),
     briefReceipts: async (tenantId, tag, limit) => sync.briefReceipts(tenantId, tag, limit),
+    objectIdByMemory: async (tenantId, kind, status, memoryId) => sync.objectIdByMemory(tenantId, kind, status, memoryId),
   };
 }
 
 /** The newest object in `status` that a memory mirrors, for the CLI flags that name an object by its memory id. */
-export function objectIdByMemory<K extends ObjectKind>(
-  hippoRoot: string,
+function idByMemory<K extends ObjectKind>(
+  db: DatabaseSyncLike,
   tenantId: string,
   kind: K,
   status: ObjectByKind[K]['status'],
-  memoryId: string
+  memoryId: string,
 ): number | null {
-  return onHandle(hippoRoot, (db) => {
-    const row = db
-      .prepare(
-        `SELECT id FROM ${rowSpec(kind).table} WHERE memory_id = ? AND tenant_id = ? AND status = ? ORDER BY id DESC ` +
-        `LIMIT 1`,
-      )
-      .get<{ id: number } | undefined>(memoryId, tenantId, status);
-    return row ? row.id : null;
-  });
+  const row = db
+    .prepare(
+      `SELECT id FROM ${rowSpec(kind).table} WHERE memory_id = ? AND tenant_id = ? AND status = ? ORDER BY id DESC ` +
+      `LIMIT 1`,
+    )
+    .get<{ id: number } | undefined>(memoryId, tenantId, status);
+  return row ? row.id : null;
 }
 
 function selectRow<K extends ObjectKind>(

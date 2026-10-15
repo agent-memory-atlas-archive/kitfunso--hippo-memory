@@ -98,6 +98,7 @@ export const WORKER_OPS = {
     policiesInForce: 'read',
     activeSkillsByName: 'read',
     briefReceipts: 'read',
+    objectIdByMemory: 'read',
   },
   readiness: {
     ping: 'read',
