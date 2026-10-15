@@ -31,4 +31,5 @@ export type {
   VectorWrites,
 } from './port.js';
 export { hasGroup, requireGroup } from './port.js';
+export { narrowStore, type StoreWith } from './narrow.js';
 export { sqliteStore } from './sqlite/store.js';

@@ -30,20 +30,26 @@ import { updateStats } from '../index-and-stats.js';
 import { auditHighIdAt, revokeKeyAt } from '../key-audit.js';
 import { changeScopeGrantAt, createKeyAt, createSelfKeyAt } from '../key-writes.js';
 import { onHandle } from '../open.js';
-import type {
-  AuditLog, ContextReads, ContinuityBlock, HippoStore, KeyAudit, KeyGrants, KeyWrites, Readiness, StoreGroups, Sync,
-  VectorViews, VectorWrites,
+import { narrowStore, type StoreWith } from '../narrow.js';
+import {
+  type AuditLog, type ContextReads, type ContinuityBlock, type HippoStore, type KeyAudit, type KeyGrants,
+  type KeyWrites, type Readiness, type StoreGroup, type StoreGroups, type Sync, type VectorViews,
+  type VectorWrites,
 } from '../port.js';
 import { loadRecallEntries } from '../search-rows.js';
 import { type ContinuityKey, listSessionEvents, loadActiveTaskSnapshot } from '../sessions.js';
 import { entriesWithoutVectorAt, loadStoredVectorViews, writeVectorsAt } from '../vector-index.js';
 
-/** `ctx` with its store filled: the one it carries, else hippo.db
- * under its root, for a public entry whose SDK caller gave none. */
-export function withStore<C extends { readonly hippoRoot: string; readonly store?: HippoStore }>(
+/** `ctx` with its store filled (the one it carries, else hippo.db under its root) and its groups proven,
+ * so a public entry given a store without them still answers 501. */
+export function withStoreGroups<
+  C extends { readonly hippoRoot: string; readonly store?: HippoStore },
+  G extends StoreGroup,
+>(
   ctx: C,
-): C & { readonly store: HippoStore } {
-  return { ...ctx, store: ctx.store ?? sqliteStore(ctx.hippoRoot) };
+  ...groups: readonly [G, ...G[]]
+): C & { readonly store: StoreWith<G> } {
+  return { ...ctx, store: narrowStore(ctx.store ?? sqliteStore(ctx.hippoRoot), ...groups) };
 }
 
 /** Not on the synchronous store: the nearest-row scan yields to
