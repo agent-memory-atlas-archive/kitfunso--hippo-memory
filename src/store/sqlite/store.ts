@@ -34,6 +34,7 @@ import { servedQuarantine, sqliteQuarantine } from './quarantine-group.js';
 import { sqliteVectorReads } from './vector-reads-group.js';
 import { loadLatestHandoff } from '../handoffs.js';
 import { updateStats } from '../index-and-stats.js';
+import { flushStatsMirrors } from '../mirrors.js';
 import { auditHighIdAt, revokeKeyAt } from '../key-audit.js';
 import { changeScopeGrantAt, createKeyAt, createSelfKeyAt } from '../key-writes.js';
 import { onHandle } from '../open.js';
@@ -106,7 +107,9 @@ export function sqliteSyncStore(
     conflicts: sqliteConflicts(hippoRoot),
     dormant: sqliteDormant(hippoRoot),
     reports: sqliteReports(hippoRoot),
-    close() {},
+    close() {
+      flushStatsMirrors(hippoRoot);
+    },
   };
 }
 

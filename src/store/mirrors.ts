@@ -339,10 +339,69 @@ export function writeIndexMirror(hippoRoot: string, index: HippoIndex): void {
   );
 }
 
-export function writeStatsMirror(hippoRoot: string, stats: LegacyStats): void {
+const STATS_MIRROR_INTERVAL_MS = 1000;
+
+interface StatsMirrorState {
+  lastWrite: number;
+  pending?: LegacyStats;
+  timer?: NodeJS.Timeout;
+}
+
+const statsMirrors = new Map<string, StatsMirrorState>();
+let statsExitHookInstalled = false;
+
+function putStatsMirror(hippoRoot: string, stats: LegacyStats): void {
+  // A root removed before its deferred write has nothing left to mirror.
+  if (!fs.existsSync(hippoRoot)) return;
   mirrorBestEffort('stats.json', () =>
     overwriteInPlace(path.join(hippoRoot, 'stats.json'), JSON.stringify(stats, null, 2)),
   );
+}
+
+/** Mirror `stats` to stats.json at once, or hold it and write the latest within a second of the last write; the
+ * database counters are always current. */
+export function writeStatsMirror(hippoRoot: string, stats: LegacyStats): void {
+  const key = path.resolve(hippoRoot);
+  dropIdleStatsMirrors();
+  const state = statsMirrors.get(key) ?? { lastWrite: 0 };
+  statsMirrors.set(key, state);
+  const wait = state.lastWrite + STATS_MIRROR_INTERVAL_MS - Date.now();
+  if (wait <= 0) {
+    state.lastWrite = Date.now();
+    putStatsMirror(hippoRoot, stats);
+    return;
+  }
+  state.pending = stats;
+  if (state.timer !== undefined) return;
+  if (!statsExitHookInstalled) {
+    process.on('exit', () => flushStatsMirrors());
+    statsExitHookInstalled = true;
+  }
+  state.timer = setTimeout(() => flushStatsMirrors(key), wait);
+  state.timer.unref();
+}
+
+// A root idle for a full interval needs no throttle state, so the map holds only recently written roots.
+function dropIdleStatsMirrors(): void {
+  const now = Date.now();
+  for (const [root, state] of statsMirrors) {
+    if (state.timer === undefined && state.pending === undefined && now - state.lastWrite >= STATS_MIRROR_INTERVAL_MS) {
+      statsMirrors.delete(root);
+    }
+  }
+}
+
+/** Write any held stats.json now, for one root or all; store close and process exit call it. */
+export function flushStatsMirrors(hippoRoot?: string): void {
+  const key = hippoRoot === undefined ? undefined : path.resolve(hippoRoot);
+  for (const [root, state] of statsMirrors) {
+    if (key !== undefined && root !== key) continue;
+    if (state.timer !== undefined) clearTimeout(state.timer);
+    state.timer = undefined;
+    const stats = state.pending;
+    statsMirrors.delete(root);
+    if (stats !== undefined) putStatsMirror(root, stats);
+  }
 }
 
 // A truncate waits for the file's last write to reach the disk, so a file rewritten on every recall keeps its blocks.

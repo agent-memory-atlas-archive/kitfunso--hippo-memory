@@ -160,6 +160,7 @@ export {
   partitionLessons,
   deduplicateLesson,
   runWatched,
+  runWatchedLine,
   type RunWatchedOptions,
   fetchGitLog,
 } from './learn/autolearn.js';
