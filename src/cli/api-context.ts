@@ -1,4 +1,5 @@
 import { type ContextWith, adminActor } from '../api/index.js';
+import { ledgerReachOf, type LedgerReach } from '../api/ledger-db.js';
 import { consolidate } from '../consolidate/sleep.js';
 import type { McpHost } from '../mcp/protocol.js';
 import type { HippoStore, StoreGroup, StoreGroups } from '../store/index.js';
@@ -19,6 +20,12 @@ export function cliRequest<T>(run: () => T | Promise<T>): Promise<T> {
 export function cliApiContext(hippoRoot: string, tenantId: string): ContextWith<StoreGroup> {
   const store = cliStore(hippoRoot);
   return { hippoRoot, tenantId, actor: adminActor('cli'), store, reach: sqliteReach(hippoRoot, store) };
+}
+
+/** Where a hook on `hippoRoot` books its ledger rows: the folder's store, else the global one, probed once here. */
+export function cliLedgerReach(hippoRoot: string): LedgerReach {
+  const store = cliStore(hippoRoot);
+  return ledgerReachOf({ reach: sqliteReach(hippoRoot, store), store });
 }
 
 /** Stdio is the operator's own process: host admin, the folder's hippo.db, and an auto-sleep that runs in process. */
