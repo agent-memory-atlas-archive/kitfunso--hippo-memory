@@ -7,6 +7,7 @@ import { RejectedValueError } from '../core/api-errors.js';
 import { markSummaryDirtyInTx } from './summary-dirty.js';
 import { errorMessage, log } from '../util/log.js';
 import { auditRejectionRefusal, audit } from './audit-event.js';
+import { appendAuditEvent } from './audit.js';
 import { selectEntriesByIds } from './entry-reads.js';
 import { stampOriginProject, upsertEntryRow, syncFtsRow, deleteFtsRow } from './entry-row.js';
 import { mirrorBestEffort, writeMarkdownMirror } from './mirrors.js';
@@ -31,10 +32,31 @@ export function writeEntry(hippoRoot: string, entry: MemoryEntry, opts?: WriteEn
 }
 
 /** writeEntry for store code that needs the write's own handle: `opts.afterWrite` shares the INSERT's SAVEPOINT. */
-export function writeEntryWithHook(hippoRoot: string, entry: MemoryEntry, opts?: WriteEntryInternalOptions): void {
+function writeEntryWithHook(hippoRoot: string, entry: MemoryEntry, opts?: WriteEntryInternalOptions): void {
   onHandle(hippoRoot, (db) => {
     writeEntryOn(db, hippoRoot, entry, opts);
   }, openStore);
+}
+
+/** Writes a promoted copy; with `auditAs` the `promote` audit row joins the INSERT's SAVEPOINT, so both or neither. */
+export function writePromotedEntry(
+  hippoRoot: string,
+  entry: MemoryEntry,
+  opts: { readonly actor?: string; readonly sourceId: string; readonly auditAs?: { tenantId: string; actor: string } },
+): void {
+  const { auditAs, sourceId } = opts;
+  writeEntryWithHook(hippoRoot, entry, {
+    actor: opts.actor,
+    afterWrite: auditAs && ((db, globalId) => {
+      appendAuditEvent(db, {
+        tenantId: auditAs.tenantId,
+        actor: auditAs.actor,
+        op: 'promote',
+        targetId: globalId,
+        metadata: { sourceId },
+      });
+    }),
+  });
 }
 
 /** writeEntry for each of `entries` in one transaction, so all land or none; each

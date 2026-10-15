@@ -1,8 +1,8 @@
-// Applies a rebuild's op list on the caller's transaction. The statements and the consolidated-source guard sit in the
-// store's graph writers.
-import { assertTenantId } from '../store/tenant.js';
-import { clock } from '../util/write-budget.js';
+// Applies a rebuild's op list through the row writers in graph-writes.ts, in one transaction per call.
 import type { DatabaseSyncLike } from '../db/index.js';
+import { clock } from '../util/write-budget.js';
+import { storedGraphOn } from './graph-reads.js';
+import type { DesiredRelation, GraphOp, StoredGraph } from './graph-rows.js';
 import {
   deleteEntityRow,
   deleteRelationRow,
@@ -11,9 +11,9 @@ import {
   insertRelationRow,
   objectInForce,
   relationPresent,
-  updateEntityRow
-} from '../store/graph-writes.js';
-import type { DesiredRelation, GraphOp } from './delta.js';
+  runGraphRebuildTransaction,
+  updateEntityRow,
+} from './graph-writes.js';
 
 function insertDesiredRelation(db: DatabaseSyncLike, tenantId: string, rel: DesiredRelation): boolean {
   const fromEntityId = entityIdBySource(db, tenantId, rel.from.entityType, rel.from.sourceObject);
@@ -64,17 +64,18 @@ export interface ApplyGraphOpsResult {
   readonly skipped: number;
 }
 
-/**
- * Applies `ops` from index `opts.from` on the caller's open transaction and stops at the first op boundary past
- * `opts.holdMs`.
- *  Returns where the next chunk starts and how many ops were skipped as stale. */
-export function applyGraphOps(
+export interface ApplyGraphOpsOptions {
+  readonly from: number;
+  readonly holdMs: number;
+  readonly clock?: () => number;
+}
+
+function applyGraphOpsOn(
   db: DatabaseSyncLike,
   tenantId: string,
   ops: readonly GraphOp[],
-  opts: { readonly from: number; readonly holdMs: number; readonly clock?: () => number },
+  opts: ApplyGraphOpsOptions,
 ): ApplyGraphOpsResult {
-  assertTenantId('applyGraphOps', tenantId);
   const now = opts.clock ?? clock;
   const begunAt = now();
   let next = opts.from;
@@ -85,4 +86,36 @@ export function applyGraphOps(
     if (now() - begunAt >= opts.holdMs) break;
   }
   return { next, skipped };
+}
+
+/**
+ * Applies `ops` from index `opts.from` in one rebuild transaction and stops at the first op boundary past
+ * `opts.holdMs`.
+ *  Returns where the next chunk starts and how many ops were skipped as stale. */
+export function applyGraphOps(
+  hippoRoot: string,
+  tenantId: string,
+  ops: readonly GraphOp[],
+  opts: ApplyGraphOpsOptions & { readonly busyWaitMs?: number },
+): ApplyGraphOpsResult {
+  return runGraphRebuildTransaction(
+    hippoRoot,
+    tenantId,
+    (db) => applyGraphOpsOn(db, tenantId, ops, opts),
+    { busyWaitMs: opts.busyWaitMs },
+  );
+}
+
+/** Reads the stored graph, diffs it with `diff` and applies every op under one lock, so two concurrent rebuilds
+ * serialize instead of both inserting a missing row. Returns how many ops were skipped as stale. */
+export function rebuildGraphUnderLock(
+  hippoRoot: string,
+  tenantId: string,
+  memoryIds: readonly string[],
+  diff: (stored: StoredGraph) => readonly GraphOp[],
+): number {
+  return runGraphRebuildTransaction(hippoRoot, tenantId, (db) => {
+    const ops = diff(storedGraphOn(db, tenantId, memoryIds));
+    return applyGraphOpsOn(db, tenantId, ops, { from: 0, holdMs: Infinity }).skipped;
+  });
 }
