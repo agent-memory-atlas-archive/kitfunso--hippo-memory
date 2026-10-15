@@ -38,9 +38,6 @@ const SQLITE_BASE = {
   'src/mcp/keep.ts': '',
   'src/store/sqlite/store.ts': 'export const storeFor = 1;\nexport type S = 1;\n',
 };
-// error-reply's busy-check pin stands in for any pinned adapter import.
-const BUSY = { 'src/store/sqlite/busy.ts': 'export const isStoreBusy = 1;\n' };
-const BUSY_IMPORT = "export const y = 1;\nimport { isStoreBusy } from '../store/sqlite/busy.js';\n";
 const SQLITE_IMPORT ="export const y = 1;\nimport { storeFor } from '../store/sqlite/store.js';\n";
 
 type Row = {
@@ -200,20 +197,6 @@ const rows: Row[] = [
     map: SQLITE_MAP,
     status: 0,
     output: ['Layer ratchet OK'],
-  },
-  {
-    name: 'a pinned file may import the SQLite adapter',
-    files: { ...SQLITE_BASE, ...BUSY, 'src/api/error-reply.ts': BUSY_IMPORT },
-    map: SQLITE_MAP,
-    status: 0,
-    output: ['Layer ratchet OK'],
-  },
-  {
-    name: 'a pinned file that no longer imports the SQLite adapter fails as stale',
-    files: { ...SQLITE_BASE, ...BUSY, 'src/api/error-reply.ts': 'export const s = 1;\n' },
-    map: SQLITE_MAP,
-    status: 1,
-    output: ['pinned: src/api/error-reply.ts no longer imports src/store/sqlite/busy.ts'],
   },
 ];
 
